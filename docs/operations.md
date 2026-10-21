@@ -27,7 +27,7 @@ Para o Worker publicado, defina `MCP_URL` com a URL real `https://<worker>.<subd
 | crm_get_organization | `id` inteiro positivo |
 | crm_search_deals | `query`, `organizationId`, `personId`, `ownerId`, `status` (`"1"`, `"2"`, `"3"`) |
 | crm_get_deal | `id` inteiro positivo |
-| crm_list_tasks | um `dealId`, `personId` ou `organizationId`; sem ID exige `updatedDateGt` ISO 8601 nos últimos 31 dias |
+| crm_list_tasks | `updatedDateGt` ISO 8601 nos últimos 31 dias sempre obrigatório; opcionalmente um `dealId`, `personId` ou `organizationId` |
 
 Listas aceitam `page` (padrão 1) e `perPage` (padrão 20, máximo 100). `crm_find_person_by_email` fixa uma página de 20. Respostas contêm `items` e `pageInfo`. Avance apenas com `nextPage` numérico; se `hasNext=true` e `nextPage=null`, a API não forneceu um próximo número utilizável. Não há varredura automática ou URL de continuação fornecida pelo cliente.
 

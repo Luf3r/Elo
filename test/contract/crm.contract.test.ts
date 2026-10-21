@@ -14,7 +14,11 @@ describe.skipIf(!enabled).sequential('real read-only Agendor CRM contract (no re
     const page = await read(() => client.searchPeople({ perPage: 1 }));
     expect(Array.isArray(page.items)).toBe(true);
     expect(page.pageInfo).toMatchObject({ page: 1, perPage: 1 });
-    for (const person of page.items) expect(typeof (person as { id: unknown }).id).toBe('number');
+    for (const person of page.items) {
+      expect(typeof (person as { id: unknown }).id).toBe('number');
+      const record = person as Record<string, unknown>;
+      expect(['contact', 'organization', 'role', 'birthday', 'address', 'cpf'].some(key => record[key] == null)).toBe(true);
+    }
   });
   it('returns an empty final page for a unique name prefix', async () => {
     const page = await read(() => client.searchPeople({ query: `mcp-no-match-${crypto.randomUUID()}` }));
@@ -37,6 +41,8 @@ describe.skipIf(!enabled).sequential('real read-only Agendor CRM contract (no re
     if (!page.items.length) { context.skip(); return; }
     const id = (page.items[0] as { id: number }).id;
     expect(await read(() => client.getOrganization(id))).toMatchObject({ id });
+    const tasks = await read(() => client.listTasks({ organizationId: id, perPage: 1, updatedDateGt: new Date(Date.now() - 86_400_000).toISOString() }));
+    expect(Array.isArray(tasks.items)).toBe(true);
   });
   it('reads deal detail when a real read-only fixture is available', async context => {
     const page = await read(() => client.searchDeals({ perPage: 1 }));

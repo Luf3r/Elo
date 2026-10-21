@@ -17,17 +17,14 @@ export const dealsInput = z.strictObject({
 });
 export const tasksInput = z.strictObject({
   ...pagination, dealId: positiveId.optional(), personId: positiveId.optional(), organizationId: positiveId.optional(),
-  updatedDateGt: z.iso.datetime({ offset: true }).optional().describe('Required for unscoped queries: ISO 8601 lower bound within the past 31 days.'),
+  updatedDateGt: z.iso.datetime({ offset: true }).describe('Required: explicit ISO 8601 lower bound within the past 31 days, including scoped entity queries.'),
 }).refine(v => [v.dealId, v.personId, v.organizationId].filter(x => x !== undefined).length <= 1, {
   message: 'Provide at most one entity ID.',
-}).refine(v => v.dealId !== undefined || v.personId !== undefined || v.organizationId !== undefined || v.updatedDateGt !== undefined, {
-  message: 'Provide an entity ID or an explicit updatedDateGt lower bound.',
 }).refine(v => {
-  if (v.dealId !== undefined || v.personId !== undefined || v.organizationId !== undefined || v.updatedDateGt === undefined) return true;
   const date = Date.parse(v.updatedDateGt);
   return date <= Date.now() && date >= Date.now() - 31 * 86_400_000;
 }, {
-  message: 'Unscoped updatedDateGt must be within the past 31 days.',
+  message: 'updatedDateGt must be within the past 31 days.',
 });
 export const idInput = z.strictObject({ id: positiveId });
 export const recordSchema = z.record(z.string(), z.unknown());

@@ -35,7 +35,7 @@ describe('CRM request contract', () => {
   });
   it.each([['dealId', 'deals'], ['personId', 'people'], ['organizationId', 'organizations']])('maps tasks %s to documented scoped route', async (field, type) => {
     const fetch = mockFetch();
-    await client().listTasks({ [field]: 12 });
+    await client().listTasks({ [field]: 12, updatedDateGt: recentDate });
     const u = new URL((fetch.mock.calls[0]![0] as Request).url);
     expect(u.pathname).toBe(`/v3/${type}/12/tasks`);
   });
@@ -49,6 +49,7 @@ describe('CRM request contract', () => {
   it('rejects unbounded generic task queries before hitting the upstream 400', async () => {
     const fetch = mockFetch();
     await expect(client().listTasks({})).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().listTasks({ organizationId: 1 })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().listTasks({ updatedDateGt: 'yesterday' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().listTasks({ updatedDateGt: '2000-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().listTasks({ updatedDateGt: '2099-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });

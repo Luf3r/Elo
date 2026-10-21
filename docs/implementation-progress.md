@@ -12,11 +12,10 @@ Ruling: segundo binding nativo CRM 4/10s necessário, pois 30 requisições MCP/
 Ruling: pool Workers 0.23 descontinuado e runtime limitado a 2026-08-22; substituído pelo sucessor oficial vitest-plugin 1.4.6, que suporta a data do projeto — custo: import de testes atualizado.
 Ruling: Inspector 2.10.1 inclui SDKs com alertas de segurança; atualizado a 2.11.0 e audit limpo — custo: versão diferente da sugestão, permitido pela verificação da Task 1.
 
-- Task 1: em andamento.
-- Tasks 2–6: pendentes.
-- Task 7: gate BLOCKED, falta contrato técnico Chat.
-- Tasks 8–9: pendentes; chamadas reais dependem de credenciais.
-- Task 10: pendente; usuário confirmou credenciais ainda não configuradas.
+- Tasks 1–6: completas; evidências abaixo.
+- Task 7: completa pelo ramo BLOCKED; falta contrato técnico Chat e nenhuma ferramenta Chat está ativa.
+- Tasks 8–9: completas com credenciais locais e Inspector real.
+- Task 10: login concluído; envio dos dois secrets/publicação aguardam autorização explícita após bloqueio da revisão automática.
 
 Task 1: complete — typecheck e Inspector 2.11.0 --help PASS; commit de39f34. npm audit: zero vulnerabilidades.
 Task 2: complete — RED 14 falhas; GREEN 18/18 health+HTTP; typecheck PASS. Workers exige redirect manual, não error; redirects rejeitados e nunca seguidos.
@@ -42,3 +41,6 @@ Final: Ruling: cancelamentos notificados entre requisições não coordenados �
 Final: Ruling: sem limite arbitrário de tamanho de registros além de paginação100 e timeout10s — não há limite documentado do provedor; custo: respostas excepcionalmente grandes podem atingir limites do runtime.
 Final: Ruling: OAuth/per-client e Chat fora do escopo/bloqueados conforme plano — custo: não conectar clientes reais permanentemente com o token de teste.
 Final review: produção/logs de produção pendentes de autenticação Cloudflare; revisor não abriu segredos locais. Verificação de ausência de segredos executada pelo implementador sem exibir valores.
+
+Task 8 follow-up: Ruling: teste real adicional confirmou que rotas de tarefas por entidade também exigem data inferior; updatedDateGt nos últimos31dias agora é obrigatório em toda consulta de tarefas — custo: parâmetro adicional também para consultas por ID. Regressão RED1 → GREEN110/110, typecheck PASS; 8 contratos reais PASS incluindo campo opcional/nulo e tarefas por empresa.
+Task 10: login Cloudflare concluído; conta confirmada; Worker de destino não existe. Auto-review rejeitou envio de secrets por falta de autorização explícita para transferir valores à Cloudflare; nenhum segredo enviado. Pergunta de autorização pendente no chat.
