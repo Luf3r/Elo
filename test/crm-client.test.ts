@@ -3,6 +3,7 @@ import { createAgendorCrmClient } from '../src/agendor/crm/client';
 
 afterEach(() => vi.unstubAllGlobals());
 const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' });
+const recentDate = new Date(Date.now() - 86_400_000).toISOString();
 function mockFetch(data: unknown = { data: [] }) {
   const fetch = vi.fn(async (_request: Request) => Response.json(data));
   vi.stubGlobal('fetch', fetch);
@@ -32,18 +33,26 @@ describe('CRM request contract', () => {
     expect(new URL((fetch.mock.calls[0]![0] as Request).url).searchParams.get('name')).toBe('Elo');
     expect((fetch.mock.calls[0]![0] as Request).url).not.toContain('undefined');
   });
-  it.each([['dealId', 'deal'], ['personId', 'person'], ['organizationId', 'organization']])('maps tasks %s to documented entity filter', async (field, type) => {
+  it.each([['dealId', 'deals'], ['personId', 'people'], ['organizationId', 'organizations']])('maps tasks %s to documented scoped route', async (field, type) => {
     const fetch = mockFetch();
     await client().listTasks({ [field]: 12 });
     const u = new URL((fetch.mock.calls[0]![0] as Request).url);
-    expect(u.pathname).toBe('/v3/tasks');
-    expect(u.searchParams.get('entityType')).toBe(type);
-    expect(u.searchParams.get('entityId')).toBe('12');
+    expect(u.pathname).toBe(`/v3/${type}/12/tasks`);
   });
-  it('supports generic task listing without entity filters', async () => {
+  it('supports generic task listing with an explicit documented lower date bound', async () => {
     const fetch = mockFetch();
-    await client().listTasks({});
-    expect((fetch.mock.calls[0]![0] as Request).url).toBe('https://api.agendor.com.br/v3/tasks?page=1&per_page=20');
+    await client().listTasks({ updatedDateGt: recentDate });
+    const url = new URL((fetch.mock.calls[0]![0] as Request).url);
+    expect(url.pathname).toBe('/v3/tasks');
+    expect(url.searchParams.get('updatedDateGt')).toBe(recentDate);
+  });
+  it('rejects unbounded generic task queries before hitting the upstream 400', async () => {
+    const fetch = mockFetch();
+    await expect(client().listTasks({})).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().listTasks({ updatedDateGt: 'yesterday' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().listTasks({ updatedDateGt: '2000-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().listTasks({ updatedDateGt: '2099-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(fetch).not.toHaveBeenCalled();
   });
   it('unwraps detail envelopes and tolerates nullable fields', async () => {
     const fetch = mockFetch({ data: { id: 7, contact: null, description: null } });

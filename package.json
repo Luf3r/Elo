@@ -10,7 +10,7 @@
     "dev": "wrangler dev",
     "test": "vitest run --exclude test/contract/**",
     "test:watch": "vitest --exclude test/contract/**",
-    "test:contract": "vitest run test/contract",
+    "test:contract": "node scripts/run-contract.mjs",
     "typecheck": "tsc --noEmit",
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",

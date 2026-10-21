@@ -4,7 +4,7 @@ export interface ListInput { page?: number; perPage?: number }
 export interface SearchPeopleInput extends ListInput { query?: string; email?: string }
 export interface SearchOrganizationsInput extends ListInput { query?: string }
 export interface SearchDealsInput extends ListInput { query?: string; organizationId?: number; personId?: number; ownerId?: number; status?: string }
-export interface ListTasksInput extends ListInput { dealId?: number; personId?: number; organizationId?: number }
+export interface ListTasksInput extends ListInput { dealId?: number; personId?: number; organizationId?: number; updatedDateGt?: string }
 export interface AgendorCrmClient {
   searchPeople(input: SearchPeopleInput): Promise<PagedResult<unknown>>;
   searchOrganizations(input: SearchOrganizationsInput): Promise<PagedResult<unknown>>;

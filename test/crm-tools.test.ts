@@ -16,7 +16,8 @@ describe('CRM tool boundary', () => {
     ['crm_search_people', { perPage: 101 }], ['crm_search_people', { perPage: 0 }],
     ['crm_search_people', { page: '1' }], ['crm_search_people', { url: 'https://attacker.test' }],
     ['crm_search_deals', { status: 'open' }], ['crm_search_deals', { ownerId: -1 }],
-    ['crm_list_tasks', { personId: 1, dealId: 2 }], ['crm_search_people', { query: 'x'.repeat(301) }],
+    ['crm_list_tasks', { personId: 1, dealId: 2 }], ['crm_list_tasks', {}],
+    ['crm_list_tasks', { updatedDateGt: 'yesterday' }], ['crm_search_people', { query: 'x'.repeat(301) }],
   ])('rejects invalid %s inputs before upstream access: %j', async (name, args) => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const { data } = await callTool(name as string, args as Record<string, unknown>);
@@ -26,7 +27,7 @@ describe('CRM tool boundary', () => {
   it.each([
     ['crm_find_person_by_email', { email: 'a+b@example.com' }, '/v3/people'],
     ['crm_search_people', {}, '/v3/people'], ['crm_search_organizations', {}, '/v3/organizations'],
-    ['crm_search_deals', {}, '/v3/deals'], ['crm_list_tasks', {}, '/v3/tasks'],
+    ['crm_search_deals', {}, '/v3/deals'], ['crm_list_tasks', { updatedDateGt: new Date(Date.now() - 86_400_000).toISOString() }, '/v3/tasks'],
   ])('calls %s once with normalized defaults', async (name, args, path) => {
     const fetch = vi.fn(async (r: Request) => { expect(new URL(r.url).pathname).toBe(path); return Response.json({ data: [{ id: 1, contact: null }], links: { next: null } }); });
     vi.stubGlobal('fetch', fetch);

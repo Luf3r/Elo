@@ -30,3 +30,6 @@ Task 5: complete — RED 4 falhas; GREEN suite 76/76; typecheck PASS. SDK v2 usa
 Task 6: complete — RED 11 falhas; GREEN suite 99/99; typecheck PASS. Sete tools CRM, validação estrita, erros MCP sanitizados, uma chamada GET por tool e texto malicioso tratado apenas como dado.
 
 Task 7: complete (BLOCKED branch) — 7 testes MCP/gate PASS; 1 contrato Chat SKIP explicitamente. Nenhum endpoint Chat, secret obrigatório ou ferramenta Chat.
+
+Task 8: Ruling: API real /tasks exige data inferior com janela de 31 dias, embora OpenAPI marque datas opcionais. Adicionado updatedDateGt explícito para consulta genérica e rotas por entidade documentadas para consultas por ID — custo: parâmetro adicional necessário em tarefas genéricas.
+Task 8: complete — regressão tarefas RED 7 falhas + RED janela 1 falha; GREEN suite 104/104, typecheck PASS; contratos reais 8 PASS e 1 Chat SKIP; 429 validado em mocks, sem provocar abuso no provedor.

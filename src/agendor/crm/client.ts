@@ -39,10 +39,10 @@ export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>): Age
     getDeal: id => detail('/deals', id),
     async listTasks(input) {
       const v = parseInput(tasksInput, input);
-      const entity = v.dealId !== undefined ? { entityType: 'deal', entityId: v.dealId }
-        : v.personId !== undefined ? { entityType: 'person', entityId: v.personId }
-        : v.organizationId !== undefined ? { entityType: 'organization', entityId: v.organizationId } : {};
-      return list('/tasks', v, entity);
+      const path = v.dealId !== undefined ? `/deals/${v.dealId}/tasks`
+        : v.personId !== undefined ? `/people/${v.personId}/tasks`
+        : v.organizationId !== undefined ? `/organizations/${v.organizationId}/tasks` : '/tasks';
+      return list(path, v, { updatedDateGt: v.updatedDateGt });
     },
   };
 }
