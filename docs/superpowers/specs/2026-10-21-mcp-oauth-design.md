@@ -1,6 +1,6 @@
 # OAuth para ChatGPT Plus e Zapia
 
-Data: 2026-10-21. Estado: aprovado pelo usuário, implementado e publicado; validação final de login pelo proprietário em andamento. Evidências atuais em [publicação](../../deployment.md).
+Data: 2026-10-21. Estado: aprovado pelo usuário, implementado e publicado; login real e consultas MCP validados. Conexões nas interfaces ChatGPT/Zapia pendentes do proprietário. Evidências atuais em [publicação](../../deployment.md).
 
 ## Objetivo e decisões confirmadas
 
