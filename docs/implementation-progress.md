@@ -15,7 +15,7 @@ Ruling: Inspector 2.10.1 inclui SDKs com alertas de segurança; atualizado a 2.1
 - Tasks 1–6: completas; evidências abaixo.
 - Task 7: completa pelo ramo BLOCKED; falta contrato técnico Chat e nenhuma ferramenta Chat está ativa.
 - Tasks 8–9: completas com credenciais locais e Inspector real.
-- Task 10: login concluído; envio dos dois secrets/publicação aguardam autorização explícita após bloqueio da revisão automática.
+- Task 10: login concluído e envio/publicação explicitamente autorizados; Cloudflare bloqueia criação do Worker com erro10034 até verificar o e-mail da conta. Nenhum secret cadastrado.
 
 Task 1: complete — typecheck e Inspector 2.11.0 --help PASS; commit de39f34. npm audit: zero vulnerabilidades.
 Task 2: complete — RED 14 falhas; GREEN 18/18 health+HTTP; typecheck PASS. Workers exige redirect manual, não error; redirects rejeitados e nunca seguidos.
@@ -44,3 +44,6 @@ Final review: produção/logs de produção pendentes de autenticação Cloudfla
 
 Task 8 follow-up: Ruling: teste real adicional confirmou que rotas de tarefas por entidade também exigem data inferior; updatedDateGt nos últimos31dias agora é obrigatório em toda consulta de tarefas — custo: parâmetro adicional também para consultas por ID. Regressão RED1 → GREEN110/110, typecheck PASS; 8 contratos reais PASS incluindo campo opcional/nulo e tarefas por empresa.
 Task 10: login Cloudflare concluído; conta confirmada; Worker de destino não existe. Auto-review rejeitou envio de secrets por falta de autorização explícita para transferir valores à Cloudflare; nenhum segredo enviado. Pergunta de autorização pendente no chat.
+
+Task 10 update2026-10-21: usuário AUTORIZOU explicitamente transferir os dois tokens para Cloudflare Secrets e publicar. Tentativa Wrangler bulk via stdin chegou à conta correta, mas Cloudflare bloqueou criação do Worker com erro10034: e-mail não verificado. Nenhum secret cadastrado; aguardando confirmação de e-mail. Autorização persiste para retomar.
+Cloudflare agent setup: 19skills oficiais instaladas, MCP cloudflare habilitado; OAuth MCP iniciado e aberto no navegador, pendente conclusão. CLIcf opcional omitida porque projeto já usaWrangler. Novos pnpm-lock.yaml/pnpm-workspace.yaml surgiram durante a sessão; preservados sem adicionar aos commits por não fazerem parte destas alterações.

@@ -1,6 +1,8 @@
 # Publicação Cloudflare
 
-Estado: **ainda não publicado**. Login oficial Cloudflare concluído e conta confirmada. O Worker ainda não existe na conta. O envio de `AGENDOR_CRM_TOKEN` e `MCP_TEST_TOKEN` à Cloudflare foi bloqueado pela revisão automática de aprovação, que exige autorização humana explícita para essa transferência de credenciais. Nenhum segredo foi enviado. Aguardando autorização solicitada no chat. Uma URL workers.dev só será registrada após deploy real; nenhuma URL foi inventada.
+Estado: **ainda não publicado**. Login oficial Cloudflare concluído e conta confirmada. O usuário autorizou explicitamente o envio de `AGENDOR_CRM_TOKEN` e `MCP_TEST_TOKEN` e a publicação do Worker. A tentativa de cadastro dos secrets foi bloqueada pela própria Cloudflare: **erro 10034, e-mail da conta ainda não verificado**. O Worker não foi criado e nenhum secret foi cadastrado. A autorização do usuário permanece válida para retomar após verificar o e-mail. Uma URL workers.dev só será registrada após deploy real; nenhuma URL foi inventada.
+
+Para desbloquear: abra o [perfil Cloudflare](https://dash.cloudflare.com/profile), escolha **Send verification email** e confirme pelo link recebido no e-mail da conta. [Instruções oficiais](https://developers.cloudflare.com/fundamentals/user-profiles/verify-email-address/).
 
 Verificação local em 2026-10-21: `npm ci` sem vulnerabilidades, 110 testes unitários/protocolo passando no workerd, oito testes de contrato CRM reais passando (Chat explicitamente pulado), TypeScript aprovado, bundle dry-run de aproximadamente 1245 KiB / 216 KiB gzip e Inspector 2.11.0 com oito tools, quatro consultas CRM reais e autenticação aprovada. Revisão independente concluída; cancelamento propagado até o upstream. Não há evidência de deploy ou logs de produção enquanto secrets e publicação não forem autorizados e executados.
 
