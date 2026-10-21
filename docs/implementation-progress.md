@@ -36,3 +36,9 @@ Task 8: complete — regressão tarefas RED 7 falhas + RED janela 1 falha; GREEN
 
 Task 9: Ruling: Wrangler dev no Windows falha na persistência SQLite; fallback dev:ephemeral usa API Wrangler com persist:false, preservando runtime e bindings — custo: API programática unstable apenas no tooling local.
 Task 9: complete — Inspector 2.11.0 modern Streamable HTTP: /health200, sem token401, token incorreto401, tools/list8, server_status, quatro GETs CRM reais PASS. Nenhum segredo encontrado nos resultados. Bundle dry-run PASS (1244KiB/216KiB gzip).
+
+Final review: revisão independente gpt-6-astra. Achado P2 confirmado: cancelamento não chegava ao fetch. Corrigido propagando request.signal e ctx.mcpReq.signal, checando antes/depois do limiter e combinando com timeout. Final: fixed cancelamento — 5 falhas RED → suite 110/110 GREEN; cancelamento antes de envio, durante fetch/corpo e durante limiter cobertos.
+Final: Ruling: cancelamentos notificados entre requisições não coordenados — aplicação é stateless, mas todos os sinais disponíveis agora são propagados; custo: sem coordenação persistente de cancelamentos externos.
+Final: Ruling: sem limite arbitrário de tamanho de registros além de paginação100 e timeout10s — não há limite documentado do provedor; custo: respostas excepcionalmente grandes podem atingir limites do runtime.
+Final: Ruling: OAuth/per-client e Chat fora do escopo/bloqueados conforme plano — custo: não conectar clientes reais permanentemente com o token de teste.
+Final review: produção/logs de produção pendentes de autenticação Cloudflare; revisor não abriu segredos locais. Verificação de ausência de segredos executada pelo implementador sem exibir valores.

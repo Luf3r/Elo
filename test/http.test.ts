@@ -47,6 +47,22 @@ describe('safe upstream HTTP', () => {
     vi.stubGlobal('fetch', fetch);
     await fetchJson(request());
   });
+  it('does not dispatch a request that was already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetch = vi.fn(async () => Response.json({}));
+    vi.stubGlobal('fetch', fetch);
+    await expect(fetchJson(new Request(request(), { signal: controller.signal }))).rejects.toMatchObject({ retryable: false });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each(['fetch', 'body'])('propagates caller cancellation during %s consumption', async phase => {
+    const controller = new AbortController();
+    vi.stubGlobal('fetch', vi.fn((r: Request) => phase === 'fetch'
+      ? new Promise((_resolve, reject) => r.signal.addEventListener('abort', () => reject(r.signal.reason)))
+      : Promise.resolve(new Response(new ReadableStream({ start(stream) { r.signal.addEventListener('abort', () => stream.error(r.signal.reason)); } })))));
+    setTimeout(() => controller.abort(), 5);
+    await expect(fetchJson(new Request(request(), { signal: controller.signal }), { timeoutMs: 100 })).rejects.toMatchObject({ retryable: false });
+  });
   it('rejects redirects without following their locations', async () => {
     const fetch = vi.fn(async () => new Response(null, { status: 302, headers: { location: 'https://attacker.example' } }));
     vi.stubGlobal('fetch', fetch);

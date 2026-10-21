@@ -5,13 +5,15 @@ import { SafeError } from '../../errors';
 import { isConfiguredSecret } from '../../auth';
 import { normalizePage } from './pagination';
 import { peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, detailEnvelope, parseInput } from './schemas';
+import { throwIfCancelled } from '../../cancellation';
 
-export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>): AgendorCrmClient {
+export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, options: { signal?: AbortSignal } = {}): AgendorCrmClient {
   async function get(path: string, params: Record<string, string | number | undefined> = {}) {
+    throwIfCancelled(options.signal);
     if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${path}`);
     for (const [name, value] of Object.entries(params)) if (value !== undefined && value !== '') url.searchParams.set(name, String(value));
-    return fetchJson<unknown>(new Request(url, { method: 'GET', headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json' } }));
+    return fetchJson<unknown>(new Request(url, { method: 'GET', signal: options.signal, headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json' } }));
   }
   async function list(path: string, input: { page: number; perPage: number }, filters: Record<string, string | number | undefined> = {}) {
     return normalizePage(await get(path, { page: input.page, per_page: input.perPage, ...filters }), input.page, input.perPage);

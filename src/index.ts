@@ -15,7 +15,7 @@ export default {
         const auth = await authenticateClient(request, env);
         await enforceRateLimit(env, auth);
         if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
-        const response = await createMcpHandler(() => createServer(env, auth), { corsOptions: false })(request, env, ctx);
+        const response = await createMcpHandler(() => createServer(env, auth, request.signal), { corsOptions: false })(request, env, ctx);
         response.headers.set('Cache-Control', 'no-store');
         return response;
       } catch (error) {
