@@ -22,3 +22,5 @@ Task 1: complete — typecheck e Inspector 2.11.0 --help PASS; commit de39f34. n
 Task 2: complete — RED 14 falhas; GREEN 18/18 health+HTTP; typecheck PASS. Workers exige redirect manual, não error; redirects rejeitados e nunca seguidos.
 
 Task 3: complete — RED 23 falhas; GREEN suite 41/41, typecheck PASS. Auth precede limite; segredos ausentes e limiter indisponível falham fechados.
+
+Task 4: complete — OpenAPI oficial V3 verificado; RED 30 falhas; GREEN suite 71/71, typecheck PASS. Nenhuma rota/filtro inventado; tarefas genéricas confirmadas em /tasks.
