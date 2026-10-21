@@ -15,7 +15,7 @@ Ruling: Inspector 2.10.1 inclui SDKs com alertas de segurança; atualizado a 2.1
 - Tasks 1–6: completas; evidências abaixo.
 - Task 7: completa pelo ramo BLOCKED; falta contrato técnico Chat e nenhuma ferramenta Chat está ativa.
 - Tasks 8–9: completas com credenciais locais e Inspector real.
-- Task 10: login concluído e envio/publicação explicitamente autorizados; Cloudflare bloqueia criação do Worker com erro10034 até verificar o e-mail da conta. Nenhum secret cadastrado.
+- Task 10: completa; dois secrets cadastrados, Worker publicado e Inspector/logs de produção verificados. URL e versão em docs/deployment.md.
 
 Task 1: complete — typecheck e Inspector 2.11.0 --help PASS; commit de39f34. npm audit: zero vulnerabilidades.
 Task 2: complete — RED 14 falhas; GREEN 18/18 health+HTTP; typecheck PASS. Workers exige redirect manual, não error; redirects rejeitados e nunca seguidos.
@@ -49,3 +49,7 @@ Task 10 update2026-10-21: usuário AUTORIZOU explicitamente transferir os dois t
 Cloudflare agent setup: 19skills oficiais instaladas, MCP cloudflare habilitado; OAuth MCP iniciado e aberto no navegador, pendente conclusão. CLIcf opcional omitida porque projeto já usaWrangler. Novos pnpm-lock.yaml/pnpm-workspace.yaml surgiram durante a sessão; preservados sem adicionar aos commits por não fazerem parte destas alterações.
 
 Task 10 diagnóstico: usuário informou verificação concluída; API manteve10034. Identidade confirmada na conta correta; OAuthWrangler renovado com cinco escopos conta/Workers; nova tentativa manteve10034. Cadastrosecrets/deploy ainda não concluídos. MCPCloudflare autenticado (auth_statuso_auth), 19skillsinstaladas. npm test110/110, typecheck e build novamente PASS após layoutnode_modules mudar por instalação pnpm externa; arquivos pnpm preservados.
+
+Task 10: complete — após confirmação do perfil verified, dois secrets cadastrados via stdin; subdomínio inicial example.workers.dev registrado pelo Wrangler; Worker publicado em https://elo-agendor-mcp.example.workers.dev, versão7e6bdf1d-9f39-4435-959d-b000e1c0674f. Inspector2.11.0 em produção: health200, auth401 ausente/incorreto, tools8, statusPASS, quatro leituras reaisPASS. Tail20eventos sem tokens/Authorizationcompleto; scannerGit/logs sem vazamentos. Primeiro TLS falhou durante ativação; repetição aprovada sem alterar segurança.
+Ruling: subdomínio de conta ausente — registrado example.workers.dev, baseado na identidade autenticada, para cumprir a publicação workers.dev autorizada; custo: namespace público da conta passa a usar esse nome.
+Final: nenhuma questão crítica/importante restante; nenhuma melhoria menor adiada. Chat continua no ramo BLOCKED previsto, não é bloqueio do CRM. Arquivos pnpm externos preservados sem commit.

@@ -2,6 +2,8 @@
 
 Worker TypeScript de consulta ao Agendor CRM, com Streamable HTTP em `/mcp` e `GET /health` público.
 
+Publicado e validado em 2026-10-21: [endpoint MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). MCP exige o Bearer configurado; não inclua tokens na URL.
+
 Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars`, preencha os dois segredos localmente e execute `npm run dev`. Nunca envie tokens no chat nem use `vars` do Wrangler para credenciais.
 
 ## Dependências verificadas

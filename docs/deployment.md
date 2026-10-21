@@ -1,12 +1,33 @@
 # Publicação Cloudflare
 
-Estado: **ainda não publicado**. Login oficial Cloudflare concluído e conta confirmada. O usuário autorizou explicitamente o envio de `AGENDOR_CRM_TOKEN` e `MCP_TEST_TOKEN` e a publicação do Worker. A tentativa de cadastro dos secrets foi bloqueada pela própria Cloudflare: **erro 10034, e-mail da conta ainda não verificado**. O Worker não foi criado e nenhum secret foi cadastrado. A autorização do usuário permanece válida para retomar após verificar o e-mail. Uma URL workers.dev só será registrada após deploy real; nenhuma URL foi inventada.
+Estado: **publicado e verificado em produção em 2026-10-21**.
 
-Para desbloquear: abra o [perfil Cloudflare](https://dash.cloudflare.com/profile), escolha **Send verification email** e confirme pelo link recebido no e-mail da conta. [Instruções oficiais](https://developers.cloudflare.com/fundamentals/user-profiles/verify-email-address/).
+| Campo | Valor |
+|---|---|
+| Worker | `elo-agendor-mcp` |
+| Conta | `owner@elo.example` |
+| Base URL | https://elo-agendor-mcp.example.workers.dev |
+| MCP Streamable HTTP | https://elo-agendor-mcp.example.workers.dev/mcp |
+| Saúde pública | https://elo-agendor-mcp.example.workers.dev/health |
+| Versão ativa | `7e6bdf1d-9f39-4435-959d-b000e1c0674f` |
+| Publicação da versão | 2026-10-21 13:15 America/Cuiaba |
+| Secrets confirmados | `AGENDOR_CRM_TOKEN`, `MCP_TEST_TOKEN`; valores omitidos |
+| Namespace MCP / CRM | `1001` / `1002` |
+| Chat | BLOCKED; sem ferramentas ou secret obrigatório |
 
-Atualização: o usuário informou ter concluído a verificação. A tentativa foi repetida e a sessão Wrangler foi renovada com escopos de conta/Workers; a API ainda devolveu erro10034. A identidade da sessão foi confirmada como `owner@elo.example`, na conta esperada. Aguardando confirmar se o perfil exibe o endereço como `verified`. Há [relato aberto na Cloudflare](https://github.com/cloudflare/developer-platform/issues/25) de divergência entre e-mail verificado e esse erro; isso não confirma a causa nesta conta. Não foram tentados contornos da exigência de verificação.
+O usuário autorizou explicitamente o envio dos dois tokens para Cloudflare Secrets e a publicação. Os valores foram transmitidos por stdin do Wrangler, sem arquivo intermediário ou valores em argumentos. A conta inicialmente devolveu erro10034 após a verificação do e-mail; uma nova tentativa liberou a criação do Worker. O subdomínio inicial `example.workers.dev` foi registrado pelo fluxo oficial do Wrangler. A primeira conexão TLS falhou durante a ativação do subdomínio; a repetição posterior passou, sem desativar verificações TLS.
 
-Verificação local em 2026-10-21: `npm ci` sem vulnerabilidades, 110 testes unitários/protocolo passando no workerd, oito testes de contrato CRM reais passando (Chat explicitamente pulado), TypeScript aprovado, bundle dry-run de aproximadamente 1245 KiB / 216 KiB gzip e Inspector 2.11.0 com oito tools, quatro consultas CRM reais e autenticação aprovada. Revisão independente concluída; cancelamento propagado até o upstream. Não há evidência de deploy ou logs de produção enquanto secrets e publicação não forem autorizados e executados.
+## Evidências da versão publicada
+
+- Instalação `npm ci` aprovada, sem vulnerabilidades no audit; 110 testes unitários/protocolo passando no workerd.
+- Oito testes de contrato CRM reais passando, incluindo dados opcionais/nulos, paginação e tarefas por empresa. Contrato Chat explicitamente pulado pelo gate.
+- TypeScript e bundle aprovados; upload de 1248.03 KiB / 216.40 KiB gzip; startup informado pelo Wrangler de 64ms.
+- Inspector **2.11.0** em produção: saúde 200, Bearer ausente/incorreto 401, oito ferramentas em `tools/list`, `server_status` aprovado e quatro consultas reais de pessoas, empresas, negócios e tarefas aprovadas.
+- Tail de produção durante a verificação: **20 eventos**, nenhum valor de segredo e nenhum Authorization completo encontrado. Conteúdo dos registros e frames brutos não foram exibidos nem salvos pelo verificador.
+- Arquivos versionados, histórico Git e logs locais produzidos verificados sem os valores dos tokens; `.dev.vars` não versionado.
+- Revisão independente concluída; cancelamento propagado até o upstream e coberto por regressões.
+
+`/health` é liveness e não consulta Agendor. A URL MCP responde a clientes MCP autenticados; abrir o endereço no navegador sem Bearer retorna 401, como esperado.
 
 ## Gate antes da publicação
 
@@ -34,7 +55,14 @@ npm run deploy
 
 Use os valores guardados localmente, sem colá-los em documentação ou chat. `secrets.required` impede deploy sem os dois nomes. **Não** cadastre AGENDOR_CHAT_TOKEN enquanto o gate estiver bloqueado. `wrangler secret put` pode criar/publicar uma nova versão; trate a operação como alteração de produção.
 
-Após deploy, registre aqui a URL workers.dev real e a URL `/mcp`. O comando `npm run verify:mcp`, com `MCP_URL` apontando para essa URL e o token local correspondente, precisa passar para comprovar autenticação, descoberta, status e quatro leituras reais. `GET /health` precisa retornar 200 sem token; `/mcp` precisa rejeitar Bearer ausente e incorreto.
+Para repetir a verificação desta publicação no PowerShell:
+
+```powershell
+$env:MCP_URL = 'https://elo-agendor-mcp.example.workers.dev/mcp'
+npm run verify:mcp
+```
+
+O token é lido do `.dev.vars`; não o passe em argumentos. A checagem precisa comprovar autenticação, descoberta, status e quatro leituras reais. `GET /health` precisa retornar 200 sem token; `/mcp` precisa rejeitar Bearer ausente e incorreto. Aguarde pelo menos dez segundos entre execuções para respeitar o orçamento CRM nativo de 4/10s.
 
 Inspecione logs ao vivo em uma janela controlada e confirme ausência dos valores dos segredos e de Authorization completo. Não habilite logging de headers ou bodies para essa verificação. Registre data, versão implantada e resultados, sem conteúdo CRM.
 
