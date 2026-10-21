@@ -26,3 +26,5 @@ Task 3: complete — RED 23 falhas; GREEN suite 41/41, typecheck PASS. Auth prec
 Task 4: complete — OpenAPI oficial V3 verificado; RED 30 falhas; GREEN suite 71/71, typecheck PASS. Nenhuma rota/filtro inventado; tarefas genéricas confirmadas em /tasks.
 
 Task 5: complete — RED 4 falhas; GREEN suite 76/76; typecheck PASS. SDK v2 usa factory nova por requisição; concorrência validada. Testes precisam Host explícito, como no HTTP real.
+
+Task 6: complete — RED 11 falhas; GREEN suite 99/99; typecheck PASS. Sete tools CRM, validação estrita, erros MCP sanitizados, uma chamada GET por tool e texto malicioso tratado apenas como dado.
