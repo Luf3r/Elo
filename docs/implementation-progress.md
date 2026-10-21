@@ -20,3 +20,5 @@ Ruling: Inspector 2.10.1 inclui SDKs com alertas de segurança; atualizado a 2.1
 
 Task 1: complete — typecheck e Inspector 2.11.0 --help PASS; commit de39f34. npm audit: zero vulnerabilidades.
 Task 2: complete — RED 14 falhas; GREEN 18/18 health+HTTP; typecheck PASS. Workers exige redirect manual, não error; redirects rejeitados e nunca seguidos.
+
+Task 3: complete — RED 23 falhas; GREEN suite 41/41, typecheck PASS. Auth precede limite; segredos ausentes e limiter indisponível falham fechados.
