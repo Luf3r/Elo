@@ -33,3 +33,6 @@ Task 7: complete (BLOCKED branch) — 7 testes MCP/gate PASS; 1 contrato Chat SK
 
 Task 8: Ruling: API real /tasks exige data inferior com janela de 31 dias, embora OpenAPI marque datas opcionais. Adicionado updatedDateGt explícito para consulta genérica e rotas por entidade documentadas para consultas por ID — custo: parâmetro adicional necessário em tarefas genéricas.
 Task 8: complete — regressão tarefas RED 7 falhas + RED janela 1 falha; GREEN suite 104/104, typecheck PASS; contratos reais 8 PASS e 1 Chat SKIP; 429 validado em mocks, sem provocar abuso no provedor.
+
+Task 9: Ruling: Wrangler dev no Windows falha na persistência SQLite; fallback dev:ephemeral usa API Wrangler com persist:false, preservando runtime e bindings — custo: API programática unstable apenas no tooling local.
+Task 9: complete — Inspector 2.11.0 modern Streamable HTTP: /health200, sem token401, token incorreto401, tools/list8, server_status, quatro GETs CRM reais PASS. Nenhum segredo encontrado nos resultados. Bundle dry-run PASS (1244KiB/216KiB gzip).

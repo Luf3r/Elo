@@ -26,6 +26,6 @@ Chat desativado. Nenhuma rota ou autenticação foi inferida. O token Chat não 
 
 ## Comandos
 
-`npm test`, `npm run test:watch`, `npm run typecheck`, `npm run build`, `npm run test:contract`, `npm run inspector`, `npm run deploy`.
+`npm test`, `npm run test:watch`, `npm run typecheck`, `npm run build`, `npm run test:contract`, `npm run inspector`, `npm run verify:mcp`, `npm run deploy`.
 
-Instruções operacionais e estado real da publicação serão registrados em `docs/operations.md` e `docs/deployment.md`.
+Veja [operação e Inspector](docs/operations.md), [estado e procedimento de deploy](docs/deployment.md) e [evidências de implementação](docs/implementation-progress.md). No Windows, `npm run dev:ephemeral` contorna falhas do SQLite de persistência do runtime local.
