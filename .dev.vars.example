@@ -1,0 +1,3 @@
+AGENDOR_CRM_TOKEN="replace-me"
+MCP_TEST_TOKEN="replace-me"
+# Add AGENDOR_CHAT_TOKEN only after Chat API discovery succeeds.

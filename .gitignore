@@ -1,0 +1,13 @@
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+.wrangler/
+node_modules/
+.tooling/
+.superpowers/
+dist/
+*.tgz
+agendor-docs.html
+agendor-api.apib
