@@ -1,8 +1,16 @@
 # Publicação Cloudflare
 
-Estado atual: **OAuth publicado em 2026-10-21**, versão `6c40658a-e7fa-48de-8309-63beba96a634`, no mesmo endpoint MCP. Secret Access preparado na versão não publicada `503a018c-7b45-4dc0-a66a-72235bbbc934` e herdado pelo upload de código, sem tráfego na versão intermediária. Descoberta de recurso/servidor, PKCE S256, CIMD e rejeição da autenticação fixa aprovados em produção. Prova completa de login e Inspector aguardando o proprietário concluir o PIN no navegador.
+Estado atual: **OAuth publicado em 2026-10-21**, versão `48f65d8d-d1b9-4d83-8102-e2f46f5b36e6`, no mesmo endpoint MCP. Secret Access preparado na versão não publicada `503a018c-7b45-4dc0-a66a-72235bbbc934` e herdado pelo upload de código, sem tráfego na versão intermediária. Descoberta de recurso/servidor, PKCE S256, CIMD e rejeição da autenticação fixa aprovados em produção. Prova completa de login e Inspector aguardando o proprietário concluir um novo PIN no navegador.
 
-Implementação: biblioteca OAuth oficial1.2.3, jose6.2.13, KV exclusivo e limitador OAuth1003; token Access1h, renovação7d somente com `offline_access`. Testes139/139 no Workers, teste de proteção do verificador1/1, contratos CRM8/8, typecheck e build aprovados. Bundle1529.58KiB/280.94KiB gzip; startup112ms informado pelo Wrangler. Revisão independente com dois ajustes corrigidos e verificados.
+Implementação: biblioteca OAuth oficial 1.2.3, jose 6.2.13, KV exclusivo e limitador OAuth1003; access token de 1h, renovação por 7d somente com `offline_access`. Testes 139/139 no Workers, teste de proteção do verificador 1/1, contratos reais CRM 8/8 e JWKS Access 1/1, typecheck e build aprovados. Bundle 1529.69KiB/280.99KiB gzip; startup 58ms informado pelo Wrangler. Revisão independente com dois ajustes corrigidos e verificados.
+
+O primeiro login encontrou uma incompatibilidade de runtime ao buscar as chaves de assinatura OIDC: Workers rejeita `redirect: 'error'`. A versão ativa usa `manual`, sem seguir redirecionamentos; a biblioteca exige resposta 200. Uma regressão unitária e um contrato com o JWKS real reproduziram o erro antes da correção e passaram depois. A validação de assinatura, issuer, audience, nonce e e-mail permanece obrigatória.
+
+## Operação atual
+
+Use os comandos e o procedimento de secrets em [OAuth](oauth-setup.md). Os secrets obrigatórios atuais são `AGENDOR_CRM_TOKEN` e `ACCESS_CLIENT_SECRET`. O token fixo antigo não autentica esta versão. Para o Inspector, conclua `npm run oauth:login` e execute `npm run verify:mcp`; a sessão fica apenas no arquivo local ignorado.
+
+## Histórico: publicação com token de teste
 
 Consulte [OAuth](oauth-setup.md) para conectar clientes e operar o novo fluxo. O registro abaixo preserva a versão com token de teste anterior, para rollback; não é a versão ativa.
 
@@ -13,7 +21,7 @@ Consulte [OAuth](oauth-setup.md) para conectar clientes e operar o novo fluxo. O
 | Base URL | https://elo-agendor-mcp.example.workers.dev |
 | MCP Streamable HTTP | https://elo-agendor-mcp.example.workers.dev/mcp |
 | Saúde pública | https://elo-agendor-mcp.example.workers.dev/health |
-| Versão ativa | `7e6bdf1d-9f39-4435-959d-b000e1c0674f` |
+| Versão histórica | `7e6bdf1d-9f39-4435-959d-b000e1c0674f` |
 | Publicação da versão | 2026-10-21 13:15 America/Cuiaba |
 | Secrets confirmados | `AGENDOR_CRM_TOKEN`, `MCP_TEST_TOKEN`; valores omitidos |
 | Namespace MCP / CRM | `1001` / `1002` |
@@ -33,7 +41,11 @@ O usuário autorizou explicitamente o envio dos dois tokens para Cloudflare Secr
 
 `/health` é liveness e não consulta Agendor. A URL MCP responde a clientes MCP autenticados; abrir o endereço no navegador sem Bearer retorna 401, como esperado.
 
-## Gate antes da publicação
+## Procedimentos históricos da versão com token fixo
+
+Os comandos abaixo descrevem a versão histórica e não configuram a publicação OAuth atual. Para a versão ativa, siga [OAuth](oauth-setup.md).
+
+### Gate antes da publicação
 
 ```powershell
 npm ci
