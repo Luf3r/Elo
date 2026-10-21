@@ -4,6 +4,8 @@ Estado: **ainda não publicado**. Login oficial Cloudflare concluído e conta co
 
 Para desbloquear: abra o [perfil Cloudflare](https://dash.cloudflare.com/profile), escolha **Send verification email** e confirme pelo link recebido no e-mail da conta. [Instruções oficiais](https://developers.cloudflare.com/fundamentals/user-profiles/verify-email-address/).
 
+Atualização: o usuário informou ter concluído a verificação. A tentativa foi repetida e a sessão Wrangler foi renovada com escopos de conta/Workers; a API ainda devolveu erro10034. A identidade da sessão foi confirmada como `owner@elo.example`, na conta esperada. Aguardando confirmar se o perfil exibe o endereço como `verified`. Há [relato aberto na Cloudflare](https://github.com/cloudflare/developer-platform/issues/25) de divergência entre e-mail verificado e esse erro; isso não confirma a causa nesta conta. Não foram tentados contornos da exigência de verificação.
+
 Verificação local em 2026-10-21: `npm ci` sem vulnerabilidades, 110 testes unitários/protocolo passando no workerd, oito testes de contrato CRM reais passando (Chat explicitamente pulado), TypeScript aprovado, bundle dry-run de aproximadamente 1245 KiB / 216 KiB gzip e Inspector 2.11.0 com oito tools, quatro consultas CRM reais e autenticação aprovada. Revisão independente concluída; cancelamento propagado até o upstream. Não há evidência de deploy ou logs de produção enquanto secrets e publicação não forem autorizados e executados.
 
 ## Gate antes da publicação
