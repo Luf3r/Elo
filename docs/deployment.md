@@ -1,6 +1,10 @@
 # Publicação Cloudflare
 
-Estado anterior: **CRM com token de teste publicado e verificado em 2026-10-21**. A extensão OAuth está implementada e em publicação; o registro abaixo preserva a versão anterior para rollback. Consulte [OAuth](oauth-setup.md) para o novo fluxo. Não considerar o registro antigo como comprovação de OAuth em produção.
+Estado atual: **OAuth publicado em 2026-10-21**, versão `6c40658a-e7fa-48de-8309-63beba96a634`, no mesmo endpoint MCP. Secret Access preparado na versão não publicada `503a018c-7b45-4dc0-a66a-72235bbbc934` e herdado pelo upload de código, sem tráfego na versão intermediária. Descoberta de recurso/servidor, PKCE S256, CIMD e rejeição da autenticação fixa aprovados em produção. Prova completa de login e Inspector aguardando o proprietário concluir o PIN no navegador.
+
+Implementação: biblioteca OAuth oficial1.2.3, jose6.2.13, KV exclusivo e limitador OAuth1003; token Access1h, renovação7d somente com `offline_access`. Testes139/139 no Workers, teste de proteção do verificador1/1, contratos CRM8/8, typecheck e build aprovados. Bundle1529.58KiB/280.94KiB gzip; startup112ms informado pelo Wrangler. Revisão independente com dois ajustes corrigidos e verificados.
+
+Consulte [OAuth](oauth-setup.md) para conectar clientes e operar o novo fluxo. O registro abaixo preserva a versão com token de teste anterior, para rollback; não é a versão ativa.
 
 | Campo | Valor |
 |---|---|

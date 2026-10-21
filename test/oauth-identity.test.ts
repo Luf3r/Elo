@@ -33,7 +33,10 @@ describe('Access identity boundary', () => {
   ])('verifies signed identity claims %j', async (override, valid) => {
     const { privateKey, publicKey } = await generateKeyPair('RS256');
     const jwk = { ...await exportJWK(publicKey), kid: 'unit-key', alg: 'RS256', use: 'sig' };
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ keys: [jwk] }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async(_url,options)=>{
+      if(options?.redirect!=='manual')throw new TypeError('Workers fetch requires manual redirect handling.');
+      return Response.json({ keys: [jwk] });
+    });
     const now = Math.floor(Date.now()/1000);
     const token = await new SignJWT({ sub: 'owner-sub', email: 'owner@elo.example', nonce: 'bound-nonce', iss: fixture.ACCESS_ISSUER, aud: 'unit-client', iat: now, exp: now + 300, ...override })
       .setProtectedHeader({ alg: 'RS256', kid: 'unit-key' }).sign(privateKey);

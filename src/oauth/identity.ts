@@ -7,7 +7,8 @@ export async function verifyAccessIdentity(token: string, nonce: string, config:
   if (!token || token.length > 16_384 || !nonce) throw new Error('Invalid identity.');
   const keys = createRemoteJWKSet(new URL(config.jwksUrl), {
     timeoutDuration: 10_000,
-    [customFetch]: async (url, options) => fetch(url, { ...options, redirect: 'error' }),
+    // Workers supports manual/follow only. jose rejects non-200 JWKS responses, so redirects are never followed.
+    [customFetch]: async (url, options) => fetch(url, { ...options, redirect: 'manual' }),
   });
   const { payload } = await jwtVerify(token, keys, {
     issuer: config.issuer, audience: config.clientId, algorithms: ['RS256'],
