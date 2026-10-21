@@ -19,13 +19,14 @@ describe('Streamable HTTP MCP', () => {
       expect(tool.name).not.toMatch(/create|update|delete|send|upsert|archive|move|request|fetch/);
       expect(tool.description).toContain('Read-only');
       expect(tool.annotations.readOnlyHint).toBe(true);
+      expect(tool._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['crm:read']}]);
     }
   });
   it('calls server_status without upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const { data } = await callTool('server_status');
     expect(data.result.isError).not.toBe(true);
-    expect(JSON.parse(data.result.content[0].text)).toEqual({ status: 'ok', service: 'elo-agendor-mcp', version: '0.1.0', client: 'test' });
+    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ status: 'ok', service: 'elo-agendor-mcp', version: '0.1.0', client: expect.any(String) });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('keeps overlapping requests isolated', async () => {

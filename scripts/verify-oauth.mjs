@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {origin,resource} from './oauth-session.mjs';
+const meta=await fetch(origin+'/.well-known/oauth-protected-resource/mcp',{signal:AbortSignal.timeout(15_000)});
+assert.equal(meta.status,200);const data=await meta.json();
+assert.equal(data.resource,resource);assert.deepEqual(data.authorization_servers,[origin]);assert.deepEqual(data.scopes_supported,['crm:read']);
+const r=await fetch(resource,{headers:{Authorization:'Bearer invalid-static-token'},signal:AbortSignal.timeout(15_000)});
+assert.equal(r.status,401);assert(r.headers.get('www-authenticate')?.includes('resource_metadata='));await r.body?.cancel();
+const config=await fetch(origin+'/.well-known/oauth-authorization-server',{signal:AbortSignal.timeout(15_000)});const auth=await config.json();
+assert.equal(auth.issuer,origin);assert(auth.code_challenge_methods_supported.includes('S256'));assert(auth.scopes_supported.includes('offline_access'));
+console.log(JSON.stringify({resource,discovery:'PASS',staticCredentialRejected:'PASS',PKCE:'S256',CIMD:auth.client_id_metadata_document_supported,authorization:'Browser login required for end-to-end verification'}));

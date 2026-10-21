@@ -2,13 +2,15 @@ import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
+import {validateMcpTarget,readSession} from './oauth-session.mjs';
 
 if (existsSync('.dev.vars')) process.loadEnvFile('.dev.vars');
-const target = new URL(process.env.MCP_URL ?? 'http://127.0.0.1:8787/mcp');
+const target = validateMcpTarget(process.env.MCP_URL);
 assert(target.pathname === '/mcp' && !target.username && !target.password && !target.search && !target.hash, 'Use an exact /mcp URL without credentials or query.');
 assert((target.protocol === 'https:' && target.hostname.endsWith('.workers.dev')) ||
   (target.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)), 'Only local HTTP or HTTPS workers.dev targets are allowed.');
-assert(process.env.MCP_TEST_TOKEN, 'Configure MCP_TEST_TOKEN locally.');
+const credential = process.env.MCP_OAUTH_ACCESS_TOKEN ?? readSession().accessToken;
+assert(credential, 'Complete OAuth browser login first.');
 
 const { runCli } = await import(pathToFileURL(resolve('node_modules/@modelcontextprotocol/inspector/clients/cli/build/index.js')).href);
 const output = process.stdout.write.bind(process.stdout);
@@ -25,12 +27,12 @@ async function inspect(method, tool, args = {}) {
     // Invoke pinned Inspector in-process: the credential never appears in OS argv or a config file.
     await runCli([process.execPath, 'inspector', '--server-url', target.href, '--transport', 'http',
       '--protocol-era', 'modern', '--stored-auth-only', '--connect-timeout', '15000', '--format', 'json', '--quiet',
-      '--header', `Authorization: Bearer ${process.env.MCP_TEST_TOKEN}`, '--method', method,
+      '--header', `Authorization: Bearer ${credential}`, '--method', method,
       ...(tool ? ['--tool-name', tool, '--tool-args-json', JSON.stringify(args)] : []),
     ]);
   } finally { process.stdout.write = output; }
   assert(!captured.includes(process.env.AGENDOR_CRM_TOKEN ?? '__unused_token__'), 'Upstream credential appeared in an MCP result.');
-  assert(!captured.includes(process.env.MCP_TEST_TOKEN), 'MCP credential appeared in an MCP result.');
+  assert(!captured.includes(credential), 'MCP credential appeared in an MCP result.');
   const parsed = JSON.parse(captured.trim());
   const result = parsed.result ?? parsed;
   assert(!result.isError && !parsed.error, 'Inspector returned an MCP error; no record content displayed.');

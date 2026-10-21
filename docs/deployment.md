@@ -1,6 +1,6 @@
 # Publicação Cloudflare
 
-Estado: **publicado e verificado em produção em 2026-10-21**.
+Estado anterior: **CRM com token de teste publicado e verificado em 2026-10-21**. A extensão OAuth está implementada e em publicação; o registro abaixo preserva a versão anterior para rollback. Consulte [OAuth](oauth-setup.md) para o novo fluxo. Não considerar o registro antigo como comprovação de OAuth em produção.
 
 | Campo | Valor |
 |---|---|

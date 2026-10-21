@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { enforceRateLimit, enforceCrmRateLimit } from '../src/rate-limit';
 import worker from '../src/index';
 import { context, testEnv } from './helpers';
+import { issueTestToken } from './oauth-token';
+import { RESOURCE } from '../src/oauth/config';
 
 describe('native rate limiting', () => {
   it('allows requests with a stable non-secret client key', async () => {
@@ -12,7 +14,8 @@ describe('native rate limiting', () => {
   it('rejects quota exhaustion', async () => {
     const env = testEnv({ MCP_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
     await expect(enforceRateLimit(env, { clientId: 'test' })).rejects.toMatchObject({ code: 'MCP_RATE_LIMITED', status: 429 });
-    const r = await worker.fetch(new Request('https://example.com/mcp', { headers: { Authorization: 'Bearer unit-mcp-token' } }), env, context());
+    const token = await issueTestToken(env);
+    const r = await worker.fetch(new Request(RESOURCE, { headers: { Authorization: `Bearer ${token.access_token}` } }), env, context());
     expect(r.status).toBe(429);
     expect(r.headers.get('retry-after')).toBe('10');
   });

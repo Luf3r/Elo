@@ -2,9 +2,9 @@
 
 Worker TypeScript de consulta ao Agendor CRM, com Streamable HTTP em `/mcp` e `GET /health` público.
 
-Publicado e validado em 2026-10-21: [endpoint MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). MCP exige o Bearer configurado; não inclua tokens na URL.
+Endpoint: [MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). A implementação OAuth conecta ChatGPT Plus e Zapia por autorização no navegador e código enviado ao e-mail do proprietário. Estado da publicação e evidências em [deployment](docs/deployment.md); instruções em [OAuth](docs/oauth-setup.md). Não inclua credenciais na URL.
 
-Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars`, preencha os dois segredos localmente e execute `npm run dev`. Nunca envie tokens no chat nem use `vars` do Wrangler para credenciais.
+Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars`, preencha `AGENDOR_CRM_TOKEN` e `ACCESS_CLIENT_SECRET` localmente e execute `npm run dev`. Os endpoints OIDC públicos e os bindings ficam em `wrangler.jsonc`. Nunca envie tokens no chat nem use `vars` do Wrangler para credenciais. `MCP_TEST_TOKEN` não autentica a implementação OAuth.
 
 ## Dependências verificadas
 

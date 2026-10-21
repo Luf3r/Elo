@@ -1,13 +1,58 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "elo-agendor-mcp",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-10-21",
-  "compatibility_flags": ["nodejs_compat"],
-  "secrets": { "required": ["AGENDOR_CRM_TOKEN", "MCP_TEST_TOKEN"] },
-  "ratelimits": [
-    { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
-    { "name": "AGENDOR_CRM_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 4, "period": 10 } }
-  ],
-  "observability": { "enabled": false }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "elo-agendor-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-21",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"secrets": {
+		"required": [
+			"AGENDOR_CRM_TOKEN",
+			"ACCESS_CLIENT_SECRET"
+		]
+	},
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			"id": "00000000000000000000000000000000"
+		}
+	],
+	"vars": {
+		"ACCESS_CLIENT_ID": "example-client-id",
+		"ACCESS_ISSUER": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id",
+		"ACCESS_AUTHORIZATION_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/authorization",
+		"ACCESS_TOKEN_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/token",
+		"ACCESS_JWKS_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/jwks"
+	},
+	"ratelimits": [
+		{
+			"name": "MCP_RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 30,
+				"period": 10
+			}
+		},
+		{
+			"name": "OAUTH_RATE_LIMITER",
+			"namespace_id": "1003",
+			"simple": {
+				"limit": 30,
+				"period": 10
+			}
+		},
+		{
+			"name": "AGENDOR_CRM_RATE_LIMITER",
+			"namespace_id": "1002",
+			"simple": {
+				"limit": 4,
+				"period": 10
+			}
+		}
+	],
+	"observability": {
+		"enabled": false
+	}
 }

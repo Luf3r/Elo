@@ -1,18 +1,18 @@
 # Operação e verificação
 
-Requer Node >=22.19.0 e npm. Instale com `npm ci`. Copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN` (Agendor → Menu → Integrações). Gere `MCP_TEST_TOKEN` com `npm run setup:token`, que grava 32 bytes aleatórios em hexadecimal somente no arquivo ignorado. O comando não mostra o token. Nunca cole credenciais em issues, histórico de comandos ou chat.
+Requer Node >=22.19.0 e npm. Instale com `npm ci`. Copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN` (Agendor → Menu → Integrações) e `ACCESS_CLIENT_SECRET` da aplicação OIDC. Nunca cole credenciais em issues, histórico de comandos ou chat. Veja [OAuth e configuração Access](oauth-setup.md).
 
 ## Execução local
 
-Use `npm run dev` e acesse `http://localhost:8787/health`. No Windows, caso workerd falhe com `SQLITE_CANTOPEN` ou criação de `miniflare-CacheObject`, use `npm run dev:ephemeral`: mesmo Wrangler/runtime, bindings nativos e segredos, com persistência local desativada. O Worker é stateless e não precisa dessa persistência.
+Use `npm run dev` e acesse `http://localhost:8787/health`. No Windows, caso workerd falhe com persistência SQLite, use `npm run dev:ephemeral`: mesmo runtime/bindings, com persistência de desenvolvimento desativada. O MCP continua stateless por requisição, mas OAuth usa KV para concessões; esse KV local é temporário no modo ephemeral. O callback Access desta instalação aponta para produção; um login OIDC local exige uma aplicação/callback de desenvolvimento deliberadamente configurados.
 
-`GET /health` não exige token e não consulta o Agendor. `/mcp` exige `Authorization: Bearer <MCP_TEST_TOKEN>` em toda requisição. Nenhum cliente externo foi conectado.
+`GET /health` não exige token e não consulta o Agendor. `/mcp` exige access token OAuth válido, identidade do proprietário e `crm:read` em toda requisição. `MCP_TEST_TOKEN` não autentica essa implementação. A conexão real em cada cliente deve ser confirmada separadamente.
 
 ## Inspector
 
-`npm run inspector` inicia o Inspector **2.11.0 fixado localmente**. Escolha Streamable HTTP, URL `http://localhost:8787/mcp`, e configure o cabeçalho Bearer com o valor de `.dev.vars`. Não salve esse segredo em configuração versionada.
+`npm run inspector` inicia o Inspector **2.11.0 fixado localmente**. Escolha Streamable HTTP, URL de produção `/mcp` e autenticação OAuth. Não salve credenciais em configuração versionada.
 
-Para verificação reproduzível sem imprimir dados de clientes ou tokens: com o Worker rodando, execute `npm run verify:mcp`. O script usa a CLI do Inspector em memória, lê a credencial de `.dev.vars`, verifica saúde e os dois casos 401, lista oito ferramentas, chama `server_status` e faz quatro consultas CRM reais. A saída contém apenas resultados de verificações. Não crie arquivos de configuração Inspector com tokens.
+Para verificação reproduzível, execute `npm run verify:oauth`, `npm run oauth:login`, conclua o login no navegador e execute `npm run verify:mcp`. A sessão fica em arquivo local ignorado. O Inspector usa o token somente em memória, verifica saúde e dois casos401, oito ferramentas, status e quatro consultas CRM reais. A saída contém apenas contagens/verificações; não há configuração Inspector com tokens.
 
 Para o Worker publicado, defina `MCP_URL` com a URL real `https://<worker>.<subdomínio>.workers.dev/mcp` e execute o mesmo comando. Só são aceitos endereços locais HTTP ou `workers.dev` HTTPS, sem query ou credenciais na URL. O token local deve corresponder ao secret de produção.
 
@@ -35,14 +35,15 @@ O Chat permanece **BLOCKED**, mesmo que uma variável de token Chat exista. Text
 
 ## Falhas e limites
 
-- HTTP 401: Bearer ausente/incorreto ou MCP secret inválido; resposta igual para tokens errados de tamanhos diferentes.
+- HTTP 401: access token ausente, inválido ou identidade sem autorização. O desafio aponta para os metadados OAuth; refaça o login.
+- HTTP 403 no MCP: token sem o escopo `crm:read`; autorize o escopo anunciado pelo recurso.
 - HTTP 429: limite MCP nativo de 30/10s, com `Retry-After: 10`.
 - HTTP 503: CRM secret ausente/inválido ou binding indisponível. A saúde pública pode continuar 200; ela é liveness, não readiness.
 - `tools/call` com `isError: true`: examine apenas `error.code`, `retryable` e `status`. Nenhum corpo de erro upstream é devolvido.
 - `UPSTREAM_RATE_LIMITED`: orçamento CRM nativo conservador de 4/10s ou 429 do provedor. Aguarde antes de repetir; o servidor não repete automaticamente. Não há garantia global estrita entre datacenters com esse binding aproximado.
 - `UPSTREAM_TIMEOUT`: limite de 10s inclui corpo da resposta. `UPSTREAM_UNAVAILABLE` cobre falha de rede/5xx. `UPSTREAM_INVALID_RESPONSE` cobre JSON/formato inválido. 401/403/404 upstream têm códigos próprios.
 
-Os namespaces 1001/1002 precisam ser únicos na conta Cloudflare. Aplique limites considerando outros consumidores do mesmo token Agendor.
+Os namespaces 1001/1002/1003 precisam ser únicos na conta Cloudflare. Aplique limites considerando outros consumidores do mesmo token Agendor. O terceiro limita login/registro, sem consumir o orçamento CRM.
 
 ## Testes e registros
 
@@ -54,4 +55,4 @@ Não há logging de payloads, headers, tokens ou registros. Observabilidade auto
 
 ## Rotação
 
-Gere novo MCP token localmente, atualize o secret de produção com `npx wrangler secret put MCP_TEST_TOKEN` por entrada interativa e atualize o cliente autorizado. Valide o novo token e confirme que o anterior retorna 401. Substitua o token Agendor pelo mesmo processo com `AGENDOR_CRM_TOKEN`, sem editar código. Não reutilize esse token de teste como credencial permanente compartilhada de clientes reais.
+Access tokens expiram em uma hora; `offline_access` permite renovação até sete dias. Refaça conexões expiradas e use o endpoint de revogação anunciado para revogar a credencial do cliente. Para a credencial do Access, o proprietário gera novo Client Secret na aplicação OIDC e atualiza o secret correspondente no Worker. Para Agendor, obtenha novo token e atualize `AGENDOR_CRM_TOKEN`, sem editar código. Não restaure o token fixo como solução automática para falhas OAuth.

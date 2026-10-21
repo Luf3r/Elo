@@ -1,15 +1,6 @@
-export interface Env {
-  AGENDOR_CRM_TOKEN: string;
-  MCP_TEST_TOKEN: string;
-  MCP_RATE_LIMITER: RateLimit;
-  AGENDOR_CRM_RATE_LIMITER: RateLimit;
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+export interface Env extends WorkerBindings {
+  MCP_TEST_TOKEN?: string;
   AGENDOR_CHAT_TOKEN?: string;
-  ACCESS_CLIENT_ID?: string;
-  ACCESS_CLIENT_SECRET?: string;
-  ACCESS_ISSUER?: string;
-  ACCESS_AUTHORIZATION_URL?: string;
-  ACCESS_TOKEN_URL?: string;
-  ACCESS_JWKS_URL?: string;
-  OAUTH_KV?: KVNamespace;
-  OAUTH_RATE_LIMITER?: RateLimit;
+  OAUTH_PROVIDER?: OAuthHelpers;
 }
