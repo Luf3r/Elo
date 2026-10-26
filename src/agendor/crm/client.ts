@@ -5,23 +5,24 @@ import { fetchJson } from '../../http';
 import { SafeError } from '../../errors';
 import { isConfiguredSecret } from '../../auth';
 import { normalizePage } from './pagination';
-import { peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, updateIdInput, detailEnvelope, parseInput, updateDealInput, updateDealStageInput, updatePersonInput, updateOrganizationInput } from './schemas';
+import { normalizeCatalogPage } from './catalog';
+import { parseConfiguration, taskDetailEnvelope, personOptionsInput, peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, updateIdInput, detailEnvelope, parseInput, updateDealInput, updateDealStageInput, updatePersonInput, updateOrganizationInput } from './schemas';
 import { throwIfCancelled } from '../../cancellation';
 
 export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, options: { signal?: AbortSignal } = {}): AgendorCrmClient {
-  async function get(path: string, params: Record<string, string | number | undefined> = {}) {
+  async function get(path: string, params: Record<string, string | number | boolean | undefined> = {}) {
     throwIfCancelled(options.signal);
     if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${path}`);
     for (const [name, value] of Object.entries(params)) if (value !== undefined && value !== '') url.searchParams.set(name, String(value));
     return fetchJson<unknown>(new Request(url, { method: 'GET', signal: options.signal, headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json' } }));
   }
-  async function list(path: string, input: { page: number; perPage: number }, filters: Record<string, string | number | undefined> = {}) {
+  async function list(path: string, input: { page: number; perPage: number }, filters: Record<string, string | number | boolean | undefined> = {}) {
     return normalizePage(await get(path, { page: input.page, per_page: input.perPage, ...filters }), input.page, input.perPage);
   }
-  async function detail(path: string, id: number) {
+  async function detail(path: string, id: number, params: Record<string, string | number | boolean | undefined> = {}) {
     const validId = parseInput(positiveId, id);
-    const result = detailEnvelope.safeParse(await get(`${path}/${validId}`));
+    const result = detailEnvelope.safeParse(await get(`${path}/${validId}`, params));
     if (!result.success) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Invalid upstream record.', false);
     return result.data.data;
   }
@@ -42,16 +43,45 @@ export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, opti
   return {
     async searchPeople(input) {
       const v = parseInput(peopleInput, input);
-      return list('/people', v, { ...(v.email ? { email: v.email } : {}), ...(v.query ? { name: v.query } : {}) });
+      return list('/people', v, {
+        ...(v.email ? { email: v.email } : {}), ...(v.query ? { name: v.query } : {}),
+        phone: v.phone, cpf: v.cpf, organization: v.organizationId, withCustomFields: v.withCustomFields,
+        createdAtGt: v.createdAtGt, createdAtLt: v.createdAtLt, updatedAtGt: v.updatedAtGt, updatedAtLt: v.updatedAtLt,
+      });
+    },
+    getPerson: (id, options = {}) => detail('/people', id, parseInput(personOptionsInput, options)),
+    async getTask(id) {
+      const validId = parseInput(positiveId, id);
+      const result = taskDetailEnvelope.safeParse(await get(`/tasks/${validId}`));
+      if (!result.success) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Invalid upstream task record.', false);
+      return result.data.task_entity;
+    },
+    async getConfiguration(input) {
+      const v = parseConfiguration(input);
+      const paths = { funnels: '/funnels', stages: '/deal_stages', users: '/users', products: '/products', origins: '/lead_origins', categories: '/categories', sectors: '/sectors' } as const;
+      const path = v.section === 'customFields' ? `/custom_fields/${v.entityType}`
+        : v.section === 'cities' ? `/states/${v.state}/cities` : paths[v.section];
+      const params = v.section === 'products' ? { page: v.page, per_page: v.perPage }
+        : v.section === 'stages' ? { funnel: v.funnelId } : {};
+      return normalizeCatalogPage(await get(path, params), v);
     },
     async searchOrganizations(input) {
       const v = parseInput(organizationsInput, input);
-      return list('/organizations', v, { name: v.query });
+      return list('/organizations', v, {
+        name: v.query, nameExact: v.exactName, cnpj: v.cnpj, phone: v.phone, email: v.email, withCustomFields: v.withCustomFields,
+        createdAtGt: v.createdAtGt, createdAtLt: v.createdAtLt, updatedAtGt: v.updatedAtGt, updatedAtLt: v.updatedAtLt,
+      });
     },
     getOrganization: id => detail('/organizations', id),
     async searchDeals(input) {
       const v = parseInput(dealsInput, input);
-      return list('/deals', v, { title: v.query, organization: v.organizationId, person: v.personId, userOwner: v.ownerId, dealStatus: v.status });
+      return list('/deals', v, {
+        title: v.query, organization: v.organizationId, person: v.personId, userOwner: v.ownerId, dealStatus: v.status,
+        titleSearch: v.titleSearch, funnels: v.funnelIds?.join(','), dealStage: v.stageId, dealStageOrder: v.stageSequence,
+        withCustomFields: v.withCustomFields,
+        createdAtGt: v.createdAtGt, createdAtLt: v.createdAtLt, updatedAtGt: v.updatedAtGt, updatedAtLt: v.updatedAtLt,
+        startAtGt: v.startAtGt, startAtLt: v.startAtLt, endAtGt: v.endAtGt, endAtLt: v.endAtLt,
+      });
     },
     getDeal: id => detail('/deals', id),
     updateDeal: (id, fields) => { const validId = parseInput(updateIdInput.shape.id, id); return update(`/deals/${validId}`, validId, fields, updateDealInput); },

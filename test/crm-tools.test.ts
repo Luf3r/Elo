@@ -3,7 +3,7 @@ import { callTool, rpc } from './mcp-helper';
 import { testEnv } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
-const names = ['crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
+const names = ['crm_get_person', 'crm_get_task', 'crm_get_configuration', 'crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
 describe('CRM tool boundary', () => {
   it('registers CRM tools with strict schemas and separate read/write scopes', async () => {
     const { data } = await rpc('tools/list');
