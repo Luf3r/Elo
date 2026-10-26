@@ -49,3 +49,4 @@ export type ApplyInput = z.infer<typeof schemas.applyInputSchema>;
 export type ReviewResolution = z.infer<typeof schemas.reviewResolutionInputSchema>;
 export type ReprocessInput = z.infer<typeof schemas.reprocessInputSchema>;
 export type AutomationStatus = z.infer<typeof schemas.automationStatusSchema>;
+export type PlanBasis = z.infer<typeof schemas.planBasisSchema>;

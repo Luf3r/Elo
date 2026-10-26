@@ -1,5 +1,5 @@
-import type { CommandCompletion, CommandReservation, CustomerContext, OperationReceipt, ReservationResult, ReserveWorkInput, SnapshotManifest, SyncPlan, WorkLease } from '../types';
-import { commandCompletionSchema, commandReservationSchema, customerContextSchema, reserveWorkInputSchema, snapshotManifestSchema, syncPlanSchema, workLeaseSchema } from '../schemas';
+import type { CommandCompletion, CommandReservation, CustomerContext, OperationReceipt, PlanBasis, ReservationResult, ReserveWorkInput, SnapshotManifest, SyncPlan, WorkLease } from '../types';
+import { commandCompletionSchema, commandReservationSchema, customerContextSchema, reserveWorkInputSchema, snapshotManifestSchema, planBasisSchema, syncPlanSchema, workLeaseSchema } from '../schemas';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -29,6 +29,28 @@ export class AccountRepository {
     const row = this.liveWork(lease.workId);
     if (canonical(JSON.parse(row.lease)) !== canonical(lease)) throw Error('LEASE_FENCED');
     return row;
+  }
+  private checkBasis(basis: PlanBasis): SnapshotManifest {
+    this.checkLease(basis.lease);
+    const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM snapshot_manifest WHERE work_id = ?', basis.lease.workId).toArray()[0];
+    if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
+    const manifest = snapshotManifestSchema.parse(JSON.parse(row.data));
+    if (manifest.snapshotVersion !== basis.snapshotVersion || manifest.contextVersion !== basis.contextVersion || manifest.catalogVersion !== basis.catalogVersion) throw Error('STATE_VERSION_CONFLICT');
+    return manifest;
+  }
+  private checkDispatch(input: CommandReservation): void {
+    const authorization = input.authorization;
+    const plan = authorization.plan;
+    const row = this.sql.exec<{ data: string | null; work_id: string; version: number; valid: number; fence: number | null; snapshot_version: number | null; context_version: number | null; catalog_version: string | null; evidence_expires_at: number }>('SELECT * FROM plans WHERE plan_id = ?', plan.planId).toArray()[0];
+    if (!row?.valid || !row.data || row.evidence_expires_at <= Date.now() || row.work_id !== input.lease.workId || row.version !== plan.version || row.fence !== input.lease.fence || row.snapshot_version !== input.snapshotVersion || row.context_version !== input.contextVersion || row.catalog_version !== input.catalogVersion || canonical(JSON.parse(row.data)) !== canonical(plan)) throw Error('PLAN_STALE');
+    this.checkBasis(input);
+    if (input.lease.mode !== 'apply' || plan.state !== 'ready' || plan.reviewIds.length || !plan.orderedCommands.some(command => canonical(command) === canonical(input.command))) throw Error('COMMAND_NOT_AUTHORIZED');
+    const actor = authorization.actor;
+    const now = Date.now();
+    const validUntil = Date.parse(authorization.validUntil);
+    if (validUntil <= now || actor.expiresAt === undefined || actor.expiresAt <= now || validUntil > actor.expiresAt) throw Error('AUTHORIZATION_EXPIRED');
+    const grants = authorization.commandCapabilities.find(command => command.commandKey === input.command.commandKey)?.capabilities;
+    if (actor.userId !== input.lease.owner.userId || actor.clientId !== input.lease.owner.clientId || !actor.scopes.includes('automation:process') || !grants || input.command.requiredCapabilities.some(capability => !grants.includes(capability) || !actor.scopes.includes(capability))) throw Error('COMMAND_NOT_AUTHORIZED');
   }
   private invalidate(workId: string) {
     this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', workId);
@@ -78,19 +100,19 @@ export class AccountRepository {
       this.sql.exec('INSERT INTO snapshot_manifest VALUES (?, ?, ?, ?, ?) ON CONFLICT(work_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', lease.workId, manifest.snapshotVersion, fingerprint, JSON.stringify(manifest), Date.now() + EVIDENCE_RETENTION_MS);
     });
   }
-  async savePlan(raw: SyncPlan): Promise<void> {
-    const plan = syncPlanSchema.parse(raw); const fingerprint = await digest(plan);
+  async savePlan(raw: SyncPlan, rawBasis: PlanBasis): Promise<void> {
+    const plan = syncPlanSchema.parse(raw); const basis = planBasisSchema.parse(rawBasis);
+    const fingerprint = await digest(plan);
     this.storage.transactionSync(() => {
-      this.liveWork(plan.workId);
-      const manifest = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM snapshot_manifest WHERE work_id = ?', plan.workId).toArray()[0];
-      if (!manifest?.data || manifest.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
-      const sources = (JSON.parse(manifest.data) as SnapshotManifest).sources;
+      if (plan.workId !== basis.lease.workId) throw Error('LEASE_FENCED');
+      const manifest = this.checkBasis(basis);
+      const sources = manifest.sources;
       for (const ref of [...plan.sourceRefs, ...plan.before.flatMap(f => f.sources), ...plan.after.flatMap(f => f.sources), ...plan.orderedCommands.flatMap(c => [...c.sourceRefs, ...c.before.flatMap(f => f.sources)])]) if (!sources.some(s => canonical(s) === canonical(ref))) throw Error('STALE_SOURCE');
-      const previous = this.sql.exec<{ work_id: string; version: number; digest: string; valid: number }>('SELECT work_id, version, digest, valid FROM plans WHERE plan_id = ?', plan.planId).toArray()[0];
+      const previous = this.sql.exec<{ work_id: string; version: number; digest: string; valid: number; fence: number; snapshot_version: number; context_version: number; catalog_version: string }>('SELECT * FROM plans WHERE plan_id = ?', plan.planId).toArray()[0];
       if (previous && previous.work_id !== plan.workId) throw Error('IDEMPOTENCY_CONFLICT');
-      if (previous?.version === plan.version && previous.digest === fingerprint && previous.valid) return;
+      if (previous?.version === plan.version && previous.digest === fingerprint && previous.valid && previous.fence === basis.lease.fence && previous.snapshot_version === basis.snapshotVersion && previous.context_version === basis.contextVersion && previous.catalog_version === basis.catalogVersion) return;
       if (plan.version !== (previous?.version ?? 0) + 1) throw Error('VERSION_CONFLICT');
-      this.sql.exec('INSERT INTO plans VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(plan_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', plan.planId, plan.workId, plan.version, fingerprint, JSON.stringify(plan), Date.now() + EVIDENCE_RETENTION_MS);
+      this.sql.exec('INSERT INTO plans (plan_id, work_id, version, digest, valid, data, evidence_expires_at, fence, snapshot_version, context_version, catalog_version) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT(plan_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at, fence = excluded.fence, snapshot_version = excluded.snapshot_version, context_version = excluded.context_version, catalog_version = excluded.catalog_version', plan.planId, plan.workId, plan.version, fingerprint, JSON.stringify(plan), Date.now() + EVIDENCE_RETENTION_MS, basis.lease.fence, basis.snapshotVersion, basis.contextVersion, basis.catalogVersion);
     });
   }
   getContext(customerId: string): CustomerContext {
@@ -117,6 +139,7 @@ export class AccountRepository {
         }
         return { state: 'busy', version: row.version };
       }
+      this.checkDispatch(input);
       if (input.expectedVersion !== 1) throw Error('VERSION_CONFLICT');
       const receipt: OperationReceipt = { operationId: input.operationId, commandKey: input.command.commandKey, state: 'reserved', updatedFields: [] };
       this.sql.exec('INSERT INTO commands VALUES (?, ?, ?, ?, ?, 1, ?, ?)', input.command.commandKey, input.operationId, input.lease.workId, fingerprint, input.lease.fence, 'reserved', JSON.stringify(receipt));

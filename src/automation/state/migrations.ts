@@ -3,7 +3,7 @@ export function migrate(storage: DurableObjectStorage): void {
   storage.transactionSync(() => {
     const sql = storage.sql;
     sql.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)');
-    if (sql.exec('SELECT version FROM schema_migrations WHERE version = 1').toArray().length) return;
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 1').toArray().length) {
     sql.exec(`
       CREATE TABLE account_binding (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), crm_account_id TEXT NOT NULL, chat_account_id TEXT NOT NULL);
       CREATE TABLE customers (customer_id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1);
@@ -26,5 +26,16 @@ export function migrate(storage: DurableObjectStorage): void {
       CREATE TABLE budget_clock (product TEXT PRIMARY KEY, last_now INTEGER NOT NULL);
       INSERT INTO schema_migrations VALUES (1);
     `);
+    }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 2').toArray().length) {
+      sql.exec(`
+        ALTER TABLE plans ADD COLUMN fence INTEGER;
+        ALTER TABLE plans ADD COLUMN snapshot_version INTEGER;
+        ALTER TABLE plans ADD COLUMN context_version INTEGER;
+        ALTER TABLE plans ADD COLUMN catalog_version TEXT;
+        UPDATE plans SET valid = 0;
+        INSERT INTO schema_migrations VALUES (2);
+      `);
+    }
   });
 }

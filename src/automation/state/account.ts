@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../../env';
-import type { ReserveWorkInput, WorkLease, SnapshotManifest, SyncPlan, CommandReservation, CommandCompletion } from '../types';
+import type { ReserveWorkInput, PlanBasis, WorkLease, SnapshotManifest, SyncPlan, CommandReservation, CommandCompletion } from '../types';
 import { migrate } from './migrations';
 import { AccountRepository } from './repository';
 import { takeBudget } from './budget';
@@ -17,7 +17,7 @@ export class AutomationAccount extends DurableObject<Env> {
   }
   async reserveWork(input: ReserveWorkInput) { return this.repository.reserveWork(input); }
   async installSnapshot(lease: WorkLease, manifest: SnapshotManifest) { return this.repository.installSnapshot(lease, manifest); }
-  async savePlan(plan: SyncPlan) { return this.repository.savePlan(plan); }
+  async savePlan(plan: SyncPlan, basis: PlanBasis) { return this.repository.savePlan(plan, basis); }
   async getContext(customerId: string) { return this.repository.getContext(customerId); }
   async reserveCommand(input: CommandReservation) { return this.repository.reserveCommand(input); }
   async completeCommand(input: CommandCompletion) { return this.repository.completeCommand(input); }
