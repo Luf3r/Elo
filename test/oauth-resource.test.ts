@@ -19,7 +19,7 @@ describe('OAuth resource integration',()=>{
     const response=await worker.fetch(new Request(`${ORIGIN}/.well-known/oauth-protected-resource`),env,context());
     expect(response.status).toBe(200);expect(await response.json()).toMatchObject({resource:RESOURCE,authorization_servers:[ORIGIN]});
     const auth=await worker.fetch(new Request(`${ORIGIN}/.well-known/oauth-authorization-server`),env,context());
-    expect(await auth.json()).toMatchObject({issuer:ORIGIN,code_challenge_methods_supported:['S256'],token_endpoint:`${ORIGIN}/token`,registration_endpoint:`${ORIGIN}/register`,client_id_metadata_document_supported:false,scopes_supported:['crm:read','chat:read','crm:write','offline_access']});
+    expect(await auth.json()).toMatchObject({issuer:ORIGIN,code_challenge_methods_supported:['S256'],token_endpoint:`${ORIGIN}/token`,registration_endpoint:`${ORIGIN}/register`,client_id_metadata_document_supported:false,scopes_supported:['crm:read','chat:read','crm:write','crm:create','crm:enrich','automation:read','automation:process','automation:manage','offline_access']});
   });
   it('rejects old static tokens with a discovery challenge',async()=>{
     const r=await worker.fetch(new Request(RESOURCE,{headers:{Authorization:'Bearer unit-mcp-token'}}),oauthEnv(),context());

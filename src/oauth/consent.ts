@@ -7,6 +7,11 @@ export function consentPage(details: ConsentDescription, handle: string): string
   const capabilities = details.scope.filter(scope => scope !== 'offline_access').map(scope => ({
     'crm:read': 'consultar pessoas, empresas, negócios e tarefas no Agendor CRM',
     'chat:read': 'consultar conversas e mensagens do Agendor Chat',
+    'crm:create': 'criar empresas, pessoas, negócios e tarefas no Agendor CRM',
+    'crm:enrich': 'enriquecer campos e vínculos permitidos no Agendor CRM',
+    'automation:read': 'consultar o estado, operações e pendências da automação, com escopos de produto para contexto e revisões',
+    'automation:process': 'preparar e processar análises, com leituras e alterações CRM autorizadas separadamente',
+    'automation:manage': 'gerenciar políticas e decisões da automação, com alterações CRM autorizadas separadamente',
     'crm:write': 'atualizar campos permitidos de negócios, pessoas e empresas no Agendor CRM',
   }[scope] ?? 'acessar o Agendor')).join('; ');
   return `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Autorizar acesso ao Agendor</title>
