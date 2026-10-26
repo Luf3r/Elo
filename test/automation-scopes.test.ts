@@ -91,6 +91,16 @@ describe('plan authorization', () => {
     expect(authorized.plan.orderedCommands[0]!.requiredCapabilities).toEqual(['crm:create']);
     expect(authorized.actor.scopes).toEqual(all);
   });
+  it('retains the earlier token deadline when it expires before five minutes', () => {
+    const authorized = authorizePlan({ ...auth(), expiresAt: 1_793_016_299_000 }, validPlan, policy);
+    expect(authorized.validUntil).toBe('2026-10-26T12:04:59.000Z');
+    expect(authorized.actor.expiresAt).toBe(1_793_016_299_000);
+  });
+  it('caps operational authorization at five minutes without shortening the actor token expiry', () => {
+    const authorized = authorizePlan({ ...auth(), expiresAt: 1_793_019_300_000 }, validPlan, policy);
+    expect(authorized.validUntil).toBe('2026-10-26T12:05:00.000Z');
+    expect(authorized.actor.expiresAt).toBe(1_793_019_300_000);
+  });
   it.each([undefined, now - 1, now, NaN, Infinity])('requires a finite, future authorization expiry %s', expiry => {
     vi.spyOn(Date, 'now').mockReturnValue(now);
     expect(() => authorizePlan({ ...auth(), expiresAt: expiry }, validPlan, policy)).toThrow();

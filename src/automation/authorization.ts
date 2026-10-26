@@ -43,9 +43,10 @@ function deny(message: string): never {
  * Operator evidence is internal provenance, never a substitute for capabilities.
  */
 export function authorizePlan(auth: AuthContext, plan: SyncPlan, policy: AutomationPolicy): AuthorizedPlan {
+  const authorizationTime = Date.now();
   requireAutomationOperation(auth, 'apply');
   const expiry = auth.expiresAt;
-  if (!auth.userId || !auth.clientId || expiry === undefined || !Number.isFinite(expiry) || expiry <= Date.now()) {
+  if (!auth.userId || !auth.clientId || expiry === undefined || !Number.isFinite(expiry) || expiry <= authorizationTime) {
     deny('A current, expiring authorization is required.');
   }
   const parsedPlan = syncPlanSchema.safeParse(plan);
@@ -68,7 +69,7 @@ export function authorizePlan(auth: AuthContext, plan: SyncPlan, policy: Automat
     plan: snapshot,
     actor: { userId: auth.userId, clientId: auth.clientId, scopes: [...auth.scopes], expiresAt: expiry },
     commandCapabilities,
-    validUntil: new Date(expiry).toISOString(),
+    validUntil: new Date(Math.min(expiry, authorizationTime + 300_000)).toISOString(),
   });
 }
 
