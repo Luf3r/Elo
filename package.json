@@ -21,7 +21,8 @@
     "oauth:login": "node scripts/oauth-login.mjs",
     "verify:oauth": "node scripts/verify-oauth.mjs",
     "oauth:stage-secret": "node scripts/stage-oauth-secret.mjs",
-    "test:scripts": "node --test test/oauth-scripts.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs",
+    "test:scripts": "node --test test/oauth-scripts.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs",
+    "discover:automation-contracts": "node scripts/discover-automation-contracts.mjs",
     "verify:chat-contract": "node scripts/verify-chat-contract.mjs",
     "cf:login": "wrangler login",
     "cf:whoami": "wrangler whoami"

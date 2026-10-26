@@ -26,3 +26,8 @@ As respostas MCP selecionam campos; não devolvem objetos crus. Telefone, e-mail
 O contrato ao vivo é opt-in via `npm run verify:chat-contract` (relatório sanitizado) ou `npm run test:contract` (asserções sem exibir valores). Testes comuns não fazem chamadas externas. Só se usam rotas GET documentadas; a implementação não inclui endpoints de envio, atualização, atribuição ou status do Chat. Origem, header, timeout de 10 segundos e resposta máxima de 1 MiB são fixos no cliente.
 
 Validação real em 2026-10-22: perfil, lista, detalhe e mensagens retornaram HTTP 200; tamanhos observados de 25 conversas e 20 mensagens. Paginação/continuação ainda não confirmada.
+## Descoberta para automação
+
+A revisão da [coleção Postman](https://documenter.getpostman.com/view/28016625/2sAXxV4UX5) em 2026-10-26 encontrou `after` no GET de mensagens, além de GETs de contatos, conversas por contato e anexos. Isso atualiza a afirmação histórica acima sobre ausência de `after`: o parâmetro está documentado, mas sua ordenação/continuação e a completude do histórico ainda não estão confirmadas.
+
+O novo `npm run discover:automation-contracts -- --live` é opt-in, usa somente GETs fixos e salva capacidades/observações estruturais sanitizadas. Não foi executado ao vivo nesta implementação. Aceitar `after` com HTTP 200 não comprova semântica de cursor. Os gates `chatMessageAfter`, `chatHistory` e `conversationDiscovery` permanecem `unverified` até evidência suficiente. Consulte [contratos de automação](automation-contracts.md) para os estados, rotas, limites e escopo de leitura dirigida.
