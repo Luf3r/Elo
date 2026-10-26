@@ -10,7 +10,7 @@ const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_ST
 const input = (requestId = 'request-1'): ReserveWorkInput => ({ requestId, target: { kind: 'conversation', conversationId: 101 }, mode: 'apply', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'digest-1' });
 const readAt = new Date().toISOString();
 const manifest = (workId: string, snapshotVersion = 1): SnapshotManifest => ({ workId, snapshotVersion, contextVersion: 0, catalogVersion: 'catalog-1', readAt, sources: validCommand.sourceRefs, messages: [{ conversationId: 101, id: 201, revision: 'message-rev-1', hash: 'hash-1', direction: 'incoming' }], records: [], coverage: { complete: false, pagesRead: 1, missingReasons: ['history_unverified'] } });
-const basis = (lease: WorkLease, snapshotVersion = 1, contextVersion = 0, catalogVersion = 'catalog-1'): PlanBasis => ({ lease, snapshotVersion, contextVersion, catalogVersion });
+const basis = (lease: WorkLease, snapshotVersion = 1, contextVersion = 0, catalogVersion = 'catalog-1'): PlanBasis => ({ lease, customerId: 'customer-1', snapshotVersion, contextVersion, catalogVersion });
 function authorization(lease: WorkLease, plan: SyncPlan = { ...validPlan, workId: lease.workId }) {
   return authorizePlan({ ...lease.owner, scopes: ['automation:process', 'crm:create'], expiresAt: Date.now() + 60_000 }, plan, { version: 1, mode: 'apply', allowedInboxIds: [], capabilities: ['crm:create'], funnelMapping: {}, stageMapping: [], customFieldMapping: [], nativeCreatorDisabled: true, limits: { maxConversations: 10, maxCommands: 10, maxRequests: 20 } });
 }
@@ -71,7 +71,7 @@ describe('durable account coordination', () => {
     await evictDurableObject(stub);
     expect(await stub.reserveWork(input())).toEqual(lease);
     const migrations = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-    expect(migrations).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
   });
   it('treats abandoned in-flight commands as uncertain instead of retrying after lease expiry', async () => {
     const { stub, reservation } = await setup(); await stub.reserveCommand(reservation); await expire(stub);
@@ -182,6 +182,7 @@ it.each([
   [1, 1, 'catalog-2'], [2, 0, 'catalog-2'], [2, 1, 'catalog-1'],
 ] as const)('rejects a plan computed from mismatched snapshot/context/catalog versions (%s, %s, %s)', async (snapshotVersion, contextVersion, catalogVersion) => {
   const { stub, lease } = await setup();
+  await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('INSERT INTO contexts VALUES (?, ?, 1, 1, ?, ?)', 'customer-1', lease.workId, JSON.stringify({ customerId: 'customer-1', version: 1, verifiedAt: readAt, markdown: 'Synthetic current context', evidenceRefs: [] }), Date.now() + 60_000).toArray());
   await stub.installSnapshot(lease, { ...manifest(lease.workId, 2), contextVersion: 1, catalogVersion: 'catalog-2' });
   await failure(stub, instance => instance.savePlan({ ...validPlan, version: 2, workId: lease.workId }, basis(lease, snapshotVersion, contextVersion, catalogVersion)), 'STATE_VERSION_CONFLICT');
   await stub.savePlan({ ...validPlan, version: 2, workId: lease.workId }, basis(lease, 2, 1, 'catalog-2'));
@@ -206,5 +207,5 @@ it('migrates existing v1 plans as invalid and preserves command tombstones throu
   expect(row).toEqual({ valid: 0, fence: null });
   await evictDurableObject(stub);
   const versions = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-  expect(versions).toEqual([{ version: 1 }, { version: 2 }]);
+  expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
 });

@@ -4,6 +4,7 @@ import type { Env } from '../src/env';
 import type { ContextProjection, PlanBasis, SourceRef } from '../src/automation/types';
 import * as renderer from '../src/automation/context/render';
 import { CustomerContextService } from '../src/automation/context/service';
+import { validCommand, validPlan } from './fixtures/automation';
 
 const source: SourceRef = { kind: 'message', id: '101:201', revision: 'revision-1' };
 const replacementSource: SourceRef = { kind: 'crm', id: 'organization:11', revision: 'revision-2' };
@@ -16,12 +17,17 @@ const projection = (overrides: Partial<ContextProjection> = {}): ContextProjecti
   receipts: [], pendingReasons: ['origin_unknown'], ...overrides,
 });
 const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
-async function setup() {
+async function setup(mode: 'preview' | 'apply' = 'preview') {
   const stub = state();
-  const lease = await stub.reserveWork({ requestId: 'request-context', target: { kind: 'customer', customerId: 'opaque-customer-1' }, mode: 'preview', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'context-digest' });
-  const basis: PlanBasis = { lease, snapshotVersion: 1, contextVersion: 0, catalogVersion: 'catalog-1' };
+  const lease = await stub.reserveWork({ requestId: 'request-context', target: { kind: 'customer', customerId: 'opaque-customer-1' }, mode, actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'context-digest' });
+  const basis: PlanBasis = { lease, customerId: 'opaque-customer-1', snapshotVersion: 1, contextVersion: 0, catalogVersion: 'catalog-1' };
   await stub.installSnapshot(lease, { workId: lease.workId, snapshotVersion: 1, contextVersion: 0, catalogVersion: 'catalog-1', readAt: verifiedAt, sources: [source, replacementSource], messages: [], records: [], coverage: { complete: true, missingReasons: [], pagesRead: 1 } });
   return { stub, basis };
+}
+async function conversationBasis(stub: ReturnType<typeof state>, contextVersion: number): Promise<PlanBasis> {
+  const lease = await stub.reserveWork({ requestId: 'historical-conversation', target: { kind: 'conversation', conversationId: 103 }, mode: 'preview', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'history-digest' });
+  await stub.installSnapshot(lease, { workId: lease.workId, snapshotVersion: 1, contextVersion, catalogVersion: 'catalog-1', readAt: verifiedAt, sources: [source, replacementSource], messages: [], records: [], coverage: { complete: true, missingReasons: [], pagesRead: 1 } });
+  return { lease, customerId: 'opaque-customer-1', snapshotVersion: 1, contextVersion, catalogVersion: 'catalog-1' };
 }
 async function rejectCode(stub: ReturnType<typeof state>, action: (instance: import('../src/automation/state/account').AutomationAccount) => Promise<unknown>, code: string) {
   const failure = await runInDurableObject(stub, async instance => {
@@ -139,5 +145,57 @@ describe('SQLite context projection and refresh', () => {
     expect(updated.markdown).toContain('Renamed Company');
     const identities = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT COUNT(*) AS count FROM customers').one());
     expect(identities).toEqual({ count: 0 }); // Rendering cannot create or reassign identity.
+  });
+  it('supersedes a rendered projection from another work target but protects the next pending projection and its sources', async () => {
+    const { stub, basis } = await setup();
+    await stub.saveContextProjection(projection(), basis);
+    await stub.refreshCustomerContext('opaque-customer-1', 0);
+    const nextLease = await stub.reserveWork({ requestId: 'conversation-request', target: { kind: 'conversation', conversationId: 102 }, mode: 'preview', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'next-digest' });
+    expect(nextLease.workId).not.toBe(basis.lease.workId);
+    const nextBasis: PlanBasis = { lease: nextLease, customerId: 'opaque-customer-1', snapshotVersion: 1, contextVersion: 1, catalogVersion: 'catalog-1' };
+    await stub.installSnapshot(nextLease, { workId: nextLease.workId, snapshotVersion: 1, contextVersion: 1, catalogVersion: 'catalog-1', readAt: verifiedAt, sources: [source, replacementSource], messages: [], records: [], coverage: { complete: true, missingReasons: [], pagesRead: 1 } });
+    const next = projection({ version: 2, pendingReasons: ['new-conversation-review'] });
+    // Return the expected domain rejection inside the DO to avoid duplicate RPC errors.
+    const accepted = await runInDurableObject(stub, async instance => {
+      try { await instance.saveContextProjection(next, nextBasis); return 'saved'; }
+      catch (error) { return (error as Error).message; }
+    });
+    expect(accepted).toBe('saved');
+    await rejectCode(stub, instance => instance.saveContextProjection({ ...next, pendingReasons: ['competing-overwrite'] }, nextBasis), 'CONTEXT_STALE');
+    await rejectCode(stub, instance => instance.saveContextProjection(projection(), basis), 'CONTEXT_STALE');
+    await rejectCode(stub, instance => instance.saveContextProjection({ ...next, facts: [{ ...next.facts[0]!, sources: [{ ...source, revision: 'stale-source' }] }] }, nextBasis), 'STALE_SOURCE');
+    const updated = await stub.refreshCustomerContext('opaque-customer-1', 1);
+    expect(updated.version).toBe(2);
+    expect(updated.markdown).toContain('new-conversation-review');
+    expect(updated.markdown).not.toContain('competing-overwrite');
+  });
+  it('rejects another conversation plan and higher revision computed before the customer context advanced', async () => {
+    const { stub, basis } = await setup('apply');
+    const command = { ...validCommand, sourceRefs: [source] };
+    const plan = { ...validPlan, orderedCommands: [command], sourceRefs: [source], workId: basis.lease.workId };
+    await stub.savePlan(plan, basis);
+    const nextBasis = await conversationBasis(stub, 0);
+    await stub.saveContextProjection(projection(), nextBasis);
+    await stub.refreshCustomerContext('opaque-customer-1', 0);
+    const actor = { ...basis.lease.owner, scopes: ['automation:process', 'crm:create'], expiresAt: Date.now() + 60_000 };
+    const authorization = { plan, actor, commandCapabilities: [{ commandKey: validCommand.commandKey, capabilities: ['crm:create' as const] }], validUntil: new Date(actor.expiresAt).toISOString() };
+    await rejectCode(stub, instance => instance.reserveCommand({ ...basis, operationId: 'old-operation', command, authorization, expectedVersion: 1, payloadDigest: 'old-command' }), 'PLAN_STALE');
+    await rejectCode(stub, instance => instance.savePlan({ ...plan, version: 2 }, basis), 'CONTEXT_STALE');
+    expect(await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT command_key FROM commands').toArray())).toEqual([]);
+  });
+  it('retains confirmed and uncertain historical receipts from other customer work', async () => {
+    const { stub, basis } = await setup();
+    await stub.savePlan({ ...validPlan, orderedCommands: [{ ...validCommand, sourceRefs: [source] }], sourceRefs: [source], workId: basis.lease.workId }, basis);
+    await runInDurableObject(stub, (_instance, ctx) => {
+      for (const receipt of [{ operationId: 'historical-confirmed', commandKey: 'old-confirmed', state: 'confirmed', crmRef: { kind: 'organization', id: 11 }, checkedAt: verifiedAt, updatedFields: ['name'] }, { operationId: 'historical-uncertain', commandKey: 'old-uncertain', state: 'uncertain', updatedFields: [] }]) {
+        ctx.storage.sql.exec('INSERT INTO commands VALUES (?, ?, ?, ?, ?, 1, ?, ?)', receipt.commandKey, receipt.operationId, basis.lease.workId, 'receipt-digest', basis.lease.fence, receipt.state, JSON.stringify(receipt));
+      }
+    });
+    const nextBasis = await conversationBasis(stub, 0);
+    await stub.saveContextProjection(projection(), nextBasis);
+    const context = await stub.refreshCustomerContext('opaque-customer-1', 0);
+    expect(context.markdown).toContain('old-confirmed: confirmado');
+    expect(context.markdown).toContain('old-uncertain: uncertain');
+    expect(context.markdown).not.toContain('old-uncertain: confirmado');
   });
 });

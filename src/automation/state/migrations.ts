@@ -37,5 +37,15 @@ export function migrate(storage: DurableObjectStorage): void {
         INSERT INTO schema_migrations VALUES (2);
       `);
     }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 3').toArray().length) {
+      sql.exec(`
+        CREATE TABLE work_customers (work_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL);
+        CREATE INDEX work_customers_by_customer ON work_customers(customer_id);
+        INSERT INTO work_customers SELECT work_id, MIN(customer_id) FROM contexts GROUP BY work_id HAVING COUNT(DISTINCT customer_id) = 1;
+        UPDATE plans SET valid = 0;
+        UPDATE facts SET valid = 0 WHERE fact_id LIKE 'customer-context:%';
+        INSERT INTO schema_migrations VALUES (3);
+      `);
+    }
   });
 }
