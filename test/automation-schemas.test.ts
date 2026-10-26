@@ -137,3 +137,43 @@ it('uses only the existing and planned OAuth capabilities in plans', () => {
   expect(mutationCommandSchema.safeParse({ ...validCommand, requiredCapabilities: ['crm:write'] }).success).toBe(true);
   expect(mutationCommandSchema.safeParse({ ...validCommand, requiredCapabilities: ['crm:stage'] }).success).toBe(false);
 });
+
+describe('catalog-bound mutation regressions', () => {
+  it('validates write stages by sequence within the selected funnel, not stage ID', () => {
+    const schemas = createMutationSchemas(catalogFixture); // stage ID 2, sequence 1, funnel 1
+    expect(schemas.changeStage.safeParse({ funnel: 1, dealStage: 1 }).success).toBe(true);
+    expect(schemas.changeStage.safeParse({ funnel: 1, dealStage: 2 }).success).toBe(false);
+    expect(schemas.changeStage.safeParse({ funnel: 99, dealStage: 1 }).success).toBe(false);
+  });
+
+  it('rejects custom field identifiers fabricated from missing or invalid catalog IDs', () => {
+    for (const id of [undefined, 0, -1, 1.5, 2_147_483_648, '', '__proto__']) {
+      const catalog = { ...catalogFixture, customFields: [{ entityType: 'people' as const, type: 'text', ...(id === undefined ? {} : { id }) }] };
+      const schemas = createMutationSchemas(catalog);
+      expect(schemas.createPerson.safeParse({ name: 'Synthetic Person', customFields: [{ id: String(id), value: 'Synthetic value' }] }).success).toBe(false);
+    }
+  });
+
+  it('rejects submitted custom field facts when the catalog field has no identifier', () => {
+    const catalog = { ...catalogFixture, customFields: [{ entityType: 'people' as const, type: 'text' }] };
+    const input = structuredClone(validAnalysisInput);
+    input.analysis.facts = [{ entity: 'person', field: 'customFields.undefined', value: 'Synthetic value', sources: validationContext.sourceRefs, certainty: 'confirmed' }];
+    expect(createAnalysisInputSchema({ ...validationContext, catalog }).safeParse(input).success).toBe(false);
+  });
+
+  it('validates assigned user membership during task creation', () => {
+    const schemas = createMutationSchemas(catalogFixture);
+    const task = { parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', type: 1, assigned_users: [1], due_date: '2026-10-27T10:00:00-04:00' } };
+    expect(schemas.createTask.safeParse(task).success).toBe(true);
+    expect(schemas.createTask.safeParse({ ...task, record: { ...task.record, assigned_users: [999] } }).success).toBe(false);
+    expect(schemas.createTask.safeParse({ ...task, record: { ...task.record, assigned_users: [1, 999] } }).success).toBe(false);
+  });
+
+  it('validates assigned user membership during task updates without requiring unrelated fields', () => {
+    const schemas = createMutationSchemas(catalogFixture);
+    expect(schemas.updateTask.safeParse({ assigned_users: [1] }).success).toBe(true);
+    expect(schemas.updateTask.safeParse({ text: 'Synthetic new text' }).success).toBe(true);
+    expect(schemas.updateTask.safeParse({ assigned_users: [999] }).success).toBe(false);
+    expect(schemas.updateTask.safeParse({ assigned_users: [1, 999] }).success).toBe(false);
+  });
+});

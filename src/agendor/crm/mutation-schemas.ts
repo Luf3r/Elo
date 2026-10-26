@@ -44,7 +44,7 @@ export const changeStageSchema = z.strictObject({ funnel: crmIdSchema, dealStage
 /** Catalog validation is compulsory at the mutation adapter boundary. Unknown
  * upstream field types remain blocked until an explicit mapper is verified. */
 export function customFieldMatchesCatalog(field: z.infer<typeof customFieldSchema>, entity: CatalogEntityType, catalog: CatalogSnapshot): boolean {
-  const entry = catalog.customFields.find(f => f.entityType === entity && String(f.id) === String(field.id));
+  const entry = catalog.customFields.find(f => f.entityType === entity && customFieldSchema.shape.id.safeParse(f.id).success && String(f.id) === String(field.id));
   if (!entry) return false;
   const optionIds = (entry.options ?? []).flatMap(o => typeof o === 'string' || typeof o === 'number' ? [o] : o && typeof o === 'object' && 'id' in o ? [(o as { id: unknown }).id] : []);
   switch (entry.type) {
@@ -58,6 +58,7 @@ export function customFieldMatchesCatalog(field: z.infer<typeof customFieldSchem
   }
 }
 export function createMutationSchemas(catalog: CatalogSnapshot) {
+  const knownTaskAssignees = (value: { assigned_users?: number[] }) => value.assigned_users === undefined || value.assigned_users.every(id => catalog.users.some(user => user.id === id));
   function checked<T extends z.ZodType>(schema: T, entity: CatalogEntityType) {
     return schema.superRefine((value, ctx) => {
       const fields = (value as { customFields?: z.infer<typeof customFieldSchema>[] }).customFields ?? [];
@@ -70,9 +71,10 @@ export function createMutationSchemas(catalog: CatalogSnapshot) {
     });
   }
   return { createOrganization: checked(createOrganizationSchema, 'organizations'), createPerson: checked(createPersonSchema, 'people'),
-    createDeal: checked(createDealRecordSchema, 'deals'), createTask: createTaskSchema,
-    enrichOrganization: checked(enrichOrganizationSchema, 'organizations'), enrichPerson: checked(enrichPersonSchema, 'people'), enrichDeal: checked(enrichDealSchema, 'deals'), updateTask: updateTaskSchema,
-    changeStage: changeStageSchema.refine(v => catalog.stages.some(s => s.id === v.dealStage && s.funnelId === v.funnel), 'Stage/funnel mismatch.') };
+    createDeal: checked(createDealRecordSchema, 'deals'),
+    createTask: createTaskSchema.extend({ record: createTaskRecordSchema.refine(knownTaskAssignees, { path: ['assigned_users'], message: 'Unknown user.' }) }),
+    enrichOrganization: checked(enrichOrganizationSchema, 'organizations'), enrichPerson: checked(enrichPersonSchema, 'people'), enrichDeal: checked(enrichDealSchema, 'deals'), updateTask: updateTaskSchema.refine(knownTaskAssignees, { path: ['assigned_users'], message: 'Unknown user.' }),
+    changeStage: changeStageSchema.refine(v => catalog.stages.some(s => s.sequence === v.dealStage && s.funnelId === v.funnel), 'Stage/funnel mismatch.') };
 }
 export type CreateOrganization = z.infer<typeof createOrganizationSchema>;
 export type CreatePerson = z.infer<typeof createPersonSchema>;
