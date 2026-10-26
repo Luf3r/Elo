@@ -2,7 +2,7 @@
 
 Estado atual: **OAuth publicado e validado em 2026-10-21**, versão `48f65d8d-d1b9-4d83-8102-e2f46f5b36e6`, no mesmo endpoint MCP. Secret Access preparado na versão não publicada `503a018c-7b45-4dc0-a66a-72235bbbc934` e herdado pelo upload de código, sem tráfego na versão intermediária. Descoberta de recurso/servidor, PKCE S256, CIMD e rejeição da autenticação fixa aprovados em produção. O proprietário concluiu o login real por PIN; o verificador trocou o código com PKCE sem expor credenciais.
 
-Implementação: biblioteca OAuth oficial 1.2.3, jose 6.2.13, KV exclusivo e limitador OAuth1003; access token de 1h, renovação por 7d somente com `offline_access`. Testes 139/139 no Workers, teste de proteção do verificador 1/1, contratos reais CRM 8/8 e JWKS Access 1/1, typecheck e build aprovados. Bundle 1529.69KiB/280.99KiB gzip; startup 58ms informado pelo Wrangler. Revisão independente com dois ajustes corrigidos e verificados.
+Implementação: biblioteca OAuth oficial 1.2.3, jose 6.2.13, KV exclusivo e limitador OAuth1003; access token de 1h, renovação por 35d desde a autorização inicial somente com `offline_access`. Testes 139/139 no Workers, teste de proteção do verificador 1/1, contratos reais CRM 8/8 e JWKS Access 1/1, typecheck e build aprovados. Bundle 1529.69KiB/280.99KiB gzip; startup 58ms informado pelo Wrangler. Revisão independente com dois ajustes corrigidos e verificados.
 
 O primeiro login encontrou uma incompatibilidade de runtime ao buscar as chaves de assinatura OIDC: Workers rejeita `redirect: 'error'`. A versão ativa usa `manual`, sem seguir redirecionamentos; a biblioteca exige resposta 200. Uma regressão unitária e um contrato com o JWKS real reproduziram o erro antes da correção e passaram depois. A validação de assinatura, issuer, audience, nonce e e-mail permanece obrigatória.
 
@@ -11,6 +11,8 @@ Inspector 2.11.0 com a sessão OAuth real: saúde, autenticação, oito ferramen
 ## Operação atual
 
 Use os comandos e o procedimento de secrets em [OAuth](oauth-setup.md). Os secrets obrigatórios atuais são `AGENDOR_CRM_TOKEN` e `ACCESS_CLIENT_SECRET`. O token fixo antigo não autentica esta versão. Para o Inspector, conclua `npm run oauth:login` e execute `npm run verify:mcp`; a sessão fica apenas no arquivo local ignorado.
+
+O Worker `elo-agendor-mcp` agora publica também as ferramentas somente leitura do Agendor Chat: `chat_list_conversations`, `chat_get_conversation` e `chat_list_messages`, protegidas pelo escopo `chat:read`. A versão 10 (`9a62a3b3-1750-484c-a811-6547efba2611`) está ativa em 100% do tráfego. O secret `AGENDOR_CHAT_TOKEN` e a variável `AGENDOR_CHAT_ACCOUNT_ID=7001` estão configurados na Cloudflare. Clientes conectados antes da concessão de `chat:read` podem precisar atualizar as ferramentas e reautorizar. Validação MCP autenticada em produção confirmou 15 ferramentas, quatro leituras CRM e chamada bem-sucedida de `chat_list_conversations`; conteúdo de conversas e mensagens não foi exibido. Nenhuma conversa ou registro CRM foi alterado durante a configuração.
 
 ## Histórico: publicação com token de teste
 

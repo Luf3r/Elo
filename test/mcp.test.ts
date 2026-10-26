@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { rpc, callTool } from './mcp-helper';
+import packageJson from '../package.json';
 
 describe('Streamable HTTP MCP', () => {
   it('rejects unauthenticated protocol calls', async () => {
@@ -9,24 +10,30 @@ describe('Streamable HTTP MCP', () => {
   it('negotiates initialization', async () => {
     const { data, response } = await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'elo-test', version: '1.0' } });
     expect(response.status).toBe(200);
-    expect(data.result.serverInfo).toMatchObject({ name: 'elo-agendor-mcp', version: '0.1.0' });
+    expect(data.result.serverInfo).toMatchObject({ name: 'elo-agendor-mcp', version: packageJson.version });
   });
-  it('lists read-only tools without a generic or write surface', async () => {
+  it('lists separately scoped CRM readers and updates without a generic HTTP surface', async () => {
     const { data, response } = await rpc('tools/list');
     expect(response.status).toBe(200);
     expect(data.result.tools.map((t: { name: string }) => t.name)).toContain('server_status');
     for (const tool of data.result.tools) {
-      expect(tool.name).not.toMatch(/create|update|delete|send|upsert|archive|move|request|fetch/);
-      expect(tool.description).toContain('Read-only');
-      expect(tool.annotations.readOnlyHint).toBe(true);
-      expect(tool._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['crm:read']}]);
+      expect(tool.name).not.toMatch(/create|delete|send|upsert|archive|move|request|fetch/);
+      if (tool.name.startsWith('crm_update_')) {
+        expect(tool.description).not.toContain('Read-only');
+        expect(tool.annotations.readOnlyHint).toBe(false);
+        expect(tool._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['crm:write']}]);
+      } else {
+        expect(tool.description).toContain('Read-only');
+        expect(tool.annotations.readOnlyHint).toBe(true);
+        expect(tool._meta.securitySchemes).toEqual([{type:'oauth2',scopes:tool.name === 'server_status' ? [] : ['crm:read']}]);
+      }
     }
   });
   it('calls server_status without upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const { data } = await callTool('server_status');
     expect(data.result.isError).not.toBe(true);
-    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ status: 'ok', service: 'elo-agendor-mcp', version: '0.1.0', client: expect.any(String) });
+    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ status: 'ok', service: 'elo-agendor-mcp', version: packageJson.version, client: expect.any(String) });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('keeps overlapping requests isolated', async () => {

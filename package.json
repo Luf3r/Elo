@@ -1,6 +1,6 @@
 {
   "name": "elo-agendor-mcp",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:ephemeral": "node scripts/dev-ephemeral.mjs",
-    "test": "vitest run --exclude test/contract/**",
-    "test:watch": "vitest --exclude test/contract/**",
+    "test": "vitest run --exclude=test/contract/**",
+    "test:watch": "vitest --exclude=test/contract/**",
     "test:contract": "node scripts/run-contract.mjs",
     "typecheck": "tsc --noEmit",
     "build": "wrangler deploy --dry-run --outdir dist",
@@ -21,7 +21,8 @@
     "oauth:login": "node scripts/oauth-login.mjs",
     "verify:oauth": "node scripts/verify-oauth.mjs",
     "oauth:stage-secret": "node scripts/stage-oauth-secret.mjs",
-    "test:scripts": "node --test test/oauth-scripts.test.mjs",
+    "test:scripts": "node --test test/oauth-scripts.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs",
+    "verify:chat-contract": "node scripts/verify-chat-contract.mjs",
     "cf:login": "wrangler login",
     "cf:whoami": "wrangler whoami"
   },
@@ -40,5 +41,9 @@
     "typescript": "7.0.2",
     "vitest": "4.1.12",
     "wrangler": "4.151.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261019.1": true
   }
 }

@@ -48,8 +48,13 @@ for (const headers of [{}, { Authorization: 'Bearer intentionally-invalid-token'
   await response.body?.cancel();
 }
 const listed = await inspect('tools/list');
-assert.equal(listed.tools.length, 8);
+const names = listed.tools.map(tool => tool.name);
+const requiredTools = ['server_status', 'crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'chat_list_conversations', 'chat_get_conversation', 'chat_list_messages'];
+const optionalTools = ['crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
+assert(requiredTools.every(name => names.includes(name)), 'Required production tools are missing.');
+assert(names.every(name => requiredTools.includes(name) || optionalTools.includes(name)), 'Unexpected MCP tool is exposed.');
 await inspect('tools/call', 'server_status');
+await inspect('tools/call', 'chat_list_conversations');
 for (const [tool, args] of [
   ['crm_search_people', { perPage: 1 }],
   ['crm_search_organizations', { perPage: 1 }],
@@ -60,4 +65,4 @@ for (const [tool, args] of [
   const result = await inspect('tools/call', tool, args);
   assert(Array.isArray(JSON.parse(result.content[0].text).items));
 }
-console.log(JSON.stringify({ target: target.href, health: 'PASS', authentication: 'PASS', inspector: '2.11.0', tools: 8, realCrmReads: 4, secretsInResults: false }));
+console.log(JSON.stringify({ target: target.href, health: 'PASS', authentication: 'PASS', inspector: '2.11.0', tools: names.length, realCrmReads: 4, secretsInResults: false }));

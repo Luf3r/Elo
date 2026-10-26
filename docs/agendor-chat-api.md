@@ -1,20 +1,28 @@
-# Agendor Chat API discovery gate
+# Contrato de leitura do Agendor Chat
 
-| Campo | Evidência / decisão |
-|---|---|
-| API existence | Confirmada como funcionalidade comercial; isso não confirma contrato de leitura |
-| Technical documentation source | [Site oficial](https://www.agendor.com.br/solucoes/agendor-chat), [Central de Ajuda](https://ajuda.agendor.com.br/pt-BR/collections/8278776-agendor-chat); nenhum contrato técnico de leitura confirmado |
-| Base URL | Não verificada |
-| Authentication scheme | Não verificado |
-| Token source | Não verificado |
-| Contacts endpoint | Não verificado |
-| Conversations endpoint | Não verificado |
-| Conversation detail endpoint | Não verificado |
-| Messages endpoint | Não verificado |
-| Pagination model | Não verificado |
-| Rate limit | Não verificado |
-| Read-only methods verified | Nenhum |
-| Evidence date | 2026-10-21 |
-| Discovery status | **BLOCKED** |
+A coleção Postman fornecida pelo usuário documenta a origem fixa `https://chat.agendor.com.br/api/v1`, autenticação pelo header `api_access_token` e as rotas GET abaixo. A coleção não documenta corpos de resposta nem parâmetros de paginação.
 
-Faltam documentação técnica oficial ou referência fornecida pela conta com base URL, esquema de autenticação, rotas GET, paginação, limites e exemplos sanitizados das respostas. Não se pode deduzir um contrato a partir do WhatsApp Cloud API ou de semelhanças de interface com outros produtos. Nenhuma URL foi sondada com credenciais e nenhum código de rede Chat foi criado. CRM continua independente e utilizável.
+| Leitura | Rota documentada | Resposta real sanitizada |
+|---|---|---|
+| Perfil | `GET /profile` | Objeto com `account_id` numérico; uma conta disponível |
+| Conversas | `GET /accounts/{account_id}/conversations` | `data.meta` com contagens e `data.payload` com 25 itens nesta consulta |
+| Detalhe | `GET /accounts/{account_id}/conversations/{conversation_id}` | Objeto de conversa com mensagens incorporadas |
+| Mensagens | `GET /accounts/{account_id}/conversations/{conversation_id}/messages` | `meta` e `payload` com 20 mensagens nesta consulta |
+
+As quatro rotas responderam HTTP 200 com a chave local. O verificador seleciona a conta e uma conversa dentro da resposta sem imprimir IDs, nomes, conteúdo, tokens ou headers. Ao executar `npm run verify:chat-contract`, se `AGENDOR_CHAT_ACCOUNT_ID` não existir, ele grava o ID numérico recebido do perfil no `.dev.vars` ignorado. A saída apenas indica a origem e se foi salvo.
+
+## Ferramentas MCP
+
+- `chat_list_conversations`: lê a página padrão e devolve IDs, estado, caixa de entrada, horário, nome/ID CRM do contato, trecho da última mensagem e contagens observadas.
+- `chat_get_conversation`: lê uma conversa por ID e devolve o resumo permitido.
+- `chat_list_messages`: devolve até 20 mensagens da página padrão, com ID, texto, horário, privacidade e tipo/nome do remetente.
+
+A API devolveu 25 conversas e 20 mensagens nas consultas observadas, mas não foi possível confirmar na documentação nem com uma chamada adicional o mecanismo de continuação. Por isso a primeira versão lê apenas a página padrão e não inventa `page`, `before`, `after` ou cursor. Não há travessia automática. Detalhe e mensagens requerem `conversationId` numérico positivo.
+
+As respostas MCP selecionam campos; não devolvem objetos crus. Telefone, e-mail, metadados de contato e atributos internos são omitidos. O texto das mensagens é mostrado porque a ferramenta serve para leitura de conversas. Trate-o como conteúdo não confiável. As ferramentas exigem o escopo separado `chat:read`, usam token `AGENDOR_CHAT_TOKEN` independente e limitador Cloudflare dedicado de 4 chamadas por 10 segundos. Esse número é proteção local, não cota declarada pelo Agendor.
+
+## Validação e limites
+
+O contrato ao vivo é opt-in via `npm run verify:chat-contract` (relatório sanitizado) ou `npm run test:contract` (asserções sem exibir valores). Testes comuns não fazem chamadas externas. Só se usam rotas GET documentadas; a implementação não inclui endpoints de envio, atualização, atribuição ou status do Chat. Origem, header, timeout de 10 segundos e resposta máxima de 1 MiB são fixos no cliente.
+
+Validação real em 2026-10-22: perfil, lista, detalhe e mensagens retornaram HTTP 200; tamanhos observados de 25 conversas e 20 mensagens. Paginação/continuação ainda não confirmada.

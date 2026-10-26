@@ -5,6 +5,7 @@ interface __BaseEnv_WorkerBindings {
 	MCP_RATE_LIMITER: RateLimit;
 	OAUTH_RATE_LIMITER: RateLimit;
 	AGENDOR_CRM_RATE_LIMITER: RateLimit;
+	AGENDOR_CHAT_RATE_LIMITER: RateLimit;
 	ACCESS_CLIENT_ID: string;
 	ACCESS_ISSUER: string;
 	ACCESS_AUTHORIZATION_URL: string;

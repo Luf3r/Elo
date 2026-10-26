@@ -2,4 +2,9 @@ AGENDOR_CRM_TOKEN="replace-me"
 ACCESS_CLIENT_SECRET="replace-me"
 # Access public OIDC endpoints are in wrangler.jsonc.
 # MCP_TEST_TOKEN is retired from production; retain only for an explicit rollback.
-# Add AGENDOR_CHAT_TOKEN only after Chat API discovery succeeds.
+# Chat reads are enabled only after the local key and numeric account ID are configured.
+# After confirming this key is the Agendor Chat api_access_token, store it locally here:
+# AGENDOR_CHAT_TOKEN=""
+# Set the numeric account_id observed in the sanitized profile response; never put it in client configuration.
+# AGENDOR_CHAT_ACCOUNT_ID=""
+# AGENDOR_CHAT_CONVERSATION_ID=""

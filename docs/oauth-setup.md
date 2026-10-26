@@ -12,6 +12,8 @@ No Zapia, use a opção de conectar servidor MCP informada pelo usuário, com a 
 
 Os clientes recebem concessões separadas. Teste em cada um: “Consulte as organizações do Agendor cujo nome começa com Elo.” Para tarefas, informe um `updatedDateGt` ISO 8601 nos últimos 31 dias.
 
+No código local desta branch, as ferramentas declaram permissões separadas: `crm:read` para consultas CRM, `crm:write` para as quatro ferramentas de atualização limitadas e `chat:read` para futuras ferramentas somente de leitura do Agendor Chat. Solicite apenas os escopos necessários. A produção ainda não oferece os novos escopos; essa mudança está aguardando validação e confirmação antes do deploy.
+
 ## Recursos desta instalação
 
 - Worker `elo-agendor-mcp`; conta Cloudflare `example-account-id`.
@@ -63,7 +65,7 @@ O Inspector usa o access token OAuth somente em memória. Verifica saúde, rejei
 
 ## Expiração, revogação e rollback
 
-Access tokens duram uma hora. Refresh tokens só são emitidos com consentimento `offline_access`; a concessão expira após sete dias. Refaça a conexão quando expirar. Revogação via endpoint OAuth anunciado invalida a credencial correspondente segundo as garantias de KV; desconectar uma interface não prova, por si só, revogação no servidor.
+Access tokens duram uma hora. Refresh tokens só são emitidos com consentimento `offline_access`; a concessão dura 35 dias a partir da autorização inicial. Renovar o access token não reinicia esse prazo; refaça a conexão quando a concessão expirar. Revogação via endpoint OAuth anunciado invalida a credencial correspondente segundo as garantias de KV; desconectar uma interface não prova, por si só, revogação no servidor.
 
 Renove ou revogue concessões separadamente por aplicativo usando as APIs administrativas `OAuthHelpers` da biblioteca, exclusivamente por uma rotina administrativa local confiável; não existe endpoint administrativo público nesta aplicação. Para invalidar tudo em emergência, retire a publicação do endpoint ou restaure uma versão controlada enquanto administra as concessões. Não prometa revogação global instantânea com KV.
 

@@ -8,12 +8,12 @@ import { RESOURCE } from '../src/oauth/config';
 describe('native rate limiting', () => {
   it('allows requests with a stable non-secret client key', async () => {
     const env = testEnv();
-    await enforceRateLimit(env, { clientId: 'test' });
+    await enforceRateLimit(env, { clientId: 'test', scopes: [] });
     expect(env.MCP_RATE_LIMITER.limit).toHaveBeenCalledWith({ key: 'mcp:test' });
   });
   it('rejects quota exhaustion', async () => {
     const env = testEnv({ MCP_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
-    await expect(enforceRateLimit(env, { clientId: 'test' })).rejects.toMatchObject({ code: 'MCP_RATE_LIMITED', status: 429 });
+    await expect(enforceRateLimit(env, { clientId: 'test', scopes: [] })).rejects.toMatchObject({ code: 'MCP_RATE_LIMITED', status: 429 });
     const token = await issueTestToken(env);
     const r = await worker.fetch(new Request(RESOURCE, { headers: { Authorization: `Bearer ${token.access_token}` } }), env, context());
     expect(r.status).toBe(429);
@@ -26,7 +26,7 @@ describe('native rate limiting', () => {
   });
   it('fails closed if native limiter is absent or unavailable', async () => {
     for (const binding of [undefined, { limit: vi.fn(async () => { throw Error('sensitive binding error'); }) }]) {
-      await expect(enforceRateLimit(testEnv({ MCP_RATE_LIMITER: binding as RateLimit }), { clientId: 'test' })).rejects.toMatchObject({ code: 'UPSTREAM_UNAVAILABLE' });
+      await expect(enforceRateLimit(testEnv({ MCP_RATE_LIMITER: binding as RateLimit }), { clientId: 'test', scopes: [] })).rejects.toMatchObject({ code: 'UPSTREAM_UNAVAILABLE' });
     }
   });
   it('enforces a separate upstream budget per CRM call', async () => {

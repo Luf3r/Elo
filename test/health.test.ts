@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import worker from '../src/index';
 import { testEnv, context } from './helpers';
+import packageJson from '../package.json';
 
 describe('routing and health', () => {
   it('returns public JSON health without calling upstream or exposing secrets', async () => {
@@ -9,7 +10,7 @@ describe('routing and health', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/json');
     const text = await response.text();
-    expect(JSON.parse(text)).toEqual({ status: 'ok', service: 'elo-agendor-mcp', version: '0.1.0' });
+    expect(JSON.parse(text)).toEqual({ status: 'ok', service: 'elo-agendor-mcp', version: packageJson.version });
     expect(text).not.toContain('unit-crm-token');
     expect(text).not.toContain('unit-mcp-token');
     expect(fetch).not.toHaveBeenCalled();

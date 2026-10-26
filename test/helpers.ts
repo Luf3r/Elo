@@ -16,6 +16,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     ACCESS_JWKS_URL:'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/jwks',
     MCP_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     AGENDOR_CRM_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    AGENDOR_CHAT_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     ...overrides,
   };
 }

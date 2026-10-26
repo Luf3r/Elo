@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { loginHandler } from '../src/oauth/handler';
+import { oauthFailureDiagnostic } from '../src/oauth/diagnostics';
 import { baseOptions, oauthEnv, providerFetch, startAuthorization, cookies, simulateAccess } from './oauth-helper';
 
 const provider = () => new OAuthProvider({ ...baseOptions, defaultHandler:loginHandler, apiHandler:{fetch:async()=>Response.json({ok:true})} });
@@ -56,5 +57,24 @@ describe('owner-only browser login', () => {
   it('does not redirect a client with an unregistered callback',async()=>{
     const r=await providerFetch(provider(),oauthEnv(),'/authorize?client_id=missing&redirect_uri=https://evil.example&response_type=code');
     expect(r.status).toBe(400); expect(r.headers.get('location')).toBeNull();
+  });
+  it('logs safe authorization failure details without OAuth request secrets',async()=>{
+    const warn=vi.spyOn(console,'warn').mockImplementation(()=>undefined);
+    const query=new URLSearchParams({client_id:'missing',redirect_uri:'https://evil.example/callback',response_type:'code',state:'private-state-value',code_challenge:'private-challenge-value'});
+    try {
+      const response=await providerFetch(provider(),oauthEnv(),'/authorize?'+query);
+      expect(response.status).toBe(400);
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({event:'oauth_authorization_failed',phase:'authorization_request',errorType:'AuthorizationError',code:'invalid_request'}));
+      const logged=JSON.stringify(warn.mock.calls);
+      expect(logged).not.toContain('private-state-value');
+      expect(logged).not.toContain('private-challenge-value');
+      expect(logged).not.toContain('evil.example');
+    } finally { warn.mockRestore(); }
+  });
+  it('reports CIMD failure class and HTTP status without logging metadata content',()=>{
+    const diagnostic=oauthFailureDiagnostic('authorization_request',Object.assign(new Error('private payload'),{name:'CimdFetchError',detail:'Failed to fetch client metadata: HTTP 503',metadataUrl:'https://client.example/private?token=hidden'}));
+    expect(diagnostic).toEqual({phase:'client_metadata_resolution',errorType:'CimdFetchError',failure:'upstream_http_error',upstreamStatus:503});
+    expect(JSON.stringify(diagnostic)).not.toContain('private');
+    expect(JSON.stringify(diagnostic)).not.toContain('hidden');
   });
 });

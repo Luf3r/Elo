@@ -5,6 +5,7 @@ export interface SearchPeopleInput extends ListInput { query?: string; email?: s
 export interface SearchOrganizationsInput extends ListInput { query?: string }
 export interface SearchDealsInput extends ListInput { query?: string; organizationId?: number; personId?: number; ownerId?: number; status?: string }
 export interface ListTasksInput extends ListInput { dealId?: number; personId?: number; organizationId?: number; updatedDateGt?: string }
+export interface UpdateResult { id: number; updatedFields: string[] }
 export interface AgendorCrmClient {
   searchPeople(input: SearchPeopleInput): Promise<PagedResult<unknown>>;
   searchOrganizations(input: SearchOrganizationsInput): Promise<PagedResult<unknown>>;
@@ -12,4 +13,8 @@ export interface AgendorCrmClient {
   searchDeals(input: SearchDealsInput): Promise<PagedResult<unknown>>;
   getDeal(id: number): Promise<unknown>;
   listTasks(input: ListTasksInput): Promise<PagedResult<unknown>>;
+  updateDeal(id: number, fields: unknown): Promise<UpdateResult>;
+  updateDealStage(id: number, fields: unknown): Promise<UpdateResult>;
+  updatePerson(id: number, fields: unknown): Promise<UpdateResult>;
+  updateOrganization(id: number, fields: unknown): Promise<UpdateResult>;
 }

@@ -1,7 +1,7 @@
 import { SafeError } from './errors';
 import type { OAuthResourceAuth } from '@cloudflare/workers-oauth-provider';
-import { OWNER_EMAIL, RESOURCE, READ_SCOPE } from './oauth/config';
-export interface AuthContext { clientId: string; userId?: string }
+import { OWNER_EMAIL, RESOURCE } from './oauth/config';
+export interface AuthContext { clientId: string; userId?: string; scopes: readonly string[] }
 export function isConfiguredSecret(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !/\s/.test(value) && value !== 'replace-me';
 }
@@ -22,6 +22,10 @@ export function authenticateClient(ctx: ExecutionContext): AuthContext {
     (auth.expiresAt !== undefined && auth.expiresAt <= Date.now()/1000)) {
     throw new SafeError('MCP_UNAUTHORIZED', 'Unauthorized.', false, 401);
   }
-  if(!auth.scope.includes(READ_SCOPE))throw new SafeError('MCP_UNAUTHORIZED','Insufficient scope.',false,403);
-  return { clientId: auth.clientId, userId: auth.userId };
+  const scopes = Array.isArray(auth.scope) ? auth.scope : [];
+  return { clientId: auth.clientId, userId: auth.userId, scopes };
+}
+
+export function requireScope(auth: AuthContext, scope: string): void {
+  if (!auth.scopes.includes(scope)) throw new SafeError('MCP_UNAUTHORIZED', 'Insufficient scope.', false, 403, scope);
 }

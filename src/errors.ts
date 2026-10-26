@@ -10,6 +10,7 @@ export class SafeError extends Error {
     message: string,
     public readonly retryable: boolean,
     public readonly status?: number,
+    public readonly requiredScope?: string,
   ) { super(message); this.name = 'SafeError'; }
 }
 
@@ -20,5 +21,5 @@ export function safeError(error: unknown): SafeError {
 
 export function errorData(error: unknown) {
   const safe = safeError(error);
-  return { code: safe.code, message: safe.message, retryable: safe.retryable, ...(safe.status === undefined ? {} : { status: safe.status }) };
+  return { code: safe.code, message: safe.message, retryable: safe.retryable, ...(safe.status === undefined ? {} : { status: safe.status }), ...(safe.requiredScope === undefined ? {} : { requiredScope: safe.requiredScope }) };
 }

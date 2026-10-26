@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { authenticateClient, timingSafeTokenEqual } from '../src/auth';
 import worker from '../src/index';
 import { context, testEnv } from './helpers';
-import { issueTestToken } from './oauth-token';
 import { RESOURCE } from '../src/oauth/config';
+import { callTool } from './mcp-helper';
 
 describe('OAuth authentication', () => {
   it.each([undefined, 'Basic x', 'Bearer ', 'Bearer x', 'Bearer unit-mcp-token', 'Bearer unit-mcp-token trailing', 'Bearer\tunit-mcp-token'])('rejects %s', async header => {
@@ -22,9 +22,11 @@ describe('OAuth authentication', () => {
     expect(await timingSafeTokenEqual('a','a')).toBe(true);
     for(const [left,right] of compare.mock.calls){expect(left.byteLength).toBe(32);expect(right.byteLength).toBe(32);}
   });
-  it.each([undefined,'','replace-me','bad\nvalue'])('fails closed with invalid CRM secret',async token=>{
-    const env=testEnv({AGENDOR_CRM_TOKEN:token as string}); const grant=await issueTestToken(env);
-    const r=await worker.fetch(new Request(RESOURCE,{headers:{Authorization:`Bearer ${grant.access_token}`}}),env,context());
-    expect(r.status).toBe(503);expect(await r.text()).not.toContain(grant.access_token);
+  it.each([undefined,'','replace-me','bad\nvalue'])('keeps MCP available when CRM is unconfigured while failing CRM tools locally',async token=>{
+    const env=testEnv({AGENDOR_CRM_TOKEN:token as string});
+    const {response,data}=await callTool('crm_get_deal',{id:1},env);
+    expect(response.status).toBe(200);
+    expect(data.result.isError).toBe(true);
+    expect(JSON.parse(data.result.content[0].text).error.code).toBe('UPSTREAM_UNAVAILABLE');
   });
 });

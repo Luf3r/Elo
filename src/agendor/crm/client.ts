@@ -1,10 +1,11 @@
 import type { Env } from '../../env';
+import { z } from 'zod';
 import type { AgendorCrmClient } from './types';
 import { fetchJson } from '../../http';
 import { SafeError } from '../../errors';
 import { isConfiguredSecret } from '../../auth';
 import { normalizePage } from './pagination';
-import { peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, detailEnvelope, parseInput } from './schemas';
+import { peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, updateIdInput, detailEnvelope, parseInput, updateDealInput, updateDealStageInput, updatePersonInput, updateOrganizationInput } from './schemas';
 import { throwIfCancelled } from '../../cancellation';
 
 export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, options: { signal?: AbortSignal } = {}): AgendorCrmClient {
@@ -24,6 +25,20 @@ export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, opti
     if (!result.success) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Invalid upstream record.', false);
     return result.data.data;
   }
+  async function update(route: string, expectedId: number, fields: unknown, schema: z.ZodType) {
+    const payload = parseInput(schema, fields) as Record<string, unknown>;
+    throwIfCancelled(options.signal);
+    if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
+    const url = new URL(`https://api.agendor.com.br/v3${route}`);
+    const response = await fetchJson<unknown>(new Request(url, {
+      method: 'PUT', signal: options.signal,
+      headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }));
+    const result = detailEnvelope.safeParse(response);
+    if (!result.success || result.data.data.id !== expectedId) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Invalid upstream update response.', false);
+    return { id: expectedId, updatedFields: Object.keys(payload).filter(key => key !== 'checkRequiredFields') };
+  }
   return {
     async searchPeople(input) {
       const v = parseInput(peopleInput, input);
@@ -39,6 +54,14 @@ export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, opti
       return list('/deals', v, { title: v.query, organization: v.organizationId, person: v.personId, userOwner: v.ownerId, dealStatus: v.status });
     },
     getDeal: id => detail('/deals', id),
+    updateDeal: (id, fields) => { const validId = parseInput(updateIdInput.shape.id, id); return update(`/deals/${validId}`, validId, fields, updateDealInput); },
+    async updateDealStage(id, fields) {
+      const validId = parseInput(updateIdInput.shape.id, id);
+      const parsed = parseInput(updateDealStageInput, fields);
+      return update(`/deals/${validId}/stage`, validId, { ...parsed, checkRequiredFields: true }, updateDealStageInput.extend({ checkRequiredFields: z.literal(true) }));
+    },
+    updatePerson: (id, fields) => { const validId = parseInput(updateIdInput.shape.id, id); return update(`/people/${validId}`, validId, fields, updatePersonInput); },
+    updateOrganization: (id, fields) => { const validId = parseInput(updateIdInput.shape.id, id); return update(`/organizations/${validId}`, validId, fields, updateOrganizationInput); },
     async listTasks(input) {
       const v = parseInput(tasksInput, input);
       const path = v.dealId !== undefined ? `/deals/${v.dealId}/tasks`

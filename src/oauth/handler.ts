@@ -1,8 +1,9 @@
 import { AuthorizationError, CimdFetchError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../env';
-import { readOAuthConfig, ORIGIN, READ_SCOPE, type OAuthConfig } from './config';
+import { readOAuthConfig, ORIGIN, SUPPORTED_SCOPES, type OAuthConfig } from './config';
 import { verifyAccessIdentity } from './identity';
 import { consentPage } from './consent';
+import { oauthFailureDiagnostic } from './diagnostics';
 
 export async function limitedText(body: ReadableStream<Uint8Array> | null, max: number): Promise<string> {
   if (!body) return '';
@@ -30,15 +31,17 @@ export const loginHandler = {
     if(pathname!=='/authorize' && pathname!=='/callback') return new Response('Not found',{status:404});
     const oauth=env.OAUTH_PROVIDER;
     if(!oauth)return pageError(503,'O login ainda não está configurado.');
+    let phase: 'authorization_request' | 'consent_description' | 'consent_creation' = 'authorization_request';
     let config: OAuthConfig;
     try {config=readOAuthConfig(env);}catch{return pageError(503,'O login ainda não está configurado.');}
     try {
       if(pathname==='/authorize' && request.method==='GET'){
         const auth=await oauth.parseAuthRequest(request);
         if(!auth.codeChallenge || auth.codeChallengeMethod!=='S256')return pageError(400,'Este aplicativo precisa usar PKCE S256.');
-        if(auth.scope.length===0)auth.scope=[READ_SCOPE];
-        if(!auth.scope.includes(READ_SCOPE) || auth.scope.some(scope=>scope!==READ_SCOPE && scope!=='offline_access'))return pageError(400,'Permissões inválidas.');
+        if(auth.scope.some(scope=>!(SUPPORTED_SCOPES as readonly string[]).includes(scope)))return pageError(400,'Permissões inválidas.');
+        phase='consent_description';
         const details=await oauth.describeConsent(auth);
+        phase='consent_creation';
         const consent=await oauth.beginConsent(auth);
         consent.headers.set('Content-Type','text/html; charset=utf-8');
         consent.headers.set('Referrer-Policy','no-referrer');
@@ -76,6 +79,7 @@ export const loginHandler = {
       }
       return pageError(405,'Método não permitido.');
     } catch(error){
+      if(pathname==='/authorize' && request.method==='GET')console.warn({event:'oauth_authorization_failed',...oauthFailureDiagnostic(phase,error)});
       if(error instanceof RangeError)return pageError(413,'Solicitação muito grande.');
       if(error instanceof AuthorizationError || error instanceof CimdFetchError || error instanceof TypeError)return pageError(400,'Solicitação inválida ou expirada. Inicie a conexão novamente.');
       return pageError(503,'O login está temporariamente indisponível.');

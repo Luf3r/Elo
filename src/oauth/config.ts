@@ -4,6 +4,10 @@ export const ORIGIN = 'https://elo-agendor-mcp.example.workers.dev';
 export const RESOURCE = `${ORIGIN}/mcp`;
 export const OWNER_EMAIL = 'owner@elo.example';
 export const READ_SCOPE = 'crm:read';
+export const CHAT_READ_SCOPE = 'chat:read';
+export const WRITE_SCOPE = 'crm:write';
+export const OPTIONAL_SCOPE = 'offline_access';
+export const SUPPORTED_SCOPES = [READ_SCOPE, CHAT_READ_SCOPE, WRITE_SCOPE, OPTIONAL_SCOPE] as const;
 export interface OAuthConfig {
   clientId: string; clientSecret: string; issuer: string;
   authorizationUrl: string; tokenUrl: string; jwksUrl: string;

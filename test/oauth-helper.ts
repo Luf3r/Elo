@@ -18,7 +18,7 @@ export function oauthEnv(overrides: Partial<Env> = {}): Env {
 export const baseOptions = {
   apiRoute: '/mcp', authorizeEndpoint: '/authorize', tokenEndpoint: '/token', clientRegistrationEndpoint: '/register',
   resourceMetadata: { resource: RESOURCE, authorization_servers: [ORIGIN] },
-  requiredScopes: ['crm:read'], scopesSupported: ['crm:read','offline_access'],
+  scopesSupported: ['crm:read','chat:read','crm:write','offline_access'],
   onError:()=>undefined,
 } satisfies Partial<OAuthProviderOptions<Env>>;
 

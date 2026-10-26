@@ -36,7 +36,7 @@ try{
   const client=await jsonFetch(metadata.registration_endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:'Elo - verificação local',redirect_uris:[redirectUri],grant_types:['authorization_code','refresh_token'],response_types:['code'],token_endpoint_auth_method:'none'})});
   assert(typeof client.client_id==='string','Invalid registration.');clientId=client.client_id;
   const url=new URL(metadata.authorization_endpoint);
-  url.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',resource,scope:'crm:read offline_access',state,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256'}).toString();
+  url.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',resource,scope:'crm:read chat:read offline_access',state,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256'}).toString();
   mkdirSync('.tooling',{recursive:true});writeFileSync('.tooling/oauth-login-url.txt',url.href,{mode:0o600});
   console.log('Browser authorization URL ready in .tooling/oauth-login-url.txt. Open locally and finish the email login; do not share the file.');
   setTimeout(()=>{console.error('Browser login expired. Run oauth:login again.');server.close();},15*60*1000).unref();
