@@ -23,6 +23,19 @@ describe('CRM extended read contracts', () => {
     await client().searchOrganizations({ cnpj: '000', phone: '556700000000', email: 'a@empresa.test', exactName: 'Example', withCustomFields: true, createdAtGt: date });
     expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({ page: '1', per_page: '20', cnpj: '000', phone: '556700000000', email: 'a@empresa.test', nameExact: 'Example', withCustomFields: 'true', createdAtGt: date });
   });
+  it.each(['vendas@', 'financeiro'])('accepts organization email prefix %s through client and MCP', async email => {
+    const requests = upstream();
+    await client().searchOrganizations({ email });
+    expect(new URL(requests[0]!.url).searchParams.get('email')).toBe(email);
+    const result = await callTool('crm_search_organizations', { email });
+    expect(result.data.result.isError).not.toBe(true);
+    expect(new URL(requests[1]!.url).searchParams.get('email')).toBe(email);
+  });
+  it.each(['', '   ', 'x'.repeat(301)])('rejects empty or excessive organization email prefixes before fetch', async email => {
+    const requests = upstream();
+    await expect(client().searchOrganizations({ email })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(requests).toHaveLength(0);
+  });
   it('keeps deal stage ID distinct from sequence and uses documented array encoding', async () => {
     const requests = upstream();
     await client().searchDeals({ titleSearch: 'filter', funnelIds: [12, 14], stageId: 902, stageSequence: 3, withCustomFields: true, startAtGt: date, endAtLt: date });

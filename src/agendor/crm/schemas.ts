@@ -16,7 +16,7 @@ const customFields = { withCustomFields: z.boolean().optional() };
 export const personOptionsInput = z.strictObject(customFields);
 export const personDetailInput = z.strictObject({ id: positiveId, ...customFields });
 export const peopleInput = z.strictObject({ ...pagination, query, email: z.email().optional(), phone: prefix, cpf: prefix, organizationId: positiveId.optional(), ...customFields, ...dates });
-export const organizationsInput = z.strictObject({ ...pagination, query, cnpj: prefix, phone: prefix, email: z.email().optional(), exactName: prefix, ...customFields, ...dates });
+export const organizationsInput = z.strictObject({ ...pagination, query, cnpj: prefix, phone: prefix, email: prefix, exactName: prefix, ...customFields, ...dates });
 export const dealsInput = z.strictObject({
   ...pagination, query, titleSearch: prefix, funnelIds: z.array(positiveId).min(1).max(100).optional(),
   stageId: positiveId.optional(), stageSequence: positiveId.optional(), ...customFields, ...dates,
