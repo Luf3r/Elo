@@ -1,3 +1,4 @@
+import { allowBudget } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgendorCrmClient } from '../src/agendor/crm/client';
 
@@ -13,20 +14,20 @@ describe('bounded CRM update client', () => {
       return Response.json({ data: { id: 42, title: 'Renewal', value: 1200, description: 'private record data' } });
     });
     vi.stubGlobal('fetch', fetch);
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updateDeal(42, { title: 'Renewal', value: 1200 })).resolves.toEqual({ id: 42, updatedFields: ['title', 'value'] });
   });
 
   it('rejects arbitrary deal properties before making a request', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updateDeal(42, { title: 'Renewal', ownerUser: 1 } as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it('rejects IDs outside the documented 32-bit range before making a request', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     expect(() => client.updateDeal(2_147_483_648, { title: 'Renewal' })).toThrow('Invalid tool arguments.');
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -39,7 +40,7 @@ describe('bounded CRM update client', () => {
       return Response.json({ data: { id: 42, dealStage: 3 } });
     });
     vi.stubGlobal('fetch', fetch);
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updateDealStage(42, { dealStage: 3 })).resolves.toEqual({ id: 42, updatedFields: ['dealStage'] });
   });
 
@@ -49,7 +50,7 @@ describe('bounded CRM update client', () => {
       return Response.json({ data: { id: 42, dealStage: 3 } });
     });
     vi.stubGlobal('fetch', fetch);
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updateDealStage(42, { dealStage: 3, funnel: 9 })).resolves.toEqual({ id: 42, updatedFields: ['dealStage', 'funnel'] });
   });
 
@@ -59,7 +60,7 @@ describe('bounded CRM update client', () => {
       paths.push(new URL(request.url).pathname);
       return Response.json({ data: { id: Number(new URL(request.url).pathname.split('/').at(-1)), name: 'Updated' } });
     }));
-    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' });
+    const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updatePerson(7, { role: 'Buyer' })).resolves.toMatchObject({ id: 7 });
     await expect(client.updateOrganization(8, { website: 'https://example.com' })).resolves.toMatchObject({ id: 8 });
     expect(paths).toEqual(['/v3/people/7', '/v3/organizations/8']);

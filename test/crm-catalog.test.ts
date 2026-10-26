@@ -1,10 +1,11 @@
+import { allowBudget } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgendorCrmClient } from '../src/agendor/crm/client';
 import * as schemas from '../src/agendor/crm/schemas';
 import * as catalog from '../src/agendor/crm/catalog';
 import { callTool } from './mcp-helper';
 
-const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' });
+const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' }, { budgetGate: allowBudget });
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 function upstream(body: unknown = { data: [], links: { next: null } }) {
   const requests: Request[] = [];

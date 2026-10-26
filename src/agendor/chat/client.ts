@@ -1,3 +1,4 @@
+import { createBudgetGate, type BudgetGate } from '../../automation/state/budget';
 import type { Env } from '../../env';
 import { SafeError } from '../../errors';
 import type { ErrorCode } from '../../errors';
@@ -19,15 +20,19 @@ const CHAT_API_ORIGIN = 'https://chat.agendor.com.br/api/v1';
 const CHAT_TIMEOUT_MS = 10_000;
 const CHAT_MAX_RESPONSE_BYTES = 1_048_576;
 export interface ChatClientOptions {
+  budgetGate?: BudgetGate;
   signal?: AbortSignal;
   request?: (request: Request) => Promise<Response>;
   maxAttachmentBytes?: number;
 }
-export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>, options: ChatClientOptions = {}) {
+export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'> & Partial<Pick<Env, 'AUTOMATION_STATE'>>, options: ChatClientOptions = {}) {
   if (!isConfiguredSecret(env.AGENDOR_CHAT_TOKEN) || !/^\d{1,20}$/.test(env.AGENDOR_CHAT_ACCOUNT_ID ?? '')) {
     throw new SafeError('CHAT_API_NOT_CONFIGURED', 'Chat service is not configured.', false, 503);
   }
+  const budgetGate = options.budgetGate ?? createBudgetGate(env, 'chat');
   async function get(path: string): Promise<unknown> {
+    throwIfCancelled(options.signal);
+    await budgetGate();
     throwIfCancelled(options.signal);
     const controller = new AbortController();
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
@@ -151,7 +156,7 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
       const attachment = (await rawAttachments(parsed.conversationId)).find(value => value.id === parsed.attachmentId);
       if (!attachment) return { ...parsed, status: 'unavailable', pending: true, reason: 'attachment_not_found' };
       if (attachment.conversation_id !== undefined && attachment.conversation_id !== parsed.conversationId) return { ...parsed, status: 'unavailable', pending: true, reason: 'attachment_identity_mismatch' };
-      return downloadAttachment(parsed, attachment.data_url, { request: options.request ?? fetch, signal: options.signal, maxBytes: options.maxAttachmentBytes });
+      return downloadAttachment(parsed, attachment.data_url, { request: async request => { await budgetGate(); throwIfCancelled(options.signal); return (options.request ?? fetch)(request); }, signal: options.signal, maxBytes: options.maxAttachmentBytes });
     },
   };
 }

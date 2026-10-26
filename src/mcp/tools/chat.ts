@@ -3,7 +3,6 @@ import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { requireScope } from '../../auth';
 import { throwIfCancelled } from '../../cancellation';
-import { enforceChatRateLimit } from '../../rate-limit';
 import { createAgendorChatClient } from '../../agendor/chat/client';
 import { chatConversationIdInput, chatConversationPageInput, chatMessageInput, chatContactInput, chatSearchContactsInput, chatAttachmentInput } from '../../agendor/chat/schemas';
 import { chatReadSecurity } from '../security';
@@ -16,8 +15,6 @@ async function execute(env: Env, auth: AuthContext, operation: (client: ReturnTy
     requireScope(auth, 'chat:read');
     const signals = [toolSignal, requestSignal].filter((value): value is AbortSignal => value !== undefined);
     const signal = signals.length ? AbortSignal.any(signals) : undefined;
-    throwIfCancelled(signal);
-    await enforceChatRateLimit(env);
     throwIfCancelled(signal);
     const value = await operation(createAgendorChatClient(env, { signal }));
     if (!attachment) return jsonToolResult(value);

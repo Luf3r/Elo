@@ -1,3 +1,4 @@
+import { testEnv, budgetMock } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { executeWrite } from '../src/mcp/tools/read';
 import type { Env } from '../src/env';
@@ -6,7 +7,7 @@ import type { AuthContext } from '../src/auth';
 afterEach(() => vi.unstubAllGlobals());
 const auth = (scopes: string[]): AuthContext => ({ clientId: 'client-1', scopes });
 function env() {
-  return { AGENDOR_CRM_TOKEN: 'test-token', AGENDOR_CRM_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) } } as unknown as Env;
+  return testEnv();
 }
 
 describe('CRM write authorization boundary', () => {
@@ -18,7 +19,7 @@ describe('CRM write authorization boundary', () => {
     expect(JSON.parse(result.content[0]!.text).error.code).toBe('MCP_UNAUTHORIZED');
     expect(JSON.parse(result.content[0]!.text).error.requiredScope).toBe('crm:write');
     expect(result._meta).toEqual({ 'mcp/www_authenticate': ['Bearer error=\"insufficient_scope\", scope=\"crm:write\"'] });
-    expect(bindings.AGENDOR_CRM_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    expect(budgetMock(bindings)).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -27,7 +28,7 @@ describe('CRM write authorization boundary', () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const result = await executeWrite(bindings, auth(['crm:read']), client => client.updateDeal(42, { title: 'Test' }));
     expect(result.isError).toBe(true);
-    expect(bindings.AGENDOR_CRM_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    expect(budgetMock(bindings)).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -37,7 +38,7 @@ describe('CRM write authorization boundary', () => {
     vi.stubGlobal('fetch', fetch);
     const result = await executeWrite(bindings, auth(['crm:write']), client => client.updateDeal(42, { title: 'Test' }));
     expect(result.isError).toBeUndefined();
-    expect(bindings.AGENDOR_CRM_RATE_LIMITER.limit).toHaveBeenCalledWith({ key: 'agendor-crm:shared' });
+    expect(budgetMock(bindings)).toHaveBeenCalledWith('crm', expect.any(Number));
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

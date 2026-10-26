@@ -1,3 +1,4 @@
+import { SafeError } from '../../errors';
 import { throwIfCancelled } from '../../cancellation';
 import type { AttachmentInput, AttachmentResult } from './types';
 
@@ -71,7 +72,8 @@ export async function awaitChatRead<T>(operation: Promise<T>, signal: AbortSigna
     let binary = '';
     for (let start = 0; start < bytes.length; start += 8192) binary += String.fromCharCode(...bytes.subarray(start, start + 8192));
     return { ...input, status: 'available', pending: false, mimeType, data: btoa(binary) };
-  } catch {
+  } catch (error) {
+    if (error instanceof SafeError) throw error;
     throwIfCancelled(deps.signal);
     return unavailable(controller.signal.aborted ? 'download_timeout' : 'download_unavailable');
   } finally { clearTimeout(timer); }

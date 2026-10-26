@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
-import { testEnv } from './helpers';
+import { testEnv, budgetMock } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 const names = ['crm_get_person', 'crm_get_task', 'crm_get_configuration', 'crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
@@ -44,7 +44,7 @@ describe('CRM tool boundary', () => {
     expect(data.result.isError).not.toBe(true);
     expect(JSON.parse(data.result.content[0].text).pageInfo).toEqual({ page: 1, perPage: 20, hasNext: false, nextPage: null });
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(env.AGENDOR_CRM_RATE_LIMITER.limit).toHaveBeenCalledTimes(1);
+    expect(budgetMock(env)).toHaveBeenCalledTimes(1);
   });
   it.each(['crm_get_deal', 'crm_get_organization'])('unwraps detail in %s', async name => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ data: { id: 12, description: null } })));
@@ -64,7 +64,7 @@ describe('CRM tool boundary', () => {
     expect(data.result.isError).not.toBe(true);
     expect(JSON.parse(data.result.content[0].text)).toEqual({ id: 42, updatedFields: ['title'] });
     expect(JSON.stringify(data)).not.toContain('private text');
-    expect(env.AGENDOR_CRM_RATE_LIMITER.limit).toHaveBeenCalledTimes(1);
+    expect(budgetMock(env)).toHaveBeenCalledTimes(1);
   });
   it('returns safe MCP errors without upstream error text', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('secret body unit-crm-token', { status: 503 })));
@@ -75,7 +75,8 @@ describe('CRM tool boundary', () => {
   });
   it('refuses upstream quota exhaustion before any fetch', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
-    const { data } = await callTool('crm_search_people', {}, testEnv({ AGENDOR_CRM_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } }));
+    const env = testEnv(); budgetMock(env).mockResolvedValue({ allowed: false, retryAt: Date.now() + 10_000 });
+    const { data } = await callTool('crm_search_people', {}, env);
     expect(data.result.isError).toBe(true);
     expect(JSON.parse(data.result.content[0].text).error.code).toBe('UPSTREAM_RATE_LIMITED');
     expect(fetch).not.toHaveBeenCalled();

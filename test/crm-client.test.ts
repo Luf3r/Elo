@@ -1,8 +1,9 @@
+import { allowBudget } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAgendorCrmClient } from '../src/agendor/crm/client';
 
 afterEach(() => vi.unstubAllGlobals());
-const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' });
+const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' }, { budgetGate: allowBudget });
 const recentDate = new Date(Date.now() - 86_400_000).toISOString();
 function mockFetch(data: unknown = { data: [] }) {
   const fetch = vi.fn(async (_request: Request) => Response.json(data));

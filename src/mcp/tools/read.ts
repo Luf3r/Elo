@@ -1,7 +1,6 @@
 import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { requireScope } from '../../auth';
-import { enforceCrmRateLimit } from '../../rate-limit';
 import { jsonToolResult, errorToolResult } from '../result';
 import { throwIfCancelled } from '../../cancellation';
 import { createAgendorCrmClient } from '../../agendor/crm/client';
@@ -16,8 +15,6 @@ export async function executeRead(env: Env, auth: AuthContext, read: (client: Ag
   try {
     requireScope(auth, 'crm:read');
     throwIfCancelled(signal);
-    await enforceCrmRateLimit(env);
-    throwIfCancelled(signal);
     return jsonToolResult(await read(createAgendorCrmClient(env, { signal })));
   } catch (error) { return errorToolResult(error); }
 }
@@ -26,8 +23,6 @@ export async function executeWrite(env: Env, auth: AuthContext, write: (client: 
   const signal = signals.length ? AbortSignal.any(signals) : undefined;
   try {
     requireScope(auth, 'crm:write');
-    throwIfCancelled(signal);
-    await enforceCrmRateLimit(env);
     throwIfCancelled(signal);
     return jsonToolResult(await write(createAgendorCrmClient(env, { signal })));
   } catch (error) { return errorToolResult(error); }

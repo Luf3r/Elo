@@ -14,11 +14,11 @@
     "ACCESS_TOKEN_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/token",
     "ACCESS_JWKS_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/jwks"
   },
+  "durable_objects": { "bindings": [{ "name": "AUTOMATION_STATE", "class_name": "AutomationAccount" }] },
+  "migrations": [{ "tag": "automation-v1", "new_sqlite_classes": ["AutomationAccount"] }],
   "ratelimits": [
     { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
-    { "name": "OAUTH_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 10 } },
-    { "name": "AGENDOR_CRM_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 4, "period": 10 } },
-    { "name": "AGENDOR_CHAT_RATE_LIMITER", "namespace_id": "1004", "simple": { "limit": 4, "period": 10 } }
+    { "name": "OAUTH_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 10 } }
   ],
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

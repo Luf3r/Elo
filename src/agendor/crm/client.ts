@@ -1,3 +1,4 @@
+import { createBudgetGate, type BudgetGate } from '../../automation/state/budget';
 import type { Env } from '../../env';
 import { z } from 'zod';
 import type { AgendorCrmClient } from './types';
@@ -9,12 +10,15 @@ import { normalizeCatalogPage } from './catalog';
 import { parseConfiguration, taskDetailEnvelope, personOptionsInput, peopleInput, organizationsInput, dealsInput, tasksInput, positiveId, updateIdInput, detailEnvelope, parseInput, updateDealInput, updateDealStageInput, updatePersonInput, updateOrganizationInput } from './schemas';
 import { throwIfCancelled } from '../../cancellation';
 
-export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, options: { signal?: AbortSignal } = {}): AgendorCrmClient {
+export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'> & Partial<Pick<Env, 'AUTOMATION_STATE'>>, options: { signal?: AbortSignal; budgetGate?: BudgetGate } = {}): AgendorCrmClient {
+  const budgetGate = options.budgetGate ?? createBudgetGate(env, 'crm');
   async function get(path: string, params: Record<string, string | number | boolean | undefined> = {}) {
     throwIfCancelled(options.signal);
     if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${path}`);
     for (const [name, value] of Object.entries(params)) if (value !== undefined && value !== '') url.searchParams.set(name, String(value));
+    await budgetGate();
+    throwIfCancelled(options.signal);
     return fetchJson<unknown>(new Request(url, { method: 'GET', signal: options.signal, headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json' } }));
   }
   async function list(path: string, input: { page: number; perPage: number }, filters: Record<string, string | number | boolean | undefined> = {}) {
@@ -31,6 +35,8 @@ export function createAgendorCrmClient(env: Pick<Env, 'AGENDOR_CRM_TOKEN'>, opti
     throwIfCancelled(options.signal);
     if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${route}`);
+    await budgetGate();
+    throwIfCancelled(options.signal);
     const response = await fetchJson<unknown>(new Request(url, {
       method: 'PUT', signal: options.signal,
       headers: { Authorization: `Token ${env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json', 'Content-Type': 'application/json' },

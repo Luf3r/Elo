@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
-import { testEnv } from './helpers';
+import { testEnv, budgetMock } from './helpers';
 
 const conversation = {
   id: 456, status: 'open', inbox_name: 'WhatsApp', created_at: 1700000000,
@@ -102,7 +102,8 @@ describe('read-only Agendor Chat tools', () => {
   });
   it('fails closed on the dedicated Chat rate limiter before upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
-    const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123', AGENDOR_CHAT_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
+    const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
+    budgetMock(env).mockResolvedValue({ allowed: false, retryAt: Date.now() + 10_000 });
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
     expect(data.result.isError).toBe(true);
     expect(data.result.content[0].text).toContain('UPSTREAM_RATE_LIMITED');

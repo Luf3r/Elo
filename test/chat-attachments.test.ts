@@ -1,3 +1,4 @@
+import { allowBudget } from './helpers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgendorChatClient } from '../src/agendor/chat/client';
 beforeEach(() => vi.stubGlobal('fetch', () => { throw new Error('Network blocked by synthetic fixture'); }));
@@ -5,7 +6,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const env = { AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' };
 function attachmentClient(url: string, response: () => Response, maxAttachmentBytes?: number) {
   let downloads = 0;
-  const client = createAgendorChatClient(env, { maxAttachmentBytes, request: async request => {
+  const client = createAgendorChatClient(env, { budgetGate: allowBudget, maxAttachmentBytes, request: async request => {
     if (request.url.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: url, file_type: 'file' }] });
     downloads++;
     expect(request.headers.has('api_access_token')).toBe(false);
@@ -54,7 +55,7 @@ describe('authorized Chat attachments', () => {
     expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ reason: 'size_limit' });
   });
   it('bounds attachment JSON metadata to one MiB before parsing', async () => {
-    const client = createAgendorChatClient(env, { request: async () => new Response(' '.repeat(1_048_577)) });
+    const client = createAgendorChatClient(env, { budgetGate: allowBudget, request: async () => new Response(' '.repeat(1_048_577)) });
     await expect(client.listAttachments(200)).rejects.toMatchObject({ code: 'UPSTREAM_INVALID_RESPONSE' });
   });
   it('rejects credential-bearing URLs and malformed or missing authorization metadata', async () => {
@@ -63,7 +64,7 @@ describe('authorized Chat attachments', () => {
     expect(count()).toBe(0);
   });
   it('does not download when attachment metadata contradicts the conversation ID', async () => {
-    const client = createAgendorChatClient(env, { request: async request => {
+    const client = createAgendorChatClient(env, { budgetGate: allowBudget, request: async request => {
       if (!request.url.endsWith('/attachments')) throw new Error('Unexpected synthetic download');
       return Response.json({ payload: [{ id: 400, conversation_id: 201, data_url: 'https://chat.agendor.com.br/files/synthetic' }] });
     } });
@@ -81,7 +82,7 @@ describe('authorized Chat attachments', () => {
   });
   it('times out stalled attachment metadata without exposing its body', async () => {
     vi.useFakeTimers();
-    const client = createAgendorChatClient(env, { request: async () => new Response(new ReadableStream()) });
+    const client = createAgendorChatClient(env, { budgetGate: allowBudget, request: async () => new Response(new ReadableStream()) });
     const result = client.listAttachments(200).catch(error => error);
     await vi.advanceTimersByTimeAsync(10_001);
     const outcome = await Promise.race([result, Promise.resolve('still_pending')]);

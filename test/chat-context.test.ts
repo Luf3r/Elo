@@ -1,3 +1,4 @@
+import { allowBudget } from './helpers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgendorChatClient } from '../src/agendor/chat/client';
 import * as context from '../src/agendor/chat/client';
@@ -13,7 +14,7 @@ function clientFor(handler: (url: URL) => unknown) {
     return Response.json(handler(new URL(request.url)));
   };
   vi.stubGlobal('fetch', request);
-  return createAgendorChatClient(env, { request });
+  return createAgendorChatClient(env, { budgetGate: allowBudget, request });
 }
 describe('bounded Chat context', () => {
   it('isolates fixed-route reads entirely in the closed synthetic transport', async () => {

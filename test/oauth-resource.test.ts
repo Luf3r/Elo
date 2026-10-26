@@ -1,3 +1,4 @@
+import { budgetMock } from './helpers';
 import { describe, expect, it, vi } from 'vitest';
 import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
 import worker from '../src/index';
@@ -69,6 +70,6 @@ describe('OAuth resource integration',()=>{
   it('fails closed when OAuth quota is exhausted and does not consume CRM budget',async()=>{
     const env=oauthEnv({OAUTH_RATE_LIMITER:{limit:vi.fn(async()=>({success:false}))}});
     const r=await worker.fetch(new Request(`${ORIGIN}/register`,{method:'POST',body:'{}'}),env,context());
-    expect(r.status).toBe(429);expect(env.AGENDOR_CRM_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    expect(r.status).toBe(429);expect(budgetMock(env)).not.toHaveBeenCalled();
   });
 });
