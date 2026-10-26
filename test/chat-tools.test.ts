@@ -30,7 +30,8 @@ describe('read-only Agendor Chat tools', () => {
     expect(names).toContain('chat_list_conversations');
     expect(names).toContain('chat_get_conversation');
     expect(names).toContain('chat_list_messages');
-    expect(names.filter((name: string) => name.startsWith('chat_'))).toHaveLength(3);
+    for (const name of ['chat_search_contacts', 'chat_get_contact', 'chat_list_contact_conversations', 'chat_list_attachments', 'chat_get_attachment']) expect(names).toContain(name);
+    expect(names.filter((name: string) => name.startsWith('chat_'))).toHaveLength(8);
     const denied = await callTool('chat_list_conversations', {}, env, ['crm:read']);
     expect(denied.data.result.isError).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
@@ -64,6 +65,41 @@ describe('read-only Agendor Chat tools', () => {
     expect(fetch.mock.calls.every(([request]) => (request as Request).method === 'GET')).toBe(true);
   });
 
+  it('keeps all expanded reads behind chat scope and rejects caller attachment URLs', async () => {
+    const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { throw new Error('Synthetic fixture prohibits network'); });
+    for (const [tool, input] of [
+      ['chat_search_contacts', { query: 'SYNTHETIC' }], ['chat_get_contact', { contactId: 300 }],
+      ['chat_list_contact_conversations', { contactId: 300 }], ['chat_list_attachments', { conversationId: 200 }],
+      ['chat_get_attachment', { conversationId: 200, attachmentId: 400 }],
+    ] as const) {
+      const result = await callTool(tool, input, env, ['crm:read']);
+      expect(result.data.result.isError).toBe(true);
+      expect(JSON.parse(result.data.result.content[0].text).error.requiredScope).toBe('chat:read');
+    }
+    const rejected = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400, url: 'https://example.invalid' }, env, ['chat:read']);
+    expect(Boolean(rejected.data.error || rejected.data.result?.isError)).toBe(true);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('forwards documented after through MCP and emits native attachment image content', async () => {
+    const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
+    const handled: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async request => {
+      const req = request as Request;
+      const url = new URL(req.url);
+      handled.push(url.pathname + url.search);
+      if (url.pathname.endsWith('/messages')) return Response.json({ payload: [{ id: 11, conversation_id: 200, message_type: 0 }] });
+      if (url.pathname.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] });
+      if (url.pathname === '/files/synthetic' && !req.headers.has('api_access_token')) return new Response('SYNTHETIC', { headers: { 'content-type': 'image/png' } });
+      throw new Error('Unexpected synthetic request');
+    });
+    const messages = await callTool('chat_list_messages', { conversationId: 200, after: 10 }, env, ['chat:read']);
+    expect(messages.data.result.isError).toBeUndefined();
+    expect(JSON.parse(messages.data.result.content[0].text).coverage.missingReasons).toContain('older_edits_not_covered');
+    const attachment = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400 }, env, ['chat:read']);
+    expect(attachment.data.result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    expect(handled).toEqual(['/api/v1/accounts/100/conversations/200/messages?after=10', '/api/v1/accounts/100/conversations/200/attachments', '/files/synthetic']);
+  });
   it('fails closed on the dedicated Chat rate limiter before upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123', AGENDOR_CHAT_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
@@ -80,7 +116,7 @@ describe('read-only Agendor Chat tools', () => {
     } }));
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
     expect(data.result.isError).toBeUndefined();
-    expect(JSON.parse(data.result.content[0].text)).toEqual({ conversations: [{ id: 456 }], counts: { all_count: 1 } });
+    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ conversations: [{ id: 456 }], counts: { all_count: 1 }, coverage: { complete: false } });
   });
   it('does not expose upstream bodies on malformed responses or configuration errors', async () => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });

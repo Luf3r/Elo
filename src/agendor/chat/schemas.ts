@@ -1,8 +1,18 @@
 import { z } from 'zod';
+import type { ChatContact } from './types';
 
-const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 export const chatConversationIdInput = z.strictObject({ conversationId: positiveId });
 export const chatConversationPageInput = z.strictObject({});
+export const chatMessageInput = z.strictObject({ conversationId: positiveId, after: positiveId.optional() });
+export const chatContactInput = z.strictObject({ contactId: positiveId });
+export const chatSearchContactsInput = z.strictObject({ query: z.string().trim().min(1).max(200) });
+export const chatAttachmentInput = z.strictObject({ conversationId: positiveId, attachmentId: positiveId });
+export const conversationReadInput = z.strictObject({
+  conversationId: positiveId, after: positiveId.optional(),
+  continuation: z.strictObject({ conversationId: positiveId, after: positiveId }).optional(),
+}).refine(v => !(v.after && v.continuation) && (!v.continuation || v.continuation.conversationId === v.conversationId));
+export const contactSchema = z.object({ id: positiveId }).passthrough();
 const conversationSchema = z.object({
   id: positiveId,
   status: z.unknown().optional(), inbox_name: z.unknown().optional(),
@@ -23,20 +33,39 @@ export const conversationDetailSchema = conversationSchemaForDetail;
 export const messagesEnvelopeSchema = z.object({
   meta: z.unknown().optional(), payload: z.array(messageSchema).max(100),
 }).passthrough();
-
+function collection<T extends z.ZodType>(item: T) {
+  return z.union([
+    z.object({ payload: z.array(item).max(100) }),
+    z.object({ data: z.object({ payload: z.array(item).max(100) }) }),
+    z.object({ data: z.array(item).max(100) }),
+  ]).transform(v => 'payload' in v ? v.payload : Array.isArray(v.data) ? v.data : v.data.payload);
+}
+export const contactsEnvelopeSchema = collection(contactSchema);
+export const contactConversationsEnvelopeSchema = collection(conversationSchema);
+export const attachmentsEnvelopeSchema = collection(z.object({ id: positiveId }).passthrough());
 type Conversation = z.infer<typeof conversationSchema>;
 type Message = z.infer<typeof messageSchema>;
-function record(value: unknown): Record<string, unknown> | undefined {
+export function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 function text(value: unknown): string | undefined { return typeof value === 'string' && value.length > 0 ? value : undefined; }
 function finite(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined; }
 function count(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined; }
 function positive(value: unknown): number | undefined { return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined; }
-
+export function summarizeContact(value: Record<string, unknown>): ChatContact | null {
+  const id = positive(value.id);
+  if (!id) return null;
+  return { id,
+    ...(text(value.name) ? { name: text(value.name) } : {}),
+    ...(text(value.email) ? { email: text(value.email) } : {}),
+    ...(text(value.phone_number) ? { phoneNumber: text(value.phone_number) } : {}),
+    ...(positive(value.agendor_person_id) ? { crmPersonId: positive(value.agendor_person_id) } : {}),
+  };
+}
 export function summarizeConversation(value: Conversation) {
   const sender = record(record(value.meta)?.sender);
   const latest = record(value.last_non_activity_message);
+  const assignee = record(record(value.meta)?.assignee);
   const status = text(value.status);
   const inboxName = text(value.inbox_name);
   const createdAt = finite(value.created_at);
@@ -52,6 +81,9 @@ export function summarizeConversation(value: Conversation) {
     ...(timestamp !== undefined ? { lastActivityAt: timestamp } : {}),
     ...(unreadCount !== undefined ? { unreadCount } : {}),
     ...(contactName ? { contactName } : {}),
+    ...(positive(sender?.id) ? { contactId: positive(sender?.id) } : {}),
+    ...(positive(assignee?.id) ? { assigneeId: positive(assignee?.id) } : {}),
+    ...(text(assignee?.name) ? { assigneeName: text(assignee?.name) } : {}),
     ...(crmPersonId !== undefined ? { crmPersonId } : {}),
     ...(latestMessage ? { latestMessage } : {}),
   };
@@ -60,14 +92,32 @@ export function summarizeMessage(value: Message) {
   const conversationId = positive(value.conversation_id);
   const content = text(value.content);
   const createdAt = finite(value.created_at);
-  const senderType = text(value.sender_type);
-  const senderName = text(record(value.sender)?.name);
+  const updatedAt = finite(value.updated_at);
+  const sender = record(value.sender);
+  const senderType = text(value.sender_type) ?? text(sender?.type);
+  const senderName = text(sender?.name);
+  const senderId = positive(sender?.id);
+  // Explicit wire values only: a name or private flag never proves authorship/direction.
+  const direction = value.message_type === 'incoming' ? 'incoming' as const
+    : value.message_type === 'outgoing' ? 'outgoing' as const
+    : value.message_type === 'activity' ? 'activity' as const : 'unknown' as const;
   return {
     id: value.id,
     ...(conversationId !== undefined ? { conversationId } : {}),
     ...(content ? { content } : {}),
     ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(updatedAt !== undefined ? { updatedAt } : {}),
     ...(typeof value.private === 'boolean' ? { private: value.private } : {}),
     ...(senderType ? { senderType } : {}), ...(senderName ? { senderName } : {}),
+    ...(senderId ? { senderId } : {}), direction,
+    ...(typeof value.message_type === 'number' || typeof value.message_type === 'string' ? { messageType: value.message_type } : {}),
+  };
+}
+export function summarizeAttachment(value: Record<string, unknown>) {
+  return { id: positiveId.parse(value.id),
+    ...(text(value.file_type) ? { fileType: text(value.file_type) } : {}),
+    ...(text(value.content_type) ? { mimeType: text(value.content_type) } : {}),
+    ...(count(value.file_size) !== undefined ? { byteSize: count(value.file_size) } : {}),
+    ...(positive(value.message_id) ? { messageId: positive(value.message_id) } : {}),
   };
 }

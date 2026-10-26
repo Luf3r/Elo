@@ -6,17 +6,24 @@ import { throwIfCancelled } from '../../cancellation';
 import {
   chatConversationIdInput, conversationDetailSchema, conversationsEnvelopeSchema,
   messagesEnvelopeSchema, summarizeConversation, summarizeMessage,
+  chatMessageInput, chatContactInput, chatSearchContactsInput, chatAttachmentInput,
+  contactsEnvelopeSchema, contactConversationsEnvelopeSchema, attachmentsEnvelopeSchema,
+  summarizeContact, summarizeAttachment, record,
 } from './schemas';
+
+import { awaitChatRead, downloadAttachment } from './attachments';
+import type { AttachmentInput, AttachmentResult, MessagePage, Coverage, AttachmentPage } from './types';
+export { createConversationReader } from './contacts';
 
 const CHAT_API_ORIGIN = 'https://chat.agendor.com.br/api/v1';
 const CHAT_TIMEOUT_MS = 10_000;
 const CHAT_MAX_RESPONSE_BYTES = 1_048_576;
-export interface AgendorChatClient {
-  listConversations(): Promise<unknown>;
-  getConversation(id: number): Promise<unknown>;
-  listMessages(id: number): Promise<unknown>;
+export interface ChatClientOptions {
+  signal?: AbortSignal;
+  request?: (request: Request) => Promise<Response>;
+  maxAttachmentBytes?: number;
 }
-export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>, options: { signal?: AbortSignal } = {}): AgendorChatClient {
+export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>, options: ChatClientOptions = {}) {
   if (!isConfiguredSecret(env.AGENDOR_CHAT_TOKEN) || !/^\d{1,20}$/.test(env.AGENDOR_CHAT_ACCOUNT_ID ?? '')) {
     throw new SafeError('CHAT_API_NOT_CONFIGURED', 'Chat service is not configured.', false, 503);
   }
@@ -26,12 +33,12 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
     const timer = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
     try {
-      const response = await fetch(new Request(new URL(CHAT_API_ORIGIN + path), {
+      const response = await awaitChatRead((options.request ?? fetch)(new Request(new URL(CHAT_API_ORIGIN + path), {
         method: 'GET', redirect: 'manual', signal,
         headers: { Accept: 'application/json', api_access_token: env.AGENDOR_CHAT_TOKEN! },
-      }));
+      })), signal);
       if (!response.ok) {
-        await response.body?.cancel();
+        if (response.body) await awaitChatRead(response.body.cancel(), signal);
         const errors: Record<number, [ErrorCode, string, boolean]> = {
           401: ['UPSTREAM_UNAUTHORIZED', 'Chat authentication failed.', false],
           403: ['UPSTREAM_FORBIDDEN', 'Chat access denied.', false],
@@ -45,7 +52,7 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
       }
       const length = Number(response.headers.get('content-length'));
       if (Number.isFinite(length) && length > CHAT_MAX_RESPONSE_BYTES) {
-        await response.body?.cancel();
+        if (response.body) await awaitChatRead(response.body.cancel(), signal);
         throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
       }
       if (!response.body) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned an empty response.', false);
@@ -54,16 +61,19 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
       let size = 0;
       try {
         while (true) {
-          const { value, done } = await reader.read();
+          const { value, done } = await awaitChatRead(reader.read(), signal);
           if (done) break;
           size += value.byteLength;
           if (size > CHAT_MAX_RESPONSE_BYTES) {
-            await reader.cancel();
+            await awaitChatRead(reader.cancel(), signal);
             throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
           }
           chunks.push(value);
         }
-      } finally { reader.releaseLock(); }
+      } finally {
+        if (signal.aborted) void reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
       const bytes = new Uint8Array(size);
       let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
@@ -82,6 +92,14 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
     return result.data;
   }
   const account = env.AGENDOR_CHAT_ACCOUNT_ID;
+  const partial = (...missingReasons: string[]): Coverage => ({ complete: false, missingReasons, pagesRead: 1 });
+  async function contacts() {
+    return parse(contactsEnvelopeSchema, await get(`/accounts/${account}/contacts`)).map(value => summarizeContact(value)!);
+  }
+  async function rawAttachments(id: number) {
+    const { conversationId } = chatConversationIdInput.parse({ conversationId: id });
+    return parse(attachmentsEnvelopeSchema, await get(`/accounts/${account}/conversations/${conversationId}/attachments`));
+  }
   return {
     async listConversations() {
       const result = parse(conversationsEnvelopeSchema, await get(`/accounts/${account}/conversations`));
@@ -93,16 +111,48 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
           const value = meta[key];
           return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? [[key, value]] : [];
         }));
-      return { conversations: result.data.payload.slice(0, 25).map(summarizeConversation), counts };
+      return { conversations: result.data.payload.map(summarizeConversation), counts, coverage: partial('conversation_discovery_unverified') };
     },
-    async getConversation(id) {
+    async getConversation(id: number) {
       const { conversationId } = chatConversationIdInput.parse({ conversationId: id });
-      return summarizeConversation(parse(conversationDetailSchema, await get(`/accounts/${account}/conversations/${conversationId}`)));
+      const detail = parse(conversationDetailSchema, await get(`/accounts/${account}/conversations/${conversationId}`));
+      const sender = record(record(detail.meta)?.sender);
+      return { ...summarizeConversation(detail), contact: sender ? summarizeContact(sender) : null, coverage: partial('history_unverified') };
     },
-    async listMessages(id) {
-      const { conversationId } = chatConversationIdInput.parse({ conversationId: id });
-      const result = parse(messagesEnvelopeSchema, await get(`/accounts/${account}/conversations/${conversationId}/messages`));
-      return { conversationId, messages: result.payload.slice(0, 20).map(summarizeMessage) };
+    async listMessages(id: number, input: { after?: number } = {}): Promise<MessagePage> {
+      const { conversationId, after } = chatMessageInput.parse({ conversationId: id, ...input });
+      const result = parse(messagesEnvelopeSchema, await get(`/accounts/${account}/conversations/${conversationId}/messages${after ? `?after=${after}` : ''}`));
+      const messages = result.payload.map(summarizeMessage);
+      if (messages.some(message => message.conversationId !== undefined && message.conversationId !== conversationId)) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned inconsistent message identity.', false);
+      // Response metadata is not a verified cursor contract. Never invent a next page.
+      return { conversationId, messages, coverage: partial('history_unverified', 'continuation_unverified', ...(after ? ['older_edits_not_covered'] : [])) };
+    },
+    async searchContacts(input: { query: string }) {
+      const { query } = chatSearchContactsInput.parse(input);
+      const normalized = query.toLocaleLowerCase('en-US');
+      const selected = (await contacts()).filter(contact => [contact.name, contact.email, contact.phoneNumber].some(value => value?.toLocaleLowerCase('en-US').includes(normalized)));
+      return { contacts: selected, coverage: partial('contact_search_partial', 'continuation_unverified') };
+    },
+    async getContact(id: number) {
+      const { contactId } = chatContactInput.parse({ contactId: id });
+      // Only the collection route has documented evidence; absence is not proof of nonexistence.
+      return { contact: (await contacts()).find(contact => contact.id === contactId) ?? null, coverage: partial('contact_collection_partial') };
+    },
+    async listContactConversations(id: number) {
+      const { contactId } = chatContactInput.parse({ contactId: id });
+      const values = parse(contactConversationsEnvelopeSchema, await get(`/accounts/${account}/contacts/${contactId}/conversations`));
+      return { contactId, conversations: values.map(summarizeConversation), coverage: partial('conversation_discovery_unverified', 'continuation_unverified') };
+    },
+    async listAttachments(id: number): Promise<AttachmentPage> {
+      return { attachments: (await rawAttachments(id)).map(summarizeAttachment), coverage: partial('attachments_unverified', 'continuation_unverified') };
+    },
+    async readAttachment(input: AttachmentInput): Promise<AttachmentResult> {
+      const parsed = chatAttachmentInput.parse(input);
+      const attachment = (await rawAttachments(parsed.conversationId)).find(value => value.id === parsed.attachmentId);
+      if (!attachment) return { ...parsed, status: 'unavailable', pending: true, reason: 'attachment_not_found' };
+      if (attachment.conversation_id !== undefined && attachment.conversation_id !== parsed.conversationId) return { ...parsed, status: 'unavailable', pending: true, reason: 'attachment_identity_mismatch' };
+      return downloadAttachment(parsed, attachment.data_url, { request: options.request ?? fetch, signal: options.signal, maxBytes: options.maxAttachmentBytes });
     },
   };
 }
+export type AgendorChatClient = ReturnType<typeof createAgendorChatClient>;
