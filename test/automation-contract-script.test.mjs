@@ -93,3 +93,22 @@ test('CLI requires explicit opt-in and rejects arguments before reading credenti
     assert.equal(child.stderr.includes('unit-agendor-key'), false);
   }
 });
+
+test('live CLI fails closed before credential access while the shared durable budget is unavailable', () => {
+  const scriptUrl = new URL('../scripts/discover-automation-contracts.mjs', import.meta.url).href;
+  const code = `
+    import { promises } from 'node:fs';
+    import { fileURLToPath } from 'node:url';
+    promises.readFile = async () => {
+      process.stderr.write('CREDENTIAL_READ_ATTEMPT');
+      throw new Error('forbidden credential access');
+    };
+    process.argv = [process.execPath, fileURLToPath(${JSON.stringify(scriptUrl)}), '--live'];
+    await import(${JSON.stringify(scriptUrl)});
+  `;
+  const child = spawnSync(process.execPath, ['--input-type=module', '--eval', code], { encoding: 'utf8' });
+  assert.equal(child.status, 1);
+  assert.match(child.stderr, /Shared per-product budget unavailable; live discovery requires the Task 6 adapter/);
+  assert.equal(child.stderr.includes('CREDENTIAL_READ_ATTEMPT'), false);
+  assert.equal(child.stdout, '');
+});

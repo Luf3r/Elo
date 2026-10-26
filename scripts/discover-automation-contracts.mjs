@@ -1,4 +1,3 @@
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 const CHAT = 'https://chat.agendor.com.br/api/v1';
@@ -7,6 +6,7 @@ const POSTMAN = 'https://documenter.getpostman.com/view/28016625/2sAXxV4UX5';
 const OPENAPI = 'https://api.agendor.com.br/v3/swagger.json';
 const MAX_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 10_000;
+const LIVE_DISCOVERY_BLOCKED = 'Shared per-product budget unavailable; live discovery requires the Task 6 adapter.';
 const CATALOG = ['funnels', 'deal_stages', 'users', 'products', 'lead_origins', 'categories', 'sectors'];
 const ENTITIES = ['organizations', 'people', 'deals', 'products'];
 
@@ -127,39 +127,16 @@ export async function discoverAutomationContracts({ request, emit, timeoutMs = T
   return report;
 }
 
-function localVars(text) {
-  const result = new Map();
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*(AGENDOR_CHAT_TOKEN|AGENDOR_CRM_TOKEN)\s*=\s*(.*?)\s*$/.exec(line);
-    if (match) result.set(match[1], match[2].replace(/^(["'])(.*)\1$/, '$2'));
-  }
-  return result;
-}
 async function main() {
   if (process.argv.length !== 3 || process.argv[2] !== '--live') throw new Error('Use only --live to explicitly opt in to GET discovery.');
-  const vars = localVars(await readFile('.dev.vars', 'utf8'));
-  const chatToken = vars.get('AGENDOR_CHAT_TOKEN');
-  const crmToken = vars.get('AGENDOR_CRM_TOKEN');
-  if (![chatToken, crmToken].every(token => typeof token === 'string' && token.length > 0 && !/\s/.test(token))) throw new Error('credentials');
-  const report = await discoverAutomationContracts({
-    request: async req => {
-      // The core constructs all routes. Credentials never cross their pinned origin.
-      const origin = new URL(req.url).origin;
-      const headers = new Headers(req.headers);
-      if (origin === 'https://chat.agendor.com.br') headers.set('api_access_token', chatToken);
-      else if (origin === 'https://api.agendor.com.br') headers.set('Authorization', `Token ${crmToken}`);
-      else throw new Error('origin');
-      await new Promise(resolve => setTimeout(resolve, 350));
-      if (req.signal.aborted) throw new Error('aborted');
-      return fetch(new Request(req, { headers, redirect: 'manual' }));
-    }, emit: line => console.log(line),
-  });
-  await mkdir('.tooling', { recursive: true });
-  await writeFile('.tooling/automation-contracts.json', JSON.stringify(report, null, 2) + '\n');
+  // Task 6 must supply the same durable account/credential budget used by MCP and automation.
+  // A process-local delay or native datacenter limiter cannot satisfy shared accounting.
+  // Fail before credential access or fetch; the injected synthetic observer remains usable.
+  throw new Error(LIVE_DISCOVERY_BLOCKED);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => {
-    console.error(error instanceof Error && error.message.startsWith('Use only --live') ? error.message : 'Automation contract discovery failed.');
+    console.error(error instanceof Error && (error.message.startsWith('Use only --live') || error.message === LIVE_DISCOVERY_BLOCKED) ? error.message : 'Automation contract discovery failed.');
     process.exitCode = 1;
   });
 }
