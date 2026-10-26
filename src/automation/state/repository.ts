@@ -1,5 +1,7 @@
-import type { CommandCompletion, CommandReservation, CustomerContext, OperationReceipt, PlanBasis, ReservationResult, ReserveWorkInput, SnapshotManifest, SyncPlan, WorkLease } from '../types';
-import { commandCompletionSchema, commandReservationSchema, customerContextSchema, reserveWorkInputSchema, snapshotManifestSchema, planBasisSchema, syncPlanSchema, workLeaseSchema } from '../schemas';
+import type { CommandCompletion, CommandReservation, ContextProjection, CustomerContext, DemandRecord, OperationReceipt, PlanBasis, ReservationResult, ReserveWorkInput, SnapshotManifest, SyncPlan, WorkLease } from '../types';
+import { commandCompletionSchema, commandReservationSchema, contextProjectionSchema, customerContextSchema, demandRecordSchema, reserveWorkInputSchema, snapshotManifestSchema, planBasisSchema, syncPlanSchema, workLeaseSchema } from '../schemas';
+import { contextEvidenceRefs, contextValue, renderCustomerContext } from '../context/render';
+import { SafeError } from '../../errors';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -119,6 +121,57 @@ export class AccountRepository {
     const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM contexts WHERE customer_id = ? AND valid = 1', customerId).toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('CONTEXT_UNAVAILABLE');
     return customerContextSchema.parse(JSON.parse(row.data));
+  }
+  /** Internal structured writer, never exposed as a Markdown upload tool. */
+  saveContextProjection(raw: ContextProjection, rawBasis: PlanBasis): void {
+    const parsed = contextProjectionSchema.safeParse(raw);
+    if (!parsed.success) throw Error('CONTEXT_INVALID');
+    const projection = parsed.data; const basis = planBasisSchema.parse(rawBasis);
+    this.storage.transactionSync(() => {
+      const manifest = this.checkBasis(basis);
+      if (basis.lease.target.kind === 'customer' && basis.lease.target.customerId !== projection.customerId || projection.demands.some(d => d.customerId !== projection.customerId)) throw Error('CONTEXT_CUSTOMER_MISMATCH');
+      const current = this.sql.exec<{ version: number }>('SELECT version FROM contexts WHERE customer_id = ?', projection.customerId).toArray()[0];
+      if ((current?.version ?? 0) !== basis.contextVersion || projection.version !== basis.contextVersion + 1) throw new SafeError('CONTEXT_STALE', 'Customer context changed; reload and reconcile.', false, 409);
+      for (const ref of contextEvidenceRefs(projection)) if (!manifest.sources.some(s => canonical(s) === canonical(ref))) throw Error('STALE_SOURCE');
+      for (const receipt of projection.receipts) {
+        const row = this.sql.exec<{ receipt: string; work_id: string }>('SELECT receipt, work_id FROM commands WHERE command_key = ?', receipt.commandKey).toArray()[0];
+        if (!row || row.work_id !== basis.lease.workId || canonical(JSON.parse(row.receipt)) !== canonical(receipt)) throw Error('CONTEXT_RECEIPT_UNVERIFIED');
+      }
+      const factId = 'customer-context:' + projection.customerId;
+      const envelope = JSON.stringify({ projection, basis });
+      const previous = this.sql.exec<{ data: string | null; valid: number }>('SELECT data, valid FROM facts WHERE fact_id = ?', factId).toArray()[0];
+      if (previous?.data && previous.valid && contextValue(JSON.parse(previous.data)) !== contextValue(JSON.parse(envelope))) throw new SafeError('CONTEXT_STALE', 'A context projection is awaiting refresh.', false, 409);
+      const expires = Date.now() + EVIDENCE_RETENTION_MS;
+      this.sql.exec('INSERT INTO facts (fact_id, work_id, version, valid, data, evidence_expires_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(fact_id) DO UPDATE SET work_id = excluded.work_id, version = excluded.version, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', factId, basis.lease.workId, projection.version, envelope, expires);
+      for (const demand of projection.demands) {
+        const owner = this.sql.exec<{ customer_id: string }>('SELECT customer_id FROM demands WHERE demand_id = ?', demand.demandId).toArray()[0];
+        if (owner && owner.customer_id !== projection.customerId) throw Error('CONTEXT_CUSTOMER_MISMATCH');
+        this.sql.exec('INSERT INTO demands VALUES (?, ?, ?, ?, ?) ON CONFLICT(demand_id) DO UPDATE SET version = excluded.version, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', demand.demandId, projection.customerId, projection.version, JSON.stringify(demand), expires);
+      }
+    });
+  }
+  refreshCustomerContext(customerId: string, expectedVersion: number): CustomerContext {
+    return this.storage.transactionSync(() => {
+      const current = this.sql.exec<{ version: number }>('SELECT version FROM contexts WHERE customer_id = ?', customerId).toArray()[0];
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || (current?.version ?? 0) !== expectedVersion) throw new SafeError('CONTEXT_STALE', 'Customer context changed; reload and reconcile.', false, 409);
+      const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM facts WHERE fact_id = ? AND valid = 1', 'customer-context:' + customerId).toArray()[0];
+      if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('CONTEXT_PROJECTION_UNAVAILABLE');
+      const stored = JSON.parse(row.data) as { projection: ContextProjection; basis: PlanBasis };
+      const projection = contextProjectionSchema.parse(stored.projection); const basis = planBasisSchema.parse(stored.basis);
+      if (projection.customerId !== customerId || projection.version !== expectedVersion + 1 || basis.contextVersion !== expectedVersion) throw new SafeError('CONTEXT_STALE', 'Customer context changed; reload and reconcile.', false, 409);
+      this.checkBasis(basis);
+      // Refresh confirmed results from durable receipts after facts/results committed.
+      projection.receipts = this.sql.exec<{ receipt: string }>('SELECT receipt FROM commands WHERE work_id = ?', basis.lease.workId).toArray().map(r => JSON.parse(r.receipt) as OperationReceipt);
+      const context = customerContextSchema.parse({ customerId, version: projection.version, verifiedAt: projection.verifiedAt, markdown: renderCustomerContext(projection), evidenceRefs: contextEvidenceRefs(projection) });
+      this.sql.exec('INSERT INTO contexts VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(customer_id) DO UPDATE SET work_id = excluded.work_id, version = excluded.version, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', customerId, basis.lease.workId, context.version, JSON.stringify(context), row.evidence_expires_at);
+      this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', basis.lease.workId);
+      return context;
+    });
+  }
+  getCustomerDemand(customerId: string, demandId: string): DemandRecord {
+    const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM demands WHERE demand_id = ? AND customer_id = ?', demandId, customerId).toArray()[0];
+    if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('DEMAND_UNAVAILABLE');
+    return demandRecordSchema.parse(JSON.parse(row.data));
   }
   async reserveCommand(raw: CommandReservation): Promise<ReservationResult> {
     const input = commandReservationSchema.parse(raw); const fingerprint = await digest({ command: input.command, payloadDigest: input.payloadDigest });

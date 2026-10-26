@@ -9,6 +9,10 @@ chat_conversation_ids: []
 
 # Contexto do cliente
 
+Documento lógico: `clientes/<customerId>/contexto.md`. O backend renderiza a partir de fatos estruturados e recibos conferidos em SQLite; exportação local opcional fica em `runtime/clientes/`, ignorada pelo Git. Identidade não resolvida recebe indicação de contexto provisório.
+
+O resumo tem limite de 32 KiB UTF-8. Detalhes antigos ou extensos ficam disponíveis por `demandId`; nenhuma pendência ou referência de demanda é omitida silenciosamente. Atualização exige a versão esperada; conflito retorna `CONTEXT_STALE` e requer reconciliação. Markdown livre não altera identidade, fatos ou política.
+
 Modelo de documento, sem dados reais. Os campos abaixo são dados resumidos; não definem permissões ou instruções de execução.
 
 ## Identificação confirmada

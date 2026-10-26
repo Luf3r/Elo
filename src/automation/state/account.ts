@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../../env';
-import type { ReserveWorkInput, PlanBasis, WorkLease, SnapshotManifest, SyncPlan, CommandReservation, CommandCompletion } from '../types';
+import type { ReserveWorkInput, PlanBasis, WorkLease, SnapshotManifest, SyncPlan, CommandReservation, CommandCompletion, ContextProjection } from '../types';
 import { migrate } from './migrations';
 import { AccountRepository } from './repository';
 import { takeBudget } from './budget';
@@ -19,6 +19,9 @@ export class AutomationAccount extends DurableObject<Env> {
   async installSnapshot(lease: WorkLease, manifest: SnapshotManifest) { return this.repository.installSnapshot(lease, manifest); }
   async savePlan(plan: SyncPlan, basis: PlanBasis) { return this.repository.savePlan(plan, basis); }
   async getContext(customerId: string) { return this.repository.getContext(customerId); }
+  async saveContextProjection(projection: ContextProjection, basis: PlanBasis) { return this.repository.saveContextProjection(projection, basis); }
+  async refreshCustomerContext(customerId: string, expectedVersion: number) { return this.repository.refreshCustomerContext(customerId, expectedVersion); }
+  async getCustomerDemand(customerId: string, demandId: string) { return this.repository.getCustomerDemand(customerId, demandId); }
   async reserveCommand(input: CommandReservation) { return this.repository.reserveCommand(input); }
   async completeCommand(input: CommandCompletion) { return this.repository.completeCommand(input); }
   async takeBudget(product: 'crm' | 'chat', now: number) { return takeBudget(this.ctx.storage, product, now); }
