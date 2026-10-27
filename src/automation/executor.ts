@@ -103,7 +103,7 @@ export async function resumeOperation(operation: ExecutionOperation, deps: Execu
       outcome = safe.code === 'UPSTREAM_RATE_LIMITED' ? { state: 'rejected', code: safe.code, retryAfterSeconds: safe.retryAfterSeconds } : { state: 'uncertain', reason: 'UPSTREAM_UNAVAILABLE' };
     }
     if (outcome.state === 'rejected' && outcome.code === 'UPSTREAM_RATE_LIMITED') {
-      const delay = Math.max(0, outcome.retryAfterSeconds ?? 10);
+      const delay = Math.max(0, outcome.retryAfterSeconds ?? Math.min(300, 10 * 2 ** (sending.attempts - 1)));
       await deps.repository.finishDispatch(command.commandKey, sending.token!, { state: 'retry', receipt: receipt(sending, 'reserved'), retryAt: Date.now() + delay * 1000 });
       return status(operation, deps, sending.attempts >= 5 ? 'review' : 'queued', [sending.attempts >= 5 ? 'ATTEMPTS_EXHAUSTED' : 'UPSTREAM_RATE_LIMITED']);
     }

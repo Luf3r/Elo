@@ -93,8 +93,12 @@ export async function handleAutomationQueue(batch: QueueBatch, env: Env, factory
       const operation = await deps.repository.getOperation(parsed.data.operationId);
       if (!operation || operation.version !== parsed.data.version || operation.input.accountKey !== parsed.data.accountKey) { message.ack(); continue; }
       const status = await resumeOperation(operation, { ...deps, defer: false });
-      if (status.state === 'applied') await accountState(env).completeDirectOperation(operation.operationId);
-      if (status.state === 'queued' || status.state === 'uncertain') message.retry({ delaySeconds: 10 }); else message.ack();
+      if (status.state === 'applied') await deps.repository.publishOperationContext(operation.operationId);
+      if (status.state === 'queued' || status.state === 'uncertain') {
+        const commands = await Promise.all(operation.input.authorization.plan.orderedCommands.map(c => deps.repository.getExecutionCommand(c.commandKey)));
+        const next = commands.reduce((deadline, c) => Math.max(deadline, c?.nextAttemptAt ?? 0), Date.now() + 10_000);
+        message.retry({ delaySeconds: Math.min(43_200, Math.max(1, Math.ceil((next - Date.now()) / 1000))) });
+      } else message.ack();
     } catch { message.retry({ delaySeconds: 10 }); }
   }
 }

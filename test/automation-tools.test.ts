@@ -19,11 +19,11 @@ function upstream() {
 
 afterEach(() => vi.unstubAllGlobals());
 const configured = () => testEnv({ AGENDOR_CHAT_TOKEN: 'unit-chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
-const automationNames = ['prepare_sync', 'submit_analysis', 'apply_plan', 'get_operation', 'get_customer_context', 'list_reviews', 'resolve_review', 'get_status', 'update_policy', 'reprocess'].map(n => `automation_${n}`);
+const automationNames = ['prepare_sync', 'submit_analysis', 'apply_plan', 'get_operation', 'get_customer_context', 'list_reviews', 'list_audit', 'resolve_review', 'get_status', 'update_policy', 'reprocess'].map(n => `automation_${n}`);
 describe('agent workflow MCP boundary', () => {
-  it('publishes exactly 41 tools when both products are configured', async () => {
+  it('publishes exactly 42 tools when both products are configured', async () => {
     const { data } = await rpc('tools/list', {}, configured());
-    expect(data.result.tools).toHaveLength(41);
+    expect(data.result.tools).toHaveLength(42);
     for (const name of automationNames) {
       const tool = data.result.tools.find((t: {name: string}) => t.name === name);
       expect(tool, name).toBeDefined();

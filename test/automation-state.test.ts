@@ -71,7 +71,7 @@ describe('durable account coordination', () => {
     await evictDurableObject(stub);
     expect(await stub.reserveWork(input())).toEqual(lease);
     const migrations = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-    expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
+    expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }]);
   });
   it('treats abandoned in-flight commands as uncertain instead of retrying after lease expiry', async () => {
     const { stub, reservation } = await setup(); await stub.reserveCommand(reservation); await expire(stub);
@@ -207,5 +207,5 @@ it('migrates existing v1 plans as invalid and preserves command tombstones throu
   expect(row).toEqual({ valid: 0, fence: null });
   await evictDurableObject(stub);
   const versions = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-  expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
+  expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }]);
 });

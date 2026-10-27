@@ -3,14 +3,18 @@ import { oauthProvider } from './oauth/provider';
 import { readOAuthConfig } from './oauth/config';
 import { VERSION } from './version';
 import { handleAutomationQueue } from './automation/queue';
+import { acceptChatHint } from './automation/ingress';
+import { accountState } from './automation/state/budget';
 
 export default {
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> { await accountState(env).maintainAccount(Date.now()); },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> { await handleAutomationQueue(batch, env); },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (new URL(request.url).pathname === '/health' && request.method === 'GET') {
       return Response.json({ status: 'ok', service: 'elo-agendor-mcp', version: VERSION });
     }
     const path=new URL(request.url).pathname;
+    if (path === '/automation/chat-events') return acceptChatHint(request, env);
     const known=['/mcp','/authorize','/callback','/token','/token/revoke','/register','/.well-known/oauth-authorization-server','/.well-known/openid-configuration','/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'];
     if(!known.includes(path))return new Response('Not found',{status:404});
     try {

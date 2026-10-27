@@ -7,6 +7,7 @@
   "secrets": { "required": ["AGENDOR_CRM_TOKEN", "ACCESS_CLIENT_SECRET"] },
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
   "vars": {
+    "AUTOMATION_CHAT_HINTS_ENABLED": "false",
     "AGENDOR_CHAT_ACCOUNT_ID": "7001",
     "ACCESS_CLIENT_ID": "example-client-id",
     "ACCESS_ISSUER": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id",
@@ -15,6 +16,7 @@
     "ACCESS_JWKS_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/jwks"
   },
   "durable_objects": { "bindings": [{ "name": "AUTOMATION_STATE", "class_name": "AutomationAccount" }] },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "migrations": [{ "tag": "automation-v1", "new_sqlite_classes": ["AutomationAccount"] }],
   "queues": {
     "producers": [{ "binding": "AUTOMATION_QUEUE", "queue": "elo-agendor-operations" }],

@@ -10,7 +10,7 @@ import { parseInput } from '../agendor/crm/schemas';
 import { accountState } from './state/budget';
 import { readCustomerCandidates, uniqueSources } from './identity';
 import { requireAutomationOperation, requirePolicyCapabilities, authorizeSubmission, authorizePlan } from './authorization';
-import { prepareInputSchema, preparedWorkSchema, analysisInputSchema, createAnalysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema } from './schemas';
+import { prepareInputSchema, preparedWorkSchema, analysisInputSchema, createAnalysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema, auditInputSchema } from './schemas';
 import { automationPolicySchema, updatePolicyInputSchema } from './policy-types';
 import { buildSyncPlan } from './planner';
 import { payloadDigest } from './operations';
@@ -90,6 +90,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
           conversation.messages = conversation.messages.filter(m => { if (m.createdAt === undefined) return false; const time = m.createdAt > 1e12 ? m.createdAt : m.createdAt * 1000; return time >= Date.parse(range.from) && time <= Date.parse(range.to); });
         }
         state.step++; await persistWorkflow(repository(), state);
+        for (const conversationId of state.conversationIds) await repository().acknowledgeChatHints(conversationId);
       }
       if (state.step === 1) {
         const contact = state.conversations[0]?.contact;
@@ -131,7 +132,13 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     const resolution = await repository().resolveWork(input.analysis, state.candidates, state.catalog, state.basis);
     const plan = buildSyncPlan(input.analysis, state.work, resolution, policy);
     if (plan.state === 'review' || plan.reviewReasons?.length) { plan.state = 'review'; plan.orderedCommands = []; plan.reviewIds = [await review(state, plan.reviewReasons?.length ? plan.reviewReasons : ['ANALYSIS_REQUIRES_REVIEW'])]; }
-    state.analysis = input.analysis; await repository().savePlan(plan, state.basis); await persistWorkflow(repository(), state); return plan;
+    state.analysis = input.analysis; await repository().savePlan(plan, state.basis);
+    const demands = [];
+    for (const decision of resolution.demands.demands) if (decision.kind === 'create' || decision.kind === 'resolved') demands.push(await repository().getCustomerDemand(state.customerId, decision.demandId));
+    // Only structured, validated facts enter the projection. Message bodies,
+    // raw attachments and Markdown supplied by an agent never enter this path.
+    await repository().saveContextProjection({ customerId: state.customerId, version: state.basis.contextVersion + 1, verifiedAt: new Date().toISOString(), ...(resolution.customer.kind === 'resolved' ? { primaryRef: resolution.customer.ref } : {}), facts: input.analysis.facts, contacts: state.candidates.candidates.filter(c => c.ref.kind === 'person'), demands, receipts: [], pendingReasons: [...(plan.reviewReasons ?? []), ...state.work.coverage.missingReasons], pendingPlanIds: [plan.planId] }, state.basis);
+    await persistWorkflow(repository(), state); return plan;
   }
   async function apply(raw: unknown): Promise<OperationStatus> {
     requireAutomationOperation(auth, 'apply'); automationActor(auth); const input = parseInput(applyInputSchema, raw);
@@ -155,14 +162,15 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       for (const command of operation.input.authorization.plan.orderedCommands) results.push(await reconcileCommand(command.commandKey, { repository: repository(), reads }));
       const pending = results.flatMap(r => r.state === 'confirmed' ? [] : r.reviewReasons);
       const status = await repository().setOperationStatus(id, { operationId: id, state: results.every(r => r.state === 'confirmed') ? 'applied' : results.some(r => r.state === 'review') ? 'review' : 'uncertain', receipts: [], pendingReasons: [...new Set(pending)].slice(0, 100) });
-      if (status.state === 'applied') await repository().completeDirectOperation(id);
+      if (status.state === 'applied') await repository().publishOperationContext(id);
       return status;
     },
     async getCustomerContext(customerId: string, demandId?: string) { requireAutomationOperation(auth, 'context'); automationActor(auth); const input = parseInput(customerContextInputSchema, { customerId, ...(demandId ? { demandId } : {}) }); const context = await repository().getContext(input.customerId); return input.demandId ? { ...context, demand: await repository().getCustomerDemand(input.customerId, input.demandId) } : context; },
     async listReviews(raw: unknown) { requireAutomationOperation(auth, 'reviews'); const caller = automationActor(auth); return repository().listReviews(parseInput(listReviewsInputSchema, raw), caller); },
     async resolveReview(raw: unknown) { requireAutomationOperation(auth, 'resolveReview'); const caller = automationActor(auth); const input = parseInput(reviewResolutionInputSchema, raw); return { review: await repository().resolveReview(input, caller), actionRequired: 'prepare' as const }; },
     async getStatus() { requireAutomationOperation(auth, 'status'); const caller = automationActor(auth); return repository().getServiceStatus(caller); },
-    async updatePolicy(raw: unknown) { requireAutomationOperation(auth, 'updatePolicy'); automationActor(auth); const input = parseInput(updatePolicyInputSchema, raw); const policy = automationPolicySchema.parse({ ...await currentPolicy(), ...input.patch, version: input.expectedVersion + 1 }); requirePolicyCapabilities(auth, policy); return repository().updatePolicy(policy, input.expectedVersion); },
-    async reprocess(raw: unknown) { requireAutomationOperation(auth, 'reprocess'); automationActor(auth); const input = parseInput(reprocessInputSchema, raw); return prepareWork({ requestId: input.requestId, target: input.target, mode: 'preview' }, { from: input.from, to: input.to }); },
+    async getAudit(raw: unknown) { requireAutomationOperation(auth, 'status'); const caller = automationActor(auth); return repository().listAudit(parseInput(auditInputSchema, raw), caller); },
+    async updatePolicy(raw: unknown) { requireAutomationOperation(auth, 'updatePolicy'); const caller = automationActor(auth); const input = parseInput(updatePolicyInputSchema, raw); const policy = automationPolicySchema.parse({ ...await currentPolicy(), ...input.patch, version: input.expectedVersion + 1 }); requirePolicyCapabilities(auth, policy); return repository().updatePolicy(policy, input.expectedVersion, caller); },
+    async reprocess(raw: unknown) { requireAutomationOperation(auth, 'reprocess'); const caller = automationActor(auth); const input = parseInput(reprocessInputSchema, raw); await repository().recordReprocess(input.requestId, caller); return prepareWork({ requestId: input.requestId, target: input.target, mode: input.mode }, { from: input.from, to: input.to }); },
   };
 }

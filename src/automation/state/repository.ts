@@ -12,6 +12,8 @@ import { automationPolicySchema } from '../policy-types';
 import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
 import type { AutomationPolicy } from '../types';
 import { reviewResolutionInputSchema } from '../schemas';
+import { WATCHDOG_INTERVAL_MS } from '../maintenance';
+import type { ExecutionOperation } from '../operations';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -32,6 +34,87 @@ export class AccountRepository {
   async prepareOperation(input: OperationInput) { return this.operations.prepareOperation(input); }
   getOperation(id: string) { return this.operations.getOperation(id); }
   getOperationByRequest(id: string) { return this.operations.getOperationByRequest(id); }
+  hasCommandKey(key: string): boolean { return this.sql.exec('SELECT command_key FROM commands WHERE command_key = ?', key).toArray().length > 0; }
+  recordAudit(action: 'review_resolved' | 'policy_updated' | 'reprocess_requested' | 'operation_archived', targetId: string, version: number, owner: WorkLease['owner'], now = Date.now()): void {
+    this.sql.exec('INSERT INTO operational_audit VALUES (?, ?, ?, ?, ?, ?, ?)', crypto.randomUUID(), now, owner.userId, owner.clientId, action, targetId, version);
+  }
+  listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
+    if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) throw Error('INVALID_AUDIT_INPUT');
+    const rows = this.sql.exec<{ audit_id: string; occurred_at: number; action: string; target_id: string; version: number }>('SELECT audit_id, occurred_at, action, target_id, version FROM operational_audit WHERE user_id = ? AND client_id = ? AND audit_id > ? ORDER BY audit_id LIMIT ?', owner.userId, owner.clientId, input.cursor ?? '', input.limit + 1).toArray();
+    const entries = rows.slice(0, input.limit).map(r => ({ auditId: r.audit_id, occurredAt: r.occurred_at, action: r.action, targetId: r.target_id, version: r.version }));
+    return { entries, ...(rows.length > input.limit ? { cursor: entries.at(-1)!.auditId } : {}) };
+  }
+  recordChatHint(key: string, fingerprint: string, conversationId: number, now: number): 'accepted' | 'duplicate' | 'conflict' | 'limited' {
+    if (!/^[a-f0-9]{64}$/.test(key) || !/^[a-f0-9]{64}$/.test(fingerprint) || !Number.isSafeInteger(conversationId) || conversationId <= 0 || !Number.isSafeInteger(now) || now < 0) throw Error('INVALID_HINT');
+    return this.storage.transactionSync(() => {
+      const prior = this.sql.exec<{ digest: string }>('SELECT digest FROM chat_hints WHERE hint_key = ?', key).toArray()[0];
+      if (prior) return prior.digest === fingerprint ? 'duplicate' : 'conflict';
+      if (this.sql.exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE received_at > ?', now - 60_000).one().count >= 30 || this.sql.exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE conversation_id IS NOT NULL').one().count >= 1000) return 'limited';
+      this.sql.exec('INSERT INTO chat_hints VALUES (?, ?, ?, ?)', key, conversationId, now, fingerprint); return 'accepted';
+    });
+  }
+  acknowledgeChatHints(conversationId: number): void { this.sql.exec('UPDATE chat_hints SET conversation_id = NULL WHERE conversation_id = ?', conversationId); }
+  recordDelivery(operationId: string, now: number, success: boolean): void {
+    this.sql.exec('UPDATE operation_delivery SET next_attempt_at = MAX(next_attempt_at, ?), failures = CASE WHEN ? THEN 0 ELSE failures + 1 END WHERE operation_id = ?', now + WATCHDOG_INTERVAL_MS, success ? 1 : 0, operationId);
+  }
+  nextMaintenance(now: number): number {
+    const due = this.sql.exec<{ deadline: number | null }>('SELECT MIN(next_attempt_at) AS deadline FROM operation_delivery').one().deadline;
+    return Math.max(now + 1000, Math.min(now + WATCHDOG_INTERVAL_MS, this.nextEvidenceExpiry(now), due ?? Infinity));
+  }
+  prepareMaintenance(now: number) {
+    return this.storage.transactionSync(() => {
+      const expiredEvidence = this.pruneEvidence(now);
+      const expired = this.sql.exec<{ work_id: string }>('SELECT w.work_id FROM identity_reservations i JOIN work w ON w.work_id = i.work_id AND w.fence = i.fence WHERE w.expires_at <= ?', now).toArray();
+      for (const work of expired) this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', work.work_id);
+      // Reservation rows retain their monotonically increasing fence. Deleting
+      // them would allow a later work lease to reuse an old dispatch fence.
+      this.sql.exec('UPDATE chat_hints SET conversation_id = NULL WHERE received_at <= ?', now - EVIDENCE_RETENTION_MS);
+      const policy = this.getExecutionPolicy();
+      const operations = this.sql.exec<{ request_id: string; digest: string; data: string }>('SELECT request_id, digest, data FROM execution_operations').toArray();
+      for (const row of operations) {
+        const operation = JSON.parse(row.data) as ExecutionOperation;
+        if (operation.createdAt + EVIDENCE_RETENTION_MS <= now) {
+          this.sql.exec('INSERT INTO execution_tombstones VALUES (?, ?, ?) ON CONFLICT(operation_id) DO NOTHING', operation.operationId, row.request_id, row.digest);
+          this.sql.exec('DELETE FROM execution_commands WHERE operation_id = ?', operation.operationId);
+          this.sql.exec('DELETE FROM operation_delivery WHERE operation_id = ?', operation.operationId);
+          this.sql.exec('DELETE FROM execution_operations WHERE operation_id = ?', operation.operationId);
+          this.recordAudit('operation_archived', operation.operationId, operation.version, operation.input.basis.lease.owner, now); continue;
+        }
+        if (operation.status.state === 'applied') { try { this.publishOperationContext(operation.operationId); } catch { /* Retain pending projection for explicit reconciliation. */ } continue; }
+        if (!['queued', 'running', 'uncertain'].includes(operation.status.state)) continue;
+        const commands = operation.input.authorization.plan.orderedCommands.map(c => this.operations.getExecutionCommand(c.commandKey));
+        const inFlight = commands.some(c => c?.state === 'sending' || c?.state === 'uncertain');
+        if (!inFlight) {
+          if (Date.parse(operation.input.authorization.validUntil) <= now || (operation.input.authorization.actor.expiresAt ?? 0) <= now || (this.work(operation.input.basis.lease.workId)?.expires_at ?? 0) <= now) {
+            this.operations.setOperationStatus(operation.operationId, { operationId: operation.operationId, state: 'authorization_expired', receipts: [], pendingReasons: ['AUTHORIZATION_EXPIRED'] }); continue;
+          }
+          if (!this.getWorkflow(operation.input.basis.lease.workId)?.direct && policy && (policy.mode !== 'apply' || policy.version !== operation.input.authorization.plan.policyVersion)) {
+            this.operations.setOperationStatus(operation.operationId, { operationId: operation.operationId, state: 'review', receipts: [], pendingReasons: ['POLICY_CHANGED'] }); continue;
+          }
+        }
+        const due = commands.reduce((deadline, command) => Math.max(deadline, command?.nextAttemptAt ?? 0), now);
+        this.sql.exec('INSERT INTO operation_delivery VALUES (?, ?, 0) ON CONFLICT(operation_id) DO NOTHING', operation.operationId, due);
+      }
+      const due = this.sql.exec<{ operation_id: string }>('SELECT operation_id FROM operation_delivery WHERE next_attempt_at <= ? ORDER BY next_attempt_at LIMIT 50', now).toArray().flatMap(row => { const operation = this.operations.getOperation(row.operation_id); return operation ? [operation] : []; });
+      return { expiredEvidence, expiredReservations: expired.length, due };
+    });
+  }
+  publishOperationContext(id: string): void {
+    this.storage.transactionSync(() => {
+      const operation = this.operations.getOperation(id); if (!operation || operation.status.state !== 'applied') return;
+      const basis = operation.input.basis;
+      if (this.getWorkflow(basis.lease.workId)?.direct) { this.completeDirectOperation(id); return; }
+      const current = this.sql.exec<{ version: number }>('SELECT version FROM contexts WHERE customer_id = ?', basis.customerId).toArray()[0];
+      if ((current?.version ?? 0) > basis.contextVersion) return;
+      const pending = this.sql.exec<{ data: string | null }>('SELECT data FROM facts WHERE fact_id = ? AND valid = 1', 'customer-context:' + basis.customerId).toArray()[0];
+      if (!pending?.data) return;
+      const envelope = JSON.parse(pending.data) as { basis: PlanBasis; projection: ContextProjection };
+      if (canonical(envelope.basis) !== canonical(basis)) throw Error('CONTEXT_STALE');
+      envelope.projection.pendingPlanIds = (envelope.projection.pendingPlanIds ?? []).filter(planId => planId !== operation.input.authorization.plan.planId);
+      this.sql.exec('UPDATE facts SET data = ? WHERE fact_id = ?', JSON.stringify(envelope), 'customer-context:' + basis.customerId);
+      this.refreshCustomerContext(basis.customerId, basis.contextVersion, true);
+    });
+  }
   completeDirectOperation(id: string): void {
     const operation = this.operations.getOperation(id);
     if (!operation || operation.status.state !== 'applied' || !this.getWorkflow(operation.input.basis.lease.workId)?.direct) return;
@@ -42,7 +125,14 @@ export class AccountRepository {
   beginDispatch(id: string, key: string) { return this.operations.beginDispatch(id, key); }
   finishDispatch(...args: Parameters<OperationsStore['finishDispatch']>) { return this.operations.finishDispatch(...args); }
   settleReconciliation(...args: Parameters<OperationsStore['settleReconciliation']>) { return this.operations.settleReconciliation(...args); }
-  setOperationStatus(...args: Parameters<OperationsStore['setOperationStatus']>) { return this.operations.setOperationStatus(...args); }
+  setOperationStatus(...args: Parameters<OperationsStore['setOperationStatus']>) {
+    return this.storage.transactionSync(() => {
+      const status = this.operations.setOperationStatus(...args);
+      const operation = this.operations.getOperation(args[0]);
+      if (operation && (status.state === 'review' || status.state === 'authorization_expired')) this.putReview({ reviewId: 'operation-review:' + operation.operationId, workId: operation.input.basis.lease.workId, customerId: operation.input.basis.customerId, version: 1, owner: operation.input.basis.lease.owner, state: 'open', reasons: status.pendingReasons.length ? status.pendingReasons : ['COMMAND_REQUIRES_REVIEW'] });
+      return status;
+    });
+  }
   getExecutionPolicy() {
     const row = this.sql.exec<{ data: string }>('SELECT data FROM policy WHERE singleton = 1').toArray()[0];
     return row ? automationPolicySchema.parse(JSON.parse(row.data)) : undefined;
@@ -68,12 +158,13 @@ export class AccountRepository {
     if (!workflow) return;
     return { plan: syncPlanSchema.parse(JSON.parse(row.data)), workflow };
   }
-  updatePolicy(policy: AutomationPolicy, expectedVersion: number): AutomationPolicy {
+  updatePolicy(policy: AutomationPolicy, expectedVersion: number, owner?: WorkLease['owner']): AutomationPolicy {
     const valid = automationPolicySchema.parse(policy);
     return this.storage.transactionSync(() => {
       if ((this.getExecutionPolicy()?.version ?? 1) !== expectedVersion || valid.version !== expectedVersion + 1) throw Error('POLICY_VERSION_CONFLICT');
       this.sql.exec('INSERT INTO policy VALUES (1, ?, ?) ON CONFLICT(singleton) DO UPDATE SET version = excluded.version, data = excluded.data', valid.version, JSON.stringify(valid));
       this.sql.exec('UPDATE plans SET valid = 0');
+      if (owner) this.recordAudit('policy_updated', 'policy', valid.version, owner);
       return valid;
     });
   }
@@ -84,7 +175,9 @@ export class AccountRepository {
     const rows = this.sql.exec<{ data: string }>('SELECT data FROM reviews WHERE data IS NOT NULL AND evidence_expires_at > ? AND review_id > ? ORDER BY review_id', Date.now(), input.cursor ?? '').toArray();
     const selected = rows.map(r => JSON.parse(r.data) as WorkflowReview).filter(r => r.state === 'open' && r.owner.userId === owner.userId && r.owner.clientId === owner.clientId && (!input.customerId || r.customerId === input.customerId));
     const reviews = selected.slice(0, input.limit);
-    return { reviews, ...(selected.length > input.limit ? { cursor: reviews.at(-1)!.reviewId } : {}) };
+    const hints = input.customerId ? [] : this.sql.exec<{ hint_key: string; conversation_id: number }>('SELECT hint_key, conversation_id FROM chat_hints WHERE conversation_id IS NOT NULL AND hint_key > ? ORDER BY hint_key LIMIT ?', input.hintCursor ?? '', input.limit + 1).toArray();
+    const chatHints = hints.slice(0, input.limit).map(h => ({ hintId: h.hint_key, conversationId: h.conversation_id, requiresCanonicalRead: true as const }));
+    return { reviews, chatHints, ...(hints.length > input.limit ? { hintCursor: chatHints.at(-1)!.hintId } : {}), ...(selected.length > input.limit ? { cursor: reviews.at(-1)!.reviewId } : {}) };
   }
   resolveReview(raw: unknown, owner: WorkLease['owner']): WorkflowReview {
     const input = reviewResolutionInputSchema.parse(raw);
@@ -93,11 +186,25 @@ export class AccountRepository {
       if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('REVIEW_UNAVAILABLE');
       const review = JSON.parse(row.data) as WorkflowReview;
       if (review.owner.userId !== owner.userId || review.owner.clientId !== owner.clientId || review.version !== input.expectedVersion || review.state !== 'open') throw Error('REVIEW_VERSION_CONFLICT');
+      const decision = input.decision;
+      if (decision.kind === 'approvePlan') {
+        const plan = this.sql.exec<{ work_id: string; version: number; data: string | null; evidence_expires_at: number }>('SELECT work_id, version, data, evidence_expires_at FROM plans WHERE plan_id = ?', decision.planId).toArray()[0];
+        if (!plan?.data || plan.work_id !== review.workId || plan.version !== decision.planVersion || plan.evidence_expires_at <= Date.now()) throw Error('PLAN_STALE');
+      }
+      if (decision.kind === 'selectDemand' && !this.sql.exec('SELECT demand_id FROM demands WHERE demand_id = ? AND customer_id = ? AND data IS NOT NULL AND evidence_expires_at > ?', decision.demandId, review.customerId, Date.now()).toArray().length) throw Error('DEMAND_UNAVAILABLE');
+      if (decision.kind === 'selectCustomer' || decision.kind === 'correctFacts') {
+        const manifest = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM snapshot_manifest WHERE work_id = ?', review.workId).toArray()[0];
+        if (!manifest?.data || manifest.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
+        const snapshot = snapshotManifestSchema.parse(JSON.parse(manifest.data));
+        if (decision.kind === 'selectCustomer' && !snapshot.records.some(r => canonical(r.ref) === canonical(decision.ref))) throw Error('CANDIDATE_ABSENT_FROM_SNAPSHOT');
+        if (decision.kind === 'correctFacts' && decision.facts.some(f => f.sources.some(ref => !snapshot.sources.some(s => canonical(s) === canonical(ref))))) throw Error('STALE_SOURCE');
+      }
       // A decision invalidates the old plan. A fresh preparation and analysis
       // must bind any corrected facts/selection to current sources before apply.
       const resolved: WorkflowReview = { ...review, state: 'resolved', version: review.version + 1, decision: input.decision };
       this.sql.exec('UPDATE reviews SET data = ?, version = ? WHERE review_id = ?', JSON.stringify(resolved), resolved.version, review.reviewId);
       this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', review.workId);
+      this.recordAudit('review_resolved', review.reviewId, resolved.version, owner);
       return resolved;
     });
   }
@@ -105,7 +212,11 @@ export class AccountRepository {
     const policy = this.getExecutionPolicy();
     const pendingReviews = this.listReviews({ limit: 100 }, owner).reviews.length;
     const pendingOperations = this.sql.exec<{ data: string }>('SELECT data FROM execution_operations').toArray().map(r => JSON.parse(r.data) as import('../operations').ExecutionOperation).filter(o => o.input.authorization.actor.userId === owner.userId && o.input.authorization.actor.clientId === owner.clientId && ['queued', 'running', 'uncertain'].includes(o.status.state)).length;
-    return { mode: policy?.mode ?? 'disabled' as const, policyVersion: policy?.version ?? 1, pendingReviews, pendingOperations };
+    const workflows = this.sql.exec<{ data: string }>("SELECT data FROM events WHERE event_id LIKE 'workflow:%' AND data IS NOT NULL AND evidence_expires_at > ?", Date.now()).toArray().map(r => JSON.parse(r.data) as WorkflowState).filter(w => w.lease.owner.userId === owner.userId && w.lease.owner.clientId === owner.clientId);
+    const awaitingAgent = workflows.filter(w => !w.direct && !w.analysis).length;
+    const incompleteCoverage = workflows.filter(w => w.work && !w.work.coverage.complete).length;
+    const pendingHints = this.sql.exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE conversation_id IS NOT NULL').one().count;
+    return { mode: policy?.mode ?? 'disabled' as const, policyVersion: policy?.version ?? 1, pendingReviews, pendingOperations, state: !policy || policy.mode === 'disabled' ? 'paused' as const : pendingReviews || incompleteCoverage || pendingHints ? 'degraded' as const : 'ready' as const, awaitingAgent, incompleteCoverage, pendingHints };
   }
   private work(id: string): WorkRow | undefined { return this.sql.exec<WorkRow>('SELECT * FROM work WHERE work_id = ?', id).toArray()[0]; }
   private liveWork(id: string): WorkRow {
@@ -120,8 +231,11 @@ export class AccountRepository {
     if (canonical(JSON.parse(row.lease)) !== canonical(lease)) throw Error('LEASE_FENCED');
     return row;
   }
-  private checkBasis(basis: PlanBasis): SnapshotManifest {
-    this.checkLease(basis.lease);
+  private checkBasis(basis: PlanBasis, allowExpired = false): SnapshotManifest {
+    if (allowExpired) {
+      const work = this.work(basis.lease.workId);
+      if (!work || canonical(JSON.parse(work.lease)) !== canonical(basis.lease)) throw Error('LEASE_FENCED');
+    } else this.checkLease(basis.lease);
     const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM snapshot_manifest WHERE work_id = ?', basis.lease.workId).toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
     const manifest = snapshotManifestSchema.parse(JSON.parse(row.data));
@@ -278,7 +392,7 @@ export class AccountRepository {
   saveContextProjection(raw: ContextProjection, rawBasis: PlanBasis): void {
     const parsed = contextProjectionSchema.safeParse(raw);
     if (!parsed.success) throw Error('CONTEXT_INVALID');
-    const projection = parsed.data; const basis = planBasisSchema.parse(rawBasis);
+    let projection = parsed.data; const basis = planBasisSchema.parse(rawBasis);
     this.storage.transactionSync(() => {
       const manifest = this.checkBasis(basis);
       if (basis.customerId !== projection.customerId || projection.demands.some(d => d.customerId !== projection.customerId)) throw Error('CONTEXT_CUSTOMER_MISMATCH');
@@ -295,8 +409,26 @@ export class AccountRepository {
       // Only an unpublished projection owns the pending slot. A rendered version
       // may be superseded by reconciled work from another conversation.
       if (previous?.data && previous.valid && previous.version > (current?.version ?? 0) && contextValue(JSON.parse(previous.data)) !== contextValue(JSON.parse(envelope))) throw new SafeError('CONTEXT_STALE', 'A context projection is awaiting refresh.', false, 409);
+      // Retain canonical facts from the last published version even when this
+      // conversation does not repeat them. Only the stored structured envelope
+      // can carry historical sources; new facts above require this manifest.
+      if (previous?.data && previous.valid && previous.version === basis.contextVersion) {
+        const prior = contextProjectionSchema.parse((JSON.parse(previous.data) as { projection: unknown }).projection);
+        const replacementKeys = new Set(projection.facts.filter(f => f.certainty === 'confirmed').map(f => `${f.entity}:${f.field}`));
+        const corrections = prior.facts.flatMap(old => {
+          const replacement = projection.facts.find(f => f.certainty === 'confirmed' && f.entity === old.entity && f.field === old.field && canonical(f.value) !== canonical(old.value));
+          return old.certainty === 'confirmed' && replacement ? [{ previous: old, replacement }] : [];
+        });
+        const unique = <T>(values: T[], key: (value: T) => string): T[] => [...new Map(values.map(value => [key(value), value])).values()];
+        projection = contextProjectionSchema.parse({ ...projection, primaryRef: projection.primaryRef ?? prior.primaryRef,
+          facts: unique([...prior.facts.filter(f => !replacementKeys.has(`${f.entity}:${f.field}`)), ...projection.facts], canonical),
+          contacts: unique([...prior.contacts, ...projection.contacts], c => canonical(c.ref)),
+          demands: unique([...prior.demands, ...projection.demands], d => d.demandId),
+          pendingReasons: [...new Set([...prior.pendingReasons, ...projection.pendingReasons])],
+          corrections: unique([...(prior.corrections ?? []), ...(projection.corrections ?? []), ...corrections], canonical) });
+      }
       const expires = Date.now() + EVIDENCE_RETENTION_MS;
-      this.sql.exec('INSERT INTO facts (fact_id, work_id, version, valid, data, evidence_expires_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(fact_id) DO UPDATE SET work_id = excluded.work_id, version = excluded.version, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', factId, basis.lease.workId, projection.version, envelope, expires);
+      this.sql.exec('INSERT INTO facts (fact_id, work_id, version, valid, data, evidence_expires_at) VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(fact_id) DO UPDATE SET work_id = excluded.work_id, version = excluded.version, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', factId, basis.lease.workId, projection.version, JSON.stringify({ projection, basis }), expires);
       for (const demand of projection.demands) {
         const owner = this.sql.exec<{ customer_id: string }>('SELECT customer_id FROM demands WHERE demand_id = ?', demand.demandId).toArray()[0];
         if (owner && owner.customer_id !== projection.customerId) throw Error('CONTEXT_CUSTOMER_MISMATCH');
@@ -304,7 +436,7 @@ export class AccountRepository {
       }
     });
   }
-  refreshCustomerContext(customerId: string, expectedVersion: number): CustomerContext {
+  refreshCustomerContext(customerId: string, expectedVersion: number, allowExpired = false): CustomerContext {
     return this.storage.transactionSync(() => {
       const current = this.sql.exec<{ version: number }>('SELECT version FROM contexts WHERE customer_id = ?', customerId).toArray()[0];
       if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || (current?.version ?? 0) !== expectedVersion) throw new SafeError('CONTEXT_STALE', 'Customer context changed; reload and reconcile.', false, 409);
@@ -313,7 +445,7 @@ export class AccountRepository {
       const stored = JSON.parse(row.data) as { projection: ContextProjection; basis: PlanBasis };
       const projection = contextProjectionSchema.parse(stored.projection); const basis = planBasisSchema.parse(stored.basis);
       if (projection.customerId !== customerId || projection.version !== expectedVersion + 1 || basis.contextVersion !== expectedVersion) throw new SafeError('CONTEXT_STALE', 'Customer context changed; reload and reconcile.', false, 409);
-      this.checkBasis(basis);
+      this.checkBasis(basis, allowExpired);
       // Refresh confirmed results from durable receipts after facts/results committed.
       projection.receipts = this.sql.exec<{ receipt: string }>('SELECT c.receipt FROM commands c JOIN work_customers w ON w.work_id = c.work_id WHERE w.customer_id = ?', customerId).toArray().map(r => JSON.parse(r.receipt) as OperationReceipt);
       const context = customerContextSchema.parse({ customerId, version: projection.version, verifiedAt: projection.verifiedAt, markdown: renderCustomerContext(projection), evidenceRefs: contextEvidenceRefs(projection) });
@@ -375,10 +507,12 @@ export class AccountRepository {
     }
     return deadline;
   }
-  pruneEvidence(now: number): void {
-    this.storage.transactionSync(() => {
-      for (const table of ['events', 'snapshot_manifest', 'demands', 'facts', 'contexts', 'plans', 'reviews']) this.sql.exec(`UPDATE ${table} SET data = NULL WHERE evidence_expires_at <= ? AND data IS NOT NULL`, now);
+  pruneEvidence(now: number): number {
+    return this.storage.transactionSync(() => {
+      let expired = 0;
+      for (const table of ['events', 'snapshot_manifest', 'demands', 'facts', 'contexts', 'plans', 'reviews']) expired += this.sql.exec(`UPDATE ${table} SET data = NULL WHERE evidence_expires_at <= ? AND data IS NOT NULL`, now).rowsWritten;
       for (const table of ['facts', 'contexts', 'plans']) this.sql.exec(`UPDATE ${table} SET valid = 0 WHERE evidence_expires_at <= ?`, now);
+      return expired;
     });
   }
 }

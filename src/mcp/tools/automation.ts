@@ -4,7 +4,7 @@ import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { createAutomationService } from '../../automation/service';
 import { automationOperationCapabilities, type AutomationOperation } from '../../automation/authorization';
-import { prepareInputSchema, analysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema } from '../../automation/schemas';
+import { prepareInputSchema, analysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema, auditInputSchema } from '../../automation/schemas';
 import { updatePolicyInputSchema } from '../../automation/policy-types';
 import { oauthToolSecurity } from '../security';
 import { errorToolResult, jsonToolResult } from '../result';
@@ -28,6 +28,7 @@ export function registerAutomation(server: McpServer, env: Env, auth: AuthContex
   register('automation_list_reviews', 'reviews', listReviewsInputSchema, 'Read-only bounded review list for this actor, optionally filtered by customer. Resume with the returned cursor. Reading creates no work, facts or CRM records.', true, (s, i) => s.listReviews(i));
   register('automation_resolve_review', 'resolveReview', reviewResolutionInputSchema, 'Record an operator decision against the exact review version. Invalidates old plans and requires fresh preparation/analysis before apply. A review decision never grants CRM mutation capabilities.', false, (s, i) => s.resolveReview(i));
   register('automation_get_status', 'status', z.strictObject({}), 'Read-only automation mode, current policy version and pending operation/review counts for this actor. Never prepares work or contacts upstream services.', true, s => s.getStatus());
+  register('automation_list_audit', 'status', auditInputSchema, 'Read-only paginated operational audit for this actor. Contains action codes, timestamps and internal references, never customer text, credentials or lease tokens.', true, (s, i) => s.getAudit(i));
   register('automation_update_policy', 'updatePolicy', updatePolicyInputSchema, 'Update an allowlisted policy patch with expectedVersion. Enabling mutation capabilities requires each corresponding OAuth grant. Policy changes invalidate old plans; this call never writes CRM.', false, (s, i) => s.updatePolicy(i));
   register('automation_reprocess', 'reprocess', reprocessInputSchema, 'Prepare bounded customer/conversation work for a validated from/to interval. Returns a preview for new analysis, retaining uncertain effects and requiring current evidence before another plan can apply.', false, (s, i) => s.reprocess(i));
 }

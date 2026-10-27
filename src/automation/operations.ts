@@ -36,6 +36,7 @@ export class OperationsStore {
     if (input.authorization.plan.workId !== input.basis.lease.workId || input.authorization.plan.state === 'review') throw Error('PLAN_STALE');
     const fingerprint = await payloadDigest({ plan: input.authorization.plan, basis: input.basis, actor: { userId: input.authorization.actor.userId, clientId: input.authorization.actor.clientId, scopes: input.authorization.actor.scopes }, catalogJson: input.catalogJson });
     return this.storage.transactionSync(() => {
+      if (this.sql.exec('SELECT operation_id FROM execution_tombstones WHERE request_id = ?', input.requestId).toArray().length) throw Error('OPERATION_EVIDENCE_EXPIRED');
       const prior = this.sql.exec<{ digest: string; operation_id: string }>('SELECT digest, operation_id FROM execution_operations WHERE request_id = ?', input.requestId).toArray()[0];
       if (prior) {
         if (prior.digest !== fingerprint) throw Error('IDEMPOTENCY_CONFLICT');
@@ -131,10 +132,16 @@ export class OperationsStore {
       status.receipts = commands.flatMap(c => c?.operationId === operationId ? [c.receipt] : []);
       if (commands.length && commands.every(c => c?.state === 'confirmed') && !status.pendingReasons.length) status.state = 'applied';
       operation.status = status; this.sql.exec('UPDATE execution_operations SET data = ? WHERE operation_id = ?', JSON.stringify(operation), operationId);
+      if (status.state === 'queued' || status.state === 'uncertain') {
+        const due = commands.filter(c => c && c.state !== 'confirmed').reduce((next, c) => Math.max(next, c!.nextAttemptAt), Date.now());
+        this.sql.exec('INSERT INTO operation_delivery VALUES (?, ?, 0) ON CONFLICT(operation_id) DO UPDATE SET next_attempt_at = excluded.next_attempt_at', operationId, due);
+      } else this.sql.exec('DELETE FROM operation_delivery WHERE operation_id = ?', operationId);
     });
     return status;
   }
 }
 
-export type ExecutionRepository = Pick<OperationsStore, 'prepareOperation' | 'getOperation' | 'getOperationByRequest' | 'reserveExecutionCommand' | 'getExecutionCommand' | 'beginDispatch' | 'finishDispatch' | 'settleReconciliation' | 'setOperationStatus'>;
+export type ExecutionRepository = Pick<OperationsStore, 'prepareOperation' | 'getOperation' | 'getOperationByRequest' | 'reserveExecutionCommand' | 'getExecutionCommand' | 'beginDispatch' | 'finishDispatch' | 'settleReconciliation' | 'setOperationStatus'> & {
+  publishOperationContext(operationId: string): void;
+};
 export type AsyncRepository = { [K in keyof ExecutionRepository]: (...args: Parameters<ExecutionRepository[K]>) => Promise<Awaited<ReturnType<ExecutionRepository[K]>>> };

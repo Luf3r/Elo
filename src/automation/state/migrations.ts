@@ -72,5 +72,17 @@ export function migrate(storage: DurableObjectStorage): void {
         INSERT INTO schema_migrations VALUES (5);
       `);
     }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 6').toArray().length) {
+      sql.exec(`
+        CREATE TABLE operation_delivery (operation_id TEXT PRIMARY KEY, next_attempt_at INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
+        CREATE INDEX operation_delivery_due ON operation_delivery(next_attempt_at);
+        CREATE TABLE execution_tombstones (operation_id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, digest TEXT NOT NULL);
+        CREATE TABLE operational_audit (audit_id TEXT PRIMARY KEY, occurred_at INTEGER NOT NULL, user_id TEXT NOT NULL, client_id TEXT NOT NULL, action TEXT NOT NULL, target_id TEXT NOT NULL, version INTEGER NOT NULL);
+        CREATE INDEX operational_audit_owner ON operational_audit(user_id, client_id, audit_id);
+        CREATE TABLE chat_hints (hint_key TEXT PRIMARY KEY, conversation_id INTEGER, received_at INTEGER NOT NULL, digest TEXT NOT NULL);
+        CREATE INDEX chat_hints_window ON chat_hints(received_at);
+        INSERT INTO schema_migrations VALUES (6);
+      `);
+    }
   });
 }
