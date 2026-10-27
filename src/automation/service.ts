@@ -49,8 +49,8 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     owns(state, auth, env); return state;
   }
   async function review(state: WorkflowState, reasons: string[]) {
-    const reviewId = 'review:' + state.lease.workId;
-    await repository().putReview({ reviewId, workId: state.lease.workId, customerId: state.customerId, version: 1, owner: state.lease.owner, state: 'open', reasons: [...new Set(reasons)].slice(0, 100) });
+    const reviewId = 'review:' + state.lease.workId + ':' + (state.work?.snapshotVersion ?? state.snapshotVersion ?? 1);
+    await repository().putReview({ reviewId, workId: state.lease.workId, customerId: state.customerId, version: 1, snapshotVersion: state.work?.snapshotVersion ?? state.snapshotVersion ?? 1, owner: state.lease.owner, state: 'open', reasons: [...new Set(reasons)].slice(0, 100) });
     return reviewId;
   }
   async function prepareWork(raw: PrepareInput, range?: WorkflowState['range']): Promise<PrepareResult> {
@@ -72,6 +72,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     }
     if (state.lease.target.kind === 'pending') unavailable('Pending targets are not supported; select an explicit conversation or customer.');
     if (state.work) return { state: 'ready', work: state.work };
+    const snapshotVersion = state.snapshotVersion ?? 1;
     const crm = createAgendorCrmClient(env, { signal }); const chat = createAgendorChatClient(env, { signal });
     try {
       if (!state.conversationIds.length) {
@@ -103,7 +104,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       while (state.step - 2 < sections.length) {
         if (catalogReads >= policy.limits.maxRequests) {
           const coverage = { complete: false, missingReasons: ['catalog_preparation_pending'], pagesRead: state.pages.length };
-          return { state: 'continue', workId: state.lease.workId, leaseToken: state.lease.leaseToken, continuation: state.continuation, coverage, manifest: { workId: state.lease.workId, snapshotVersion: 1, contextVersion: 0, catalogVersion: 'preparing', readAt: new Date().toISOString(), sources: [], messages: [], records: [], coverage } };
+          return { state: 'continue', workId: state.lease.workId, leaseToken: state.lease.leaseToken, continuation: state.continuation, coverage, manifest: { workId: state.lease.workId, snapshotVersion, contextVersion: 0, catalogVersion: 'preparing', readAt: new Date().toISOString(), sources: [], messages: [], records: [], coverage } };
         }
         state.pages.push(await crm.getConfiguration(sections[state.step - 2]!)); state.step++; await persistWorkflow(repository(), state);
         catalogReads++;
@@ -114,9 +115,9 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       const context = await repository().findContext(state.customerId); if (context) { markdown = context.markdown; contextVersion = context.version; }
       const reasons = [...new Set([...state.conversations.flatMap(c => c.coverage.missingReasons), ...state.candidates.coverage.missingReasons, ...state.conversations.flatMap(c => c.attachments.length ? ['attachments_not_read'] : [])])];
       const coverage = { complete: reasons.length === 0 && state.conversations.every(c => c.coverage.complete) && state.candidates.coverage.complete, missingReasons: reasons, pagesRead: state.conversations.reduce((n, c) => n + c.coverage.pagesRead, 0) + state.candidates.coverage.pagesRead };
-      state.work = preparedWorkSchema.parse({ workId: state.lease.workId, leaseToken: state.lease.leaseToken, expiresAt: state.lease.expiresAt, snapshotVersion: 1, contextVersion, customerId: state.customerId, markdown, snapshot: { conversations: state.conversations, candidates: state.candidates, catalog: state.catalog, sourceRefs: sources, records: [] }, catalogVersion: state.catalog.version, coverage });
-      state.basis = { lease: state.lease, customerId: state.customerId, snapshotVersion: 1, contextVersion, catalogVersion: state.catalog.version };
-      await repository().installSnapshot(state.lease, { workId: state.lease.workId, snapshotVersion: 1, contextVersion, catalogVersion: state.catalog.version, readAt: new Date().toISOString(), sources, messages: state.conversations.flatMap(c => c.messages.map(m => ({ conversationId: c.conversationId, id: m.id, revision: c.revision, hash: c.revision, direction: m.direction ?? 'unknown', ...(m.senderType ? { senderType: m.senderType } : {}), ...(m.senderId ? { senderId: m.senderId } : {}) }))), records: state.candidates.candidates.map(c => ({ ref: c.ref, revision: c.sourceRefs.find(s => s.kind === 'crm')!.revision, hash: c.sourceRefs.find(s => s.kind === 'crm')!.revision })), coverage });
+      state.work = preparedWorkSchema.parse({ workId: state.lease.workId, leaseToken: state.lease.leaseToken, expiresAt: state.lease.expiresAt, snapshotVersion, contextVersion, customerId: state.customerId, markdown, snapshot: { conversations: state.conversations, candidates: state.candidates, catalog: state.catalog, sourceRefs: sources, records: [] }, catalogVersion: state.catalog.version, coverage, ...(state.pendingReview ? { reviewDecision: { reviewId: state.pendingReview.reviewId, version: state.pendingReview.version, decision: state.pendingReview.decision } } : {}) });
+      state.basis = { lease: state.lease, customerId: state.customerId, snapshotVersion, contextVersion, catalogVersion: state.catalog.version };
+      await repository().installSnapshot(state.lease, { workId: state.lease.workId, snapshotVersion, contextVersion, catalogVersion: state.catalog.version, readAt: new Date().toISOString(), sources, messages: state.conversations.flatMap(c => c.messages.map(m => ({ conversationId: c.conversationId, id: m.id, revision: c.revision, hash: c.revision, direction: m.direction ?? 'unknown', ...(m.senderType ? { senderType: m.senderType } : {}), ...(m.senderId ? { senderId: m.senderId } : {}) }))), records: state.candidates.candidates.map(c => ({ ref: c.ref, revision: c.sourceRefs.find(s => s.kind === 'crm')!.revision, hash: c.sourceRefs.find(s => s.kind === 'crm')!.revision })), coverage });
       await persistWorkflow(repository(), state); return { state: 'ready', work: state.work };
     } catch (error) {
       if (error instanceof SafeError && error.retryable) return { state: 'deferred', workId: state.lease.workId, retryAt: new Date(Date.now() + 10_000).toISOString(), leaseToken: state.lease.leaseToken, continuation: state.continuation };
@@ -128,7 +129,9 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     authorizeSubmission(auth, input, state.lease);
     if (!state.work || !state.basis || !state.catalog || input.expectedSnapshotVersion !== state.work.snapshotVersion || input.expectedContextVersion !== state.work.contextVersion || Date.now() - Date.parse(state.catalog.fetchedAt) >= 900_000) return unavailable();
     const policy = await currentPolicy();
-    parseInput(createAnalysisInputSchema({ sourceRefs: (state.work.snapshot.sourceRefs ?? []).filter((s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator'), candidates: state.candidates.candidates.map(c => c.ref), existingDemandIds: [], catalog: state.catalog, policy }), input);
+    input.analysis = await repository().reviewAnalysis(input.analysis, state.basis);
+    const selectedDemand = state.pendingReview?.decision.kind === 'selectDemand' ? [state.pendingReview.decision.demandId] : [];
+    parseInput(createAnalysisInputSchema({ sourceRefs: (state.work.snapshot.sourceRefs ?? []).filter((s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator'), candidates: state.candidates.candidates.map(c => c.ref), existingDemandIds: selectedDemand, catalog: state.catalog, policy }), input);
     const resolution = await repository().resolveWork(input.analysis, state.candidates, state.catalog, state.basis);
     const plan = buildSyncPlan(input.analysis, state.work, resolution, policy);
     if (plan.state === 'review' || plan.reviewReasons?.length) { plan.state = 'review'; plan.orderedCommands = []; plan.reviewIds = [await review(state, plan.reviewReasons?.length ? plan.reviewReasons : ['ANALYSIS_REQUIRES_REVIEW'])]; }

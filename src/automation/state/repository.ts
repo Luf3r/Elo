@@ -14,6 +14,7 @@ import type { AutomationPolicy } from '../types';
 import { reviewResolutionInputSchema } from '../schemas';
 import { WATCHDOG_INTERVAL_MS } from '../maintenance';
 import type { ExecutionOperation } from '../operations';
+import { applyReviewDecision } from '../reviews';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -35,7 +36,7 @@ export class AccountRepository {
   getOperation(id: string) { return this.operations.getOperation(id); }
   getOperationByRequest(id: string) { return this.operations.getOperationByRequest(id); }
   hasCommandKey(key: string): boolean { return this.sql.exec('SELECT command_key FROM commands WHERE command_key = ?', key).toArray().length > 0; }
-  recordAudit(action: 'review_resolved' | 'policy_updated' | 'reprocess_requested' | 'operation_archived', targetId: string, version: number, owner: WorkLease['owner'], now = Date.now()): void {
+  recordAudit(action: 'review_resolved' | 'review_consumed' | 'policy_updated' | 'reprocess_requested' | 'operation_archived', targetId: string, version: number, owner: WorkLease['owner'], now = Date.now()): void {
     this.sql.exec('INSERT INTO operational_audit VALUES (?, ?, ?, ?, ?, ?, ?)', crypto.randomUUID(), now, owner.userId, owner.clientId, action, targetId, version);
   }
   listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
@@ -202,11 +203,47 @@ export class AccountRepository {
       // A decision invalidates the old plan. A fresh preparation and analysis
       // must bind any corrected facts/selection to current sources before apply.
       const resolved: WorkflowReview = { ...review, state: 'resolved', version: review.version + 1, decision: input.decision };
+      if (decision.kind !== 'reject') {
+        const workflow = this.getWorkflow(review.workId);
+        if (!workflow?.work || !workflow.analysis || !workflow.basis || workflow.direct || workflow.customerId !== review.customerId || workflow.lease.owner.userId !== owner.userId || workflow.lease.owner.clientId !== owner.clientId) throw Error('REVIEW_WORK_UNAVAILABLE');
+        if (review.snapshotVersion !== undefined && review.snapshotVersion !== workflow.work.snapshotVersion) throw Error('REVIEW_VERSION_CONFLICT');
+        if (decision.kind === 'approvePlan') {
+          const plan = this.sql.exec<{ snapshot_version: number }>('SELECT snapshot_version FROM plans WHERE plan_id = ?', decision.planId).toArray()[0];
+          if (plan?.snapshot_version !== workflow.work.snapshotVersion) throw Error('PLAN_STALE');
+        }
+        if (decision.kind === 'selectDemand' && workflow.analysis.demands.length !== 1) throw Error('REVIEW_DEMAND_SCOPE_INVALID');
+        const manifest = this.sql.exec<{ data: string | null }>('SELECT data FROM snapshot_manifest WHERE work_id = ?', review.workId).toArray()[0];
+        if (!manifest?.data) throw Error('SNAPSHOT_REQUIRED');
+        workflow.pendingReview = { reviewId: review.reviewId, version: resolved.version, sourceSnapshotVersion: workflow.work.snapshotVersion, sourceRefs: snapshotManifestSchema.parse(JSON.parse(manifest.data)).sources, analysis: workflow.analysis, policyVersion: this.getExecutionPolicy()?.version ?? 1, decision,
+          ...(decision.kind === 'selectDemand' ? { clientKey: workflow.analysis.demands[0]!.clientKey } : {}) };
+        workflow.snapshotVersion = workflow.work.snapshotVersion + 1;
+        workflow.revision++; workflow.step = 0; workflow.pages = []; workflow.conversations = []; workflow.continuation = crypto.randomUUID();
+        delete workflow.work; delete workflow.catalog; delete workflow.basis; delete workflow.analysis;
+        this.sql.exec('UPDATE events SET data = ? WHERE event_id = ?', JSON.stringify(workflow), 'workflow:' + review.workId);
+        // Discard only unpublished projections from the old reviewed snapshot.
+        this.sql.exec('UPDATE facts SET valid = 0 WHERE work_id = ? AND version > COALESCE((SELECT version FROM contexts WHERE customer_id = ?), 0)', review.workId, review.customerId);
+      }
       this.sql.exec('UPDATE reviews SET data = ?, version = ? WHERE review_id = ?', JSON.stringify(resolved), resolved.version, review.reviewId);
       this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', review.workId);
       this.recordAudit('review_resolved', review.reviewId, resolved.version, owner);
       return resolved;
     });
+  }
+  private activeReview(basis: PlanBasis) {
+    const workflow = this.getWorkflow(basis.lease.workId); const pending = workflow?.pendingReview;
+    if (!pending) return;
+    if (workflow.customerId !== basis.customerId || basis.snapshotVersion !== pending.sourceSnapshotVersion + 1) throw Error('REVIEW_SCOPE_CHANGED');
+    const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM reviews WHERE review_id = ?', pending.reviewId).toArray()[0];
+    if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('REVIEW_UNAVAILABLE');
+    const review = JSON.parse(row.data) as WorkflowReview;
+    if (review.workId !== basis.lease.workId || review.customerId !== basis.customerId || canonical(review.owner) !== canonical(basis.lease.owner) || review.state !== 'resolved' || canonical(review.decision) !== canonical(pending.decision) || review.version !== pending.version + (review.consumedBy ? 1 : 0) || review.consumedBy && review.consumedBy.snapshotVersion !== basis.snapshotVersion) throw Error('REVIEW_VERSION_CONFLICT');
+    const manifest = this.checkBasis(basis);
+    if (pending.sourceRefs.some(ref => !manifest.sources.some(source => canonical(source) === canonical(ref)))) throw Error('REVIEW_SOURCE_CHANGED');
+    if (pending.decision.kind === 'approvePlan' && (this.getExecutionPolicy()?.version ?? 1) !== pending.policyVersion) throw Error('REVIEW_POLICY_CHANGED');
+    return { pending, review };
+  }
+  reviewAnalysis(raw: AgentAnalysis, basis: PlanBasis): AgentAnalysis {
+    const active = this.activeReview(basis); return active ? applyReviewDecision(raw, active.pending) : raw;
   }
   getServiceStatus(owner: WorkLease['owner']) {
     const policy = this.getExecutionPolicy();
@@ -327,6 +364,13 @@ export class AccountRepository {
       if (previous?.version === plan.version && previous.digest === fingerprint && previous.valid && previous.fence === basis.lease.fence && previous.snapshot_version === basis.snapshotVersion && previous.context_version === basis.contextVersion && previous.catalog_version === basis.catalogVersion) return;
       if (plan.version !== (previous?.version ?? 0) + 1) throw Error('VERSION_CONFLICT');
       this.sql.exec('INSERT INTO plans (plan_id, work_id, version, digest, valid, data, evidence_expires_at, fence, snapshot_version, context_version, catalog_version) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT(plan_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at, fence = excluded.fence, snapshot_version = excluded.snapshot_version, context_version = excluded.context_version, catalog_version = excluded.catalog_version', plan.planId, plan.workId, plan.version, fingerprint, JSON.stringify(plan), Date.now() + EVIDENCE_RETENTION_MS, basis.lease.fence, basis.snapshotVersion, basis.contextVersion, basis.catalogVersion);
+      const active = this.activeReview(basis);
+      if (active) {
+        if (active.review.consumedBy) throw Error('REVIEW_ALREADY_CONSUMED');
+        active.review.consumedBy = { planId: plan.planId, planVersion: plan.version, snapshotVersion: basis.snapshotVersion }; active.review.version++;
+        this.sql.exec('UPDATE reviews SET data = ?, version = ? WHERE review_id = ? AND version = ?', JSON.stringify(active.review), active.review.version, active.review.reviewId, active.pending.version);
+        this.recordAudit('review_consumed', active.review.reviewId, active.review.version, basis.lease.owner);
+      }
     });
   }
   /** Backend-only resolver. The caller provides a server-created PlanBasis, never an agent customer ID.
@@ -360,6 +404,14 @@ export class AccountRepository {
       for (const candidate of candidates.candidates) if (!manifest.records.some(r => r.ref.kind === candidate.ref.kind && r.ref.id === candidate.ref.id)) throw Error('CANDIDATE_ABSENT_FROM_SNAPSHOT');
       for (const source of uniqueSources([...candidates.candidates.flatMap(c => c.sourceRefs), ...(candidates.verifiedLinks ?? []).flatMap(l => l.sourceRefs)])) if (!manifest.sources.some(s => canonical(s) === canonical(source))) throw Error('STALE_SOURCE');
       let customer = resolveCustomer(validation.data.analysis, candidates, catalog);
+      const reviewed = this.activeReview(basis);
+      if (reviewed && canonical(rawAnalysis) !== canonical(applyReviewDecision(reviewed.pending.analysis, reviewed.pending))) throw Error('REVIEW_ANALYSIS_CHANGED');
+      if (reviewed?.pending.decision.kind === 'selectCustomer') {
+        const ref = reviewed.pending.decision.ref;
+        const selected = candidates.candidates.find(c => canonical(c.ref) === canonical(ref));
+        if (!selected || !candidates.coverage.complete) throw Error('REVIEW_CUSTOMER_CHANGED');
+        customer = { kind: 'resolved', customerId: basis.customerId, ref, sourceRefs: selected.sourceRefs, reviewReasons: [] };
+      }
       if (customer.kind !== 'review') {
         const reservations = identities.flatMap(id => this.sql.exec<{ customer_id: string; external_id: string }>('SELECT customer_id, external_id FROM bindings WHERE binding_key = ?', `identity:${id}`).toArray());
         const conflict = reservations.some(row => row.customer_id !== basis.customerId);
@@ -367,6 +419,13 @@ export class AccountRepository {
         else if (customer.kind === 'create' && reservations.some(row => row.external_id !== basis.lease.workId)) customer = { kind: 'review', sourceRefs: customer.sourceRefs, reviewReasons: ['IDENTITY_CREATION_PENDING'] };
       }
       const demands = resolveDemands(validation.data.analysis, customer, existing);
+      if (reviewed?.pending.decision.kind === 'selectDemand' && customer.kind !== 'review') {
+        const id = reviewed.pending.decision.demandId; const record = existing.find(d => d.demandId === id && d.state === 'open');
+        const request = validation.data.analysis.demands.find(d => d.clientKey === reviewed.pending.clientKey);
+        if (!record || !request) throw Error('REVIEW_DEMAND_CHANGED');
+        demands.demands = demands.demands.map(d => d.clientKey === request.clientKey ? { kind: 'resolved' as const, clientKey: request.clientKey, demandId: id, sourceRefs: uniqueSources([...request.explicitRequest.sources, ...request.approach.sources, ...request.stage.sources]), reviewReasons: [] } : d);
+        demands.reviewReasons = [...new Set(demands.demands.flatMap(d => d.reviewReasons))];
+      }
       const bundle = resolutionBundleSchema.parse({ customer, demands });
       if (customer.kind !== 'review') {
         this.sql.exec('INSERT INTO customers VALUES (?, 1) ON CONFLICT(customer_id) DO NOTHING', basis.customerId);

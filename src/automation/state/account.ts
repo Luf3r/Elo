@@ -38,6 +38,7 @@ export class AutomationAccount extends DurableObject<Env> {
   async putReview(review: WorkflowReview) { return this.repository.putReview(review); }
   async listReviews(input: ListReviewsInput, owner: WorkLease['owner']) { return this.repository.listReviews(input, owner); }
   async resolveReview(input: unknown, owner: WorkLease['owner']) { return this.repository.resolveReview(input, owner); }
+  async reviewAnalysis(analysis: AgentAnalysis, basis: PlanBasis) { return this.repository.reviewAnalysis(analysis, basis); }
   async getServiceStatus(owner: WorkLease['owner']) { return this.repository.getServiceStatus(owner); }
   async getOperationByRequest(id: string) { return this.repository.getOperationByRequest(id); }
   async reserveExecutionCommand(id: string, key: string) { return this.repository.reserveExecutionCommand(id, key); }

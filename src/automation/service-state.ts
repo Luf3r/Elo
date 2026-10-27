@@ -1,4 +1,4 @@
-import type { CatalogPage, CatalogSnapshot, CustomerCandidates, PreparedWork, WorkLease, PlanBasis, AgentAnalysis, MutationCommand } from './types';
+import type { CatalogPage, CatalogSnapshot, CustomerCandidates, PreparedWork, WorkLease, PlanBasis, AgentAnalysis, MutationCommand, SourceRef } from './types';
 import type { ConversationSnapshot } from '../agendor/chat/types';
 import type { z } from 'zod';
 import type { listReviewsInputSchema, reviewResolutionInputSchema } from './schemas';
@@ -20,6 +20,8 @@ export interface WorkflowState {
   work?: PreparedWork;
   basis?: PlanBasis;
   analysis?: AgentAnalysis;
+  snapshotVersion?: number;
+  pendingReview?: { reviewId: string; version: number; sourceSnapshotVersion: number; sourceRefs: SourceRef[]; analysis: AgentAnalysis; policyVersion: number; decision: NonNullable<WorkflowReview['decision']>; clientKey?: string };
   direct?: { digest: string; capability: 'crm:create' | 'crm:enrich' | 'crm:write'; command: MutationCommand };
 }
 export interface WorkflowReview {
@@ -27,9 +29,11 @@ export interface WorkflowReview {
   workId: string;
   customerId: string;
   version: number;
+  snapshotVersion?: number;
   owner: WorkLease['owner'];
   state: 'open' | 'resolved';
   reasons: string[];
   decision?: z.infer<typeof reviewResolutionInputSchema>['decision'];
+  consumedBy?: { planId: string; planVersion: number; snapshotVersion: number };
 }
 export type ListReviewsInput = z.infer<typeof listReviewsInputSchema>;

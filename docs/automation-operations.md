@@ -14,6 +14,8 @@ Uma autorização de operação dura no máximo cinco minutos e nunca ultrapassa
 
 automation_list_reviews e automation_resolve_review exigem seus escopos de leitura/gestão. A resolução compara reviewId e expectedVersion, verifica plano/cliente/demanda/fonte conforme a decisão e invalida planos anteriores. A decisão retorna ao agente para nova preparação e análise; não cria uma permissão para pedidos futuros nem contorna os escopos CRM. Aprovação identifica somente planId e planVersion.
 
+A resolução reabre somente o mesmo workId, avança a versão do snapshot e exige novos GETs. O preparo expõe reviewDecision tipada. A próxima submissão deve repetir a análise original: o servidor aplica a seleção/correção, valida as fontes atuais e cria outro plano. A gravação desse plano consome a revisão por CAS e registra review_consumed; decisões não migram para outra conversa, pedido ou ator. Seleção de demanda exige exatamente uma demanda na análise revisada. Fontes alteradas exigem outra revisão; aprovação não contorna cobertura, identidade, política ou validação de campos.
+
 automation_reprocess aceita alvo explícito de conversa ou cliente, intervalo from/to e mode (preview por padrão); preserva o pedido delimitado e um registro auditável. Nenhuma revisão, atualização de política ou solicitação de reprocessamento escreve no CRM por si só.
 
 automation_list_audit retorna páginas de códigos de ação, timestamps, versão e identificadores para o mesmo userId/clientId. Não contém decisão textual, mensagens, anexos, credenciais nem leaseToken. Os logs técnicos não imprimem corpos upstream. automation_get_status informa ready/degraded/paused, pendências, trabalho aguardando agente e contagem de cobertura incompleta.
