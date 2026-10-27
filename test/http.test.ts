@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchJson } from '../src/http';
+import { SafeError } from '../src/errors';
 
 afterEach(() => vi.unstubAllGlobals());
 const request = () => new Request('https://api.agendor.com.br/v3/people');
@@ -68,5 +69,21 @@ describe('safe upstream HTTP', () => {
     vi.stubGlobal('fetch', fetch);
     await expect(fetchJson(request())).rejects.toMatchObject({ code: 'UPSTREAM_INVALID_RESPONSE' });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([true, false])('limits CRM JSON bodies to 1 MiB with declared length %s', async declared => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: 'x'.repeat(1_048_576) }), { headers: declared ? { 'content-length': '1048590' } : {} })));
+    await expect(fetchJson(request())).rejects.toMatchObject({ code: 'UPSTREAM_INVALID_RESPONSE' });
+  });
+  it.each(['fetch', 'body'] as const)('enforces its deadline even when %s ignores AbortSignal', async phase => {
+    vi.stubGlobal('fetch', vi.fn(() => phase === 'fetch' ? new Promise<Response>(() => {}) : Promise.resolve(new Response(new ReadableStream({ start() {} })))));
+    await expect(fetchJson(request(), { timeoutMs: 5 })).rejects.toMatchObject({ code: 'UPSTREAM_TIMEOUT' });
+  });
+  it.each([['12', 12], ['-1', undefined], ['secret-token', undefined], ['999999999', 86400]])('sanitizes Retry-After %s', async (header, expected) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('secret', { status: 429, headers: { 'Retry-After': header as string } })));
+    const error = await fetchJson(request()).catch(e => e);
+    expect(error).toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
+    expect(error).toBeInstanceOf(SafeError);
+    expect((error as SafeError).retryAfterSeconds).toBe(expected);
+    expect(JSON.stringify(error)).not.toContain('secret');
   });
 });

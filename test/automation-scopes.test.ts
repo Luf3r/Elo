@@ -58,7 +58,7 @@ const commands: MutationCommand[] = [
   validPlan.orderedCommands[0]!,
   { kind: 'create_person', payload: { name: 'Synthetic' } },
   { kind: 'create_deal', target: { kind: 'person', id: 1 }, payload: { title: 'Synthetic' } },
-  { kind: 'create_task', target: { kind: 'person', id: 1 }, payload: { text: 'Synthetic', type: 1, assigned_users: [1], due_date: '2026-10-27T00:00:00Z' } },
+  { kind: 'create_task', target: { kind: 'person', id: 1 }, payload: { text: 'Synthetic', type: 'LIGACAO', assigned_users: [1], due_date: '2026-10-27T00:00:00Z' } },
   { kind: 'enrich_organization', target: { kind: 'organization', id: 1 }, patch: { name: 'Synthetic' } },
   { kind: 'enrich_person', target: { kind: 'person', id: 1 }, patch: { name: 'Synthetic' } },
   { kind: 'enrich_deal', target: { kind: 'deal', id: 1 }, patch: { title: 'Synthetic' } },

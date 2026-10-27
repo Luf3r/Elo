@@ -90,7 +90,7 @@ describe('fixed CRM mutation DTOs', () => {
   it('requires one explicit deal/task parent and fixed safe task fields', () => {
     expect(createDealSchema.safeParse({ parent: { kind: 'organization', id: 11 }, record: { title: 'Synthetic request' } }).success).toBe(true);
     expect(createDealSchema.safeParse({ parent: { kind: 'organization', id: 11, personId: 12 }, record: { title: 'Synthetic request' } }).success).toBe(false);
-    expect(createTaskSchema.safeParse({ parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', type: 1, assigned_users: [1], due_date: '2026-10-27T10:00:00-04:00' } }).success).toBe(true);
+    expect(createTaskSchema.safeParse({ parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', type: 'LIGACAO', assigned_users: [1], due_date: '2026-10-27T10:00:00-04:00' } }).success).toBe(true);
     expect(createTaskSchema.safeParse({ parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', done: true } }).success).toBe(false);
   });
   it('validates custom field IDs, catalog entity, supported type, options and dangerous keys', () => {
@@ -163,7 +163,7 @@ describe('catalog-bound mutation regressions', () => {
 
   it('validates assigned user membership during task creation', () => {
     const schemas = createMutationSchemas(catalogFixture);
-    const task = { parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', type: 1, assigned_users: [1], due_date: '2026-10-27T10:00:00-04:00' } };
+    const task = { parent: { kind: 'deal', id: 21 }, record: { text: 'Synthetic callback', type: 'LIGACAO', assigned_users: [1], due_date: '2026-10-27T10:00:00-04:00' } };
     expect(schemas.createTask.safeParse(task).success).toBe(true);
     expect(schemas.createTask.safeParse({ ...task, record: { ...task.record, assigned_users: [999] } }).success).toBe(false);
     expect(schemas.createTask.safeParse({ ...task, record: { ...task.record, assigned_users: [1, 999] } }).success).toBe(false);

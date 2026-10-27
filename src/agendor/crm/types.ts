@@ -30,6 +30,23 @@ export interface CatalogSnapshot {
   coverage: Partial<Record<string, CatalogCoverage>>;
 }
 export interface UpdateResult { id: number; updatedFields: string[] }
+export type CrmMutationRef = { kind: 'organization' | 'person' | 'deal' | 'task'; id: number };
+/** HTTP acknowledgement only. Returned fields are evidence for later read-back,
+ * never a checked receipt or permission to dispatch again. */
+export type MutationOutcome =
+  | { state: 'confirmed'; ref: CrmMutationRef; returnedFields: Record<string, unknown> }
+  | { state: 'uncertain'; reason: import('../../errors').ErrorCode | 'UPSTREAM_CANCELLED' }
+  | { state: 'rejected'; code: import('../../errors').ErrorCode | 'COLLECTION_WRITE_UNVERIFIED'; retryAfterSeconds?: number };
+export interface CrmMutationClient {
+  createOrganization(record: import('./mutation-schemas').CreateOrganization): Promise<MutationOutcome>;
+  createPerson(record: import('./mutation-schemas').CreatePerson): Promise<MutationOutcome>;
+  createDeal(parent: import('../../automation/types').EntityRef, record: import('./mutation-schemas').CreateDealRecord): Promise<MutationOutcome>;
+  createTask(parent: import('../../automation/types').TaskParent, record: import('./mutation-schemas').CreateTaskRecord): Promise<MutationOutcome>;
+  enrichOrganization(id: number, patch: import('./mutation-schemas').EnrichOrganization): Promise<MutationOutcome>;
+  enrichPerson(id: number, patch: import('./mutation-schemas').EnrichPerson): Promise<MutationOutcome>;
+  enrichDeal(id: number, patch: import('./mutation-schemas').EnrichDeal): Promise<MutationOutcome>;
+  updateTask(id: number, patch: import('./mutation-schemas').UpdateTask): Promise<MutationOutcome>;
+}
 export interface AgendorCrmClient {
   searchPeople(input: SearchPeopleInput): Promise<PagedResult<unknown>>;
   getPerson(id: number, options?: CustomFieldOptions): Promise<unknown>;

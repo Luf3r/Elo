@@ -25,7 +25,9 @@ const dealFields = {
   title: text(150).min(1), description: text(2000).optional(), value: z.number().finite().min(0).max(1_000_000_000_000).optional(),
   startTime: z.iso.datetime({ offset: true }).optional(), products_entities: z.array(productItemSchema).max(100).optional(), ownerUser: crmIdSchema.optional(), customFields: customFields.optional(),
 };
-const taskFields = { text: text(2000).min(1), type: crmIdSchema, assigned_users: z.array(crmIdSchema).min(1).max(100), due_date: z.iso.datetime({ offset: true }) };
+// OpenAPI post*Tasks/putTasks use these strings, never catalog numeric IDs.
+export const taskTypeSchema = z.enum(['VISITA', 'REUNIAO', 'LIGACAO', 'EMAIL', 'PROPOSTA', 'WHATSAPP']);
+const taskFields = { text: text(2000).min(1), type: taskTypeSchema, assigned_users: z.array(crmIdSchema).min(1).max(100).refine(v => new Set(v).size === v.length, 'Duplicate assignee.'), due_date: z.iso.datetime({ offset: true }) };
 const patch = <T extends z.ZodRawShape>(shape: T) => z.strictObject(shape).partial().refine(v => Object.values(v).some(x => x !== undefined), 'Empty patch.');
 export const entityRefSchema = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('organization'), id: crmIdSchema }), z.strictObject({ kind: z.literal('person'), id: crmIdSchema })]);
 export const taskParentSchema = z.union([entityRefSchema, z.strictObject({ kind: z.literal('deal'), id: crmIdSchema })]);
@@ -70,8 +72,10 @@ export function createMutationSchemas(catalog: CatalogSnapshot) {
       }
     });
   }
+  const checkedDealRecord = checked(createDealRecordSchema, 'deals');
   return { createOrganization: checked(createOrganizationSchema, 'organizations'), createPerson: checked(createPersonSchema, 'people'),
-    createDeal: checked(createDealRecordSchema, 'deals'),
+    createDealRecord: checkedDealRecord,
+    createDeal: createDealSchema.extend({ record: checkedDealRecord }),
     createTask: createTaskSchema.extend({ record: createTaskRecordSchema.refine(knownTaskAssignees, { path: ['assigned_users'], message: 'Unknown user.' }) }),
     enrichOrganization: checked(enrichOrganizationSchema, 'organizations'), enrichPerson: checked(enrichPersonSchema, 'people'), enrichDeal: checked(enrichDealSchema, 'deals'), updateTask: updateTaskSchema.refine(knownTaskAssignees, { path: ['assigned_users'], message: 'Unknown user.' }),
     changeStage: changeStageSchema.refine(v => catalog.stages.some(s => s.sequence === v.dealStage && s.funnelId === v.funnel), 'Stage/funnel mismatch.') };
@@ -79,7 +83,9 @@ export function createMutationSchemas(catalog: CatalogSnapshot) {
 export type CreateOrganization = z.infer<typeof createOrganizationSchema>;
 export type CreatePerson = z.infer<typeof createPersonSchema>;
 export type CreateDeal = z.infer<typeof createDealSchema>;
+export type CreateDealRecord = z.infer<typeof createDealRecordSchema>;
 export type CreateTask = z.infer<typeof createTaskSchema>;
+export type CreateTaskRecord = z.infer<typeof createTaskRecordSchema>;
 export type EnrichOrganization = z.infer<typeof enrichOrganizationSchema>;
 export type EnrichPerson = z.infer<typeof enrichPersonSchema>;
 export type EnrichDeal = z.infer<typeof enrichDealSchema>;

@@ -2,7 +2,7 @@ export type ErrorCode =
   | 'INVALID_INPUT' | 'MCP_UNAUTHORIZED' | 'MCP_RATE_LIMITED'
   | 'UPSTREAM_UNAUTHORIZED' | 'UPSTREAM_FORBIDDEN' | 'UPSTREAM_NOT_FOUND'
   | 'UPSTREAM_RATE_LIMITED' | 'UPSTREAM_TIMEOUT' | 'UPSTREAM_UNAVAILABLE'
-  | 'UPSTREAM_INVALID_RESPONSE' | 'CHAT_API_NOT_CONFIGURED' | 'CONTEXT_STALE';
+  | 'UPSTREAM_INVALID_RESPONSE' | 'UPSTREAM_CONFLICT' | 'UPSTREAM_REJECTED' | 'CHAT_API_NOT_CONFIGURED' | 'CONTEXT_STALE';
 
 export class SafeError extends Error {
   constructor(
@@ -11,6 +11,7 @@ export class SafeError extends Error {
     public readonly retryable: boolean,
     public readonly status?: number,
     public readonly requiredScope?: string,
+    public readonly retryAfterSeconds?: number,
   ) { super(message); this.name = 'SafeError'; }
 }
 
