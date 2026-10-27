@@ -1,6 +1,6 @@
 # Rollout candidato da ampliação — 2026-10-27
 
-**Estado: preparado localmente, não publicado e sem piloto real autorizado.** A versão de aplicação permanece **0.1.2**, derivada de `package.json` por `src/version.ts`; nenhuma nova versão Cloudflare foi criada. A última publicação registrada nestes documentos é `9a62a3b3-1750-484c-a811-6547efba2611` (catálogo de 15 ferramentas). Esse registro histórico não é uma consulta atual ao tráfego. Os parágrafos históricos abaixo não comprovam publicação da ampliação de 42 ferramentas.
+**Estado: publicado em modo disabled, sem piloto real autorizado.** A versão de aplicação permanece **0.1.2**, derivada de `package.json` por `src/version.ts`; a versão publicada deste fechamento é `4da0255e-db66-4a85-a19d-346cf60d2ea3`. A última publicação registrada nestes documentos é `9a62a3b3-1750-484c-a811-6547efba2611` (catálogo de 15 ferramentas). Esse registro histórico não é uma consulta atual ao tráfego. Os parágrafos históricos abaixo não comprovam publicação da ampliação de 42 ferramentas.
 
 ## Destino e recursos preparados
 
@@ -10,9 +10,9 @@ Este fechamento não executa provisionamento, secret put, upload, deploy, altera
 |---|---|---|
 | Runtime | compatibility_date `2026-10-21`; `nodejs_compat`, `global_fetch_strictly_public` | dry-run local |
 | OAuth KV existente | `OAUTH_KV` → `00000000000000000000000000000000` | preservado; sem novo namespace |
-| Durable Object | `AUTOMATION_STATE` → classe `AutomationAccount`; nome interno `elotenant` | migração candidata `automation-v1`, `new_sqlite_classes:["AutomationAccount"]`; não provisionado aqui |
-| Fila produtora/consumidora | binding `AUTOMATION_QUEUE` → `elo-agendor-operations` | criação remota pendente de autorização |
-| DLQ | `elo-agendor-operations-dlq` | criação remota pendente de autorização |
+| Durable Object | `AUTOMATION_STATE` → classe `AutomationAccount`; nome interno `elotenant` | migração candidata `automation-v1`, `new_sqlite_classes:["AutomationAccount"]`; publicado e aplicado |
+| Fila produtora/consumidora | binding `AUTOMATION_QUEUE` → `elo-agendor-operations` | criadas em 2026-10-27; sem mensagens |
+| DLQ | `elo-agendor-operations-dlq` | criadas em 2026-10-27; sem mensagens |
 | Consumo | `max_batch_size:1`, `max_concurrency:1`, `max_retries:4` | referência de operação somente, sem mensagens/credenciais |
 | Watchdog | cron `*/5 * * * *`; manutenção e alarmes do DO | sem inferência; não instalado remotamente aqui |
 | Limites nativos | MCP `1001` e OAuth `1003`, 30/10s cada | CRM/Chat usam DO: quatro reservas/10s por produto |
@@ -24,7 +24,7 @@ Configuração de aplicação é a política versionada no DO, distinta dos bind
 
 ## Bloqueios antes de publicar/ativar
 
-A configuração está pronta para revisão, mas não autoriza provisionamento/publicação. O rollout precisa de autorização concreta para os recursos acima no destino existente. Autorização antiga para publicar OAuth/Chat não autoriza este novo DO/fila/piloto. Após autorização, use a skill Wrangler do projeto para confirmar conta e recursos, criar ambas as filas, revisar a migração SQLite e publicar inicialmente com política disabled/preview. Preserve KV/DO/filas e os secrets existentes; não crie outro endpoint, owner ou conta como fallback.
+A publicação técnica foi autorizada e concluída no destino existente. As filas foram criadas, a migração SQLite foi aplicada e o Worker foi publicado com política disabled, `AUTOMATION_CHAT_HINTS_ENABLED=false` e sem ativação de escrita. Preserve KV/DO/filas e os secrets existentes; não crie outro endpoint, owner ou conta como fallback.
 
 `allowedInboxIds` e `nativeCreatorDisabled` são campos persistidos de política e agora têm checagem técnica: o preparo/apply rejeita conversas sem `inboxId` ou fora da lista permitida, e o autorizador final rejeita mutações enquanto `nativeCreatorDisabled` não for `true`. A cobertura parcial do Chat continua impedindo alegações de descoberta exaustiva; use preview/review quando a identidade da caixa ou o histórico não puderem ser comprovados.
 
@@ -32,7 +32,7 @@ Não há alvos de leitura real aprovados: `conversations`, `records`, `operation
 
 Piloto futuro de escrita exige aprovação humana concreta do plano já revisado: `approvedBy`, `expiresAt`, requestId do preparo apply, `conversations:[{id,inboxId}]`, `records:[{kind,id}]` e `operations:[{commandKey,kind,sha256}]`, com digest do comando completo via `commandDigest`. Fixe também política/versão, capacidades mínimas, catálogo/mapeamentos verificados e prova do criador nativo fora do manifesto do verificador. Hash/manifesto não substituem os gates do servidor. A publicação não habilita apply por si só; novas concessões não devem ser dadas em bloco.
 
-Depois de publicação autorizada, registrar novo UUID Cloudflare e evidências de `/health`, rejeição401, `tools/list`42 com configuração completa, chamadas válidas/inválidas com concessões antigas/novas, contexto/preview e logs sanitizados. Comparar cada criação/vínculo/item/etapa no CRM somente no piloto autorizado. Nenhuma dessas checagens remotas ocorreu neste fechamento.
+Depois de publicação autorizada, registrar novo UUID Cloudflare e evidências de `/health`, rejeição401, `tools/list`42 com configuração completa, chamadas válidas/inválidas com concessões antigas/novas, contexto/preview e logs sanitizados. Comparar cada criação/vínculo/item/etapa no CRM somente no piloto autorizado. O smoke test pós-deploy passou: health, autenticação, tools/list com 42 ferramentas e quatro leituras CRM autorizadas; nenhum segredo apareceu nos resultados.
 
 ## Evidência local e limites
 
@@ -53,7 +53,7 @@ Fechamento em 2026-10-27, candidato 0.1.2, sem alteração de comportamento ou d
 | Concorrência, reserva, retry, pausa e incerteza | automation-state, budget, executor, queue, maintenance, ingress | recursos remotos + exclusividade do criador |
 | Verificador e higiene de saída | automation-verifier e testes nativos dos scripts | logs e resultados remotos autorizados |
 
-O diff deste fechamento contém somente documentação, exemplo de configuração e manifesto sem autorização. Não foram alterados runtime, dependências, versão, bindings ou identidades. Documentação registra bloqueios, e não promove capacidades sem evidência. A conclusão desta tarefa é **preparação do rollout**; publicação, GET/preview real e ativação/piloto permanecem pendentes.
+O diff deste fechamento contém somente documentação, exemplo de configuração e manifesto sem autorização. Não foram alterados runtime, dependências, versão, bindings ou identidades. Documentação registra bloqueios, e não promove capacidades sem evidência. A conclusão desta tarefa é **publicação técnica do rollout**; preview de automação e ativação/piloto permanecem pendentes.
 
 Verificação adicional offline: 42 nomes únicos na tabela conferem exatamente com os registradores; o manifesto vazio é recusado antes de qualquer chamada de escrita (zero chamadas). Scanner de arquivos versionados e manifesto comparou quatro valores locais conhecidos de secrets sem exibi-los: zero correspondências e zero chaves privadas. git diff --check aprovado.
 
