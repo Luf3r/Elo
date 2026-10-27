@@ -21,7 +21,7 @@ describe('conservative customer resolution', () => {
   it('matches normalized exact document rather than API order', () => {
     const input = analysis([fact('cnpj', '12.345.678/0001-90')]);
     for (const items of [[candidate(12), candidate(11, { document: '12345678000190' })], [candidate(11, { document: '12345678000190' }), candidate(12)]]) {
-      expect(identity.resolveCustomer(input, candidates(items), catalogFixture)).toMatchObject({ kind: 'resolved', ref: { id: 11 } });
+      expect(identity.resolveCustomer(input, candidates(items, { identifierCoverage: [{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: true, pagesRead: 1, missingReasons: [] } }] }), catalogFixture)).toMatchObject({ kind: 'resolved', ref: { id: 11 } });
     }
   });
   it('rejects prefix email results, homonyms and shared phone matches', () => {
@@ -67,6 +67,56 @@ describe('conservative customer resolution', () => {
     }, { id: 42, name: 'Person', crmPersonId: 13 }, 'contact-r1');
     expect(result.coverage.complete).toBe(false);
     expect(result.verifiedLinks).toEqual([]);
+  });
+  it('discovers an existing organization by confirmed CNPJ even when contact searches find nothing', async () => {
+    const input: AgentAnalysis = { ...analysis([fact('name', 'New Display Name'), fact('cnpj', '12.345.678/0001-90')]), customerSelection: { kind: 'new', entity: 'organization', record: { name: 'New Display Name', cnpj: '12.345.678/0001-90' } } };
+    const queries: { cnpj?: string; page?: number }[] = [];
+    const result = await identity.readCustomerCandidates({
+      async searchPeople() { return { items: [], pageInfo: { page: 1, perPage: 100, hasNext: false, nextPage: null } }; },
+      async searchOrganizations(query) {
+        queries.push(query);
+        const byDocument = query.cnpj === '12345678000190';
+        return { items: byDocument && query.page === 2 ? [{ id: 77, name: 'CRM Legal Name', cnpj: '12345678000190' }] : [], pageInfo: { page: query.page!, perPage: 100, hasNext: byDocument && query.page === 1, nextPage: byDocument && query.page === 1 ? 2 : null } };
+      },
+      async getPerson() { throw Error('unused'); },
+    }, { id: 42, name: 'Different Chat Name', email: 'different@example.test' }, 'contact-r1', input.facts);
+    expect(queries.filter(q => q.cnpj).map(q => ({ cnpj: q.cnpj, page: q.page }))).toEqual([{ cnpj: '12345678000190', page: 1 }, { cnpj: '12345678000190', page: 2 }]);
+    expect(result.candidates).toEqual(expect.arrayContaining([expect.objectContaining({ ref: { kind: 'organization', id: 77 }, document: '12345678000190' })]));
+    expect(result.coverage).toMatchObject({ complete: true, pagesRead: 6 });
+    expect(result.identifierCoverage).toEqual([{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: true, pagesRead: 2, missingReasons: [] } }]);
+    expect(identity.resolveCustomer(input, result, catalogFixture).kind).toBe('review');
+    expect(identity.resolveCustomer({ ...input, customerSelection: { kind: 'organization', id: 77 } }, result, catalogFixture)).toMatchObject({ kind: 'resolved', ref: { kind: 'organization', id: 77 } });
+  });
+  it('requires coverage of the confirmed CNPJ before accepting a new organization', () => {
+    const input: AgentAnalysis = { ...analysis([fact('name', 'Synthetic New'), fact('cnpj', '12345678000190')]), customerSelection: { kind: 'new', entity: 'organization', record: { name: 'Synthetic New' } } };
+    expect(identity.resolveCustomer(input, candidates([]), catalogFixture)).toMatchObject({ kind: 'review', reviewReasons: ['IDENTIFIER_COVERAGE_INCOMPLETE'] });
+    for (const lookup of [
+      { value: '99999999000100', coverage: { complete: true, pagesRead: 1, missingReasons: [] } },
+      { value: '12345678000190', coverage: { complete: false, pagesRead: 1, missingReasons: ['page_missing'] } },
+    ]) expect(identity.resolveCustomer(input, candidates([], { identifierCoverage: [{ entity: 'organization', field: 'cnpj', ...lookup }] }), catalogFixture).kind).toBe('review');
+    expect(identity.resolveCustomer(input, candidates([], { identifierCoverage: [{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: true, pagesRead: 1, missingReasons: [] } }] }), catalogFixture).kind).toBe('create');
+  });
+  it('blocks a creation when the confirmed CNPJ lookup fails despite complete contact searches', async () => {
+    const input: AgentAnalysis = { ...analysis([fact('name', 'Synthetic New'), fact('cnpj', '12345678000190')]), customerSelection: { kind: 'new', entity: 'organization', record: { name: 'Synthetic New' } } };
+    const result = await identity.readCustomerCandidates({
+      async searchPeople() { return { items: [], pageInfo: { page: 1, perPage: 100, hasNext: false, nextPage: null } }; },
+      async searchOrganizations(query) { if (query.cnpj) throw Error('unavailable'); return { items: [], pageInfo: { page: query.page!, perPage: 100, hasNext: false, nextPage: null } }; },
+      async getPerson() { throw Error('unused'); },
+    }, { id: 42, name: 'Synthetic New' }, 'contact-r1', input.facts);
+    expect(result.coverage.complete).toBe(false);
+    expect(result.identifierCoverage).toEqual([{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: false, pagesRead: 0, missingReasons: ['candidate_read_unavailable'] } }]);
+    expect(identity.resolveCustomer(input, result, catalogFixture).kind).toBe('review');
+  });
+  it('never declares CNPJ absence from a first page when a later page is unavailable', async () => {
+    const input: AgentAnalysis = { ...analysis([fact('name', 'Synthetic New'), fact('cnpj', '12345678000190')]), customerSelection: { kind: 'new', entity: 'organization', record: { name: 'Synthetic New' } } };
+    const result = await identity.readCustomerCandidates({
+      async searchPeople() { throw Error('unused'); },
+      async searchOrganizations(query) { if (query.page === 2) throw Error('unavailable'); return { items: [], pageInfo: { page: 1, perPage: 100, hasNext: true, nextPage: 2 } }; },
+      async getPerson() { throw Error('unused'); },
+    }, { id: 42 }, 'contact-r1', input.facts);
+    expect(result.coverage).toMatchObject({ complete: false, pagesRead: 1 });
+    expect(result.identifierCoverage?.[0]?.coverage).toMatchObject({ complete: false, pagesRead: 1, missingReasons: ['candidate_read_unavailable'] });
+    expect(identity.resolveCustomer(input, result, catalogFixture).kind).toBe('review');
   });
 });
 

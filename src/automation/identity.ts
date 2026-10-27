@@ -37,6 +37,9 @@ export function resolveCustomer(input: AgentAnalysis, candidates: CustomerCandid
   if (links.some(l => !pool.some(c => sameEntity(c.ref, l.ref)))) return review('CRM_LINK_UNVERIFIED');
   const linked = pool.filter(c => links.some(l => sameEntity(c.ref, l.ref)));
   const doc = value('cnpj'); const mail = value('email'); const phone = value('phone'); const customerName = value('name');
+  // General contact-search coverage cannot prove that a document was searched.
+  // Facts can arrive after a snapshot; require a new, complete identifier read.
+  if (entity === 'organization' && typeof doc === 'string' && (document(doc).length !== 14 || !candidates.identifierCoverage?.some(lookup => lookup.entity === entity && lookup.field === 'cnpj' && lookup.value === document(doc) && lookup.coverage.complete && !lookup.coverage.missingReasons.length && lookup.coverage.pagesRead > 0))) return review('IDENTIFIER_COVERAGE_INCOMPLETE');
   const docMatches = typeof doc === 'string' && document(doc).length === 14 ? pool.filter(c => c.document && document(c.document) === document(doc)) : [];
   const mailMatches = typeof mail === 'string' ? pool.filter(c => c.email && email(c.email) === email(mail)) : [];
   const phoneMatches = typeof phone === 'string' && normalizedPhone(phone) ? pool.filter(c => c.phone && normalizedPhone(c.phone) === normalizedPhone(phone)) : [];
@@ -65,8 +68,8 @@ export function resolveCustomer(input: AgentAnalysis, candidates: CustomerCandid
 }
 
 /** Read-only, bounded collection. Any missing page is explicit and blocks absence claims. */
-export async function readCustomerCandidates(crm: Pick<AgendorCrmClient, 'searchPeople' | 'searchOrganizations' | 'getPerson'>, contact: ChatContact, revision: string): Promise<CustomerCandidates> {
-  const result: CustomerCandidates = { candidates: [], verifiedLinks: [], coverage: { complete: false, pagesRead: 0, missingReasons: [] } };
+export async function readCustomerCandidates(crm: Pick<AgendorCrmClient, 'searchPeople' | 'searchOrganizations' | 'getPerson'>, contact: ChatContact, revision: string, facts: readonly AgentAnalysis['facts'][number][] = []): Promise<CustomerCandidates> {
+  const result: CustomerCandidates = { candidates: [], verifiedLinks: [], identifierCoverage: [], coverage: { complete: false, pagesRead: 0, missingReasons: [] } };
   const reasons = new Set<string>();
   const parsed = new Map<string, CustomerCandidate>();
   const object = (raw: unknown): Record<string, unknown> => raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
@@ -83,27 +86,38 @@ export async function readCustomerCandidates(crm: Pick<AgendorCrmClient, 'search
     parsed.set(`${kind}:${id}`, candidate); return candidate;
   };
   const read = async (kind: EntityRef['kind'], load: (page: number) => Promise<PagedResult<unknown>>) => {
+    const coverage = { complete: false, pagesRead: 0, missingReasons: [] as string[] };
+    const finish = (complete: boolean, reason?: string) => {
+      if (reason) { reasons.add(reason); coverage.missingReasons.push(reason); }
+      coverage.complete = complete && coverage.missingReasons.length === 0; return coverage;
+    };
     let page = 1; const seen = new Set<number>();
     for (let count = 0; count < 10; count++) {
-      if (seen.has(page)) { reasons.add('candidate_cursor_repeated'); return; } seen.add(page);
+      if (seen.has(page)) return finish(false, 'candidate_cursor_repeated'); seen.add(page);
       let response: PagedResult<unknown>;
-      try { response = await load(page); } catch { reasons.add('candidate_read_unavailable'); return; }
-      result.coverage.pagesRead++;
-      if (response.pageInfo.page !== page || !Array.isArray(response.items) || response.items.length > 100) { reasons.add('candidate_page_invalid'); return; }
-      for (const record of response.items) await add(record, kind);
-      if (!response.pageInfo.hasNext) { if (response.pageInfo.nextPage !== null) reasons.add('candidate_cursor_invalid'); return; }
+      try { response = await load(page); } catch { return finish(false, 'candidate_read_unavailable'); }
+      result.coverage.pagesRead++; coverage.pagesRead++;
+      if (response.pageInfo.page !== page || !Array.isArray(response.items) || response.items.length > 100) return finish(false, 'candidate_page_invalid');
+      for (const record of response.items) if (!await add(record, kind)) coverage.missingReasons.push('candidate_record_invalid');
+      if (!response.pageInfo.hasNext) return response.pageInfo.nextPage === null ? finish(true) : finish(false, 'candidate_cursor_invalid');
       const next = response.pageInfo.nextPage;
-      if (!next || !Number.isSafeInteger(next) || next <= page) { reasons.add('candidate_cursor_invalid'); return; }
+      if (!next || !Number.isSafeInteger(next) || next <= page) return finish(false, 'candidate_cursor_invalid');
       page = next;
     }
-    reasons.add('candidate_page_limit');
+    return finish(false, 'candidate_page_limit');
   };
   // Each query is fixed to the supported adapter. No arbitrary URL/query surface.
   const filters = [contact.email ? { email: contact.email } : undefined, contact.phoneNumber ? { phone: contact.phoneNumber } : undefined, contact.name ? { query: contact.name } : undefined].filter((v): v is { email: string } | { phone: string } | { query: string } => v !== undefined);
-  if (!filters.length && !contact.crmPersonId) reasons.add('contact_identity_unavailable');
+  const documents = [...new Set(facts.filter(f => f.entity === 'organization' && f.field === 'cnpj' && f.certainty === 'confirmed' && typeof f.value === 'string').map(f => document(f.value as string)))];
+  if (!filters.length && !contact.crmPersonId && !documents.length) reasons.add('contact_identity_unavailable');
   for (const filter of filters) {
     await read('person', page => crm.searchPeople({ ...filter, page, perPage: 100 }));
     await read('organization', page => crm.searchOrganizations({ ...filter, page, perPage: 100 }));
+  }
+  for (const value of documents) {
+    if (value.length !== 14) { reasons.add('candidate_identifier_invalid'); continue; }
+    const coverage = await read('organization', page => crm.searchOrganizations({ cnpj: value, page, perPage: 100 }));
+    result.identifierCoverage!.push({ entity: 'organization', field: 'cnpj', value, coverage });
   }
   if (contact.crmPersonId) {
     try {
