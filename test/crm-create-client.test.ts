@@ -47,6 +47,19 @@ describe('bounded CRM creation', () => {
     expect(request.url).toBe(`https://api.agendor.com.br/v3/${kind === 'person' ? 'people' : 'organizations'}/11/deals`);
     expect(await request.json()).toEqual({ title: 'Synthetic request', checkRequiredFields: true });
   });
+  it.each([420, 2_147_483_647])('sends organization address street_number as int32 %i on creation', async street_number => {
+    const { mutationClient, upstreamFetch } = setup();
+    expect(await mutationClient.createOrganization({ name: 'Synthetic Company', address: { street_number } })).toMatchObject({ state: 'confirmed' });
+    const request = upstreamFetch.mock.calls[0]![0];
+    expect(request.url).toBe('https://api.agendor.com.br/v3/organizations');
+    expect(await request.json()).toEqual({ name: 'Synthetic Company', address: { street_number } });
+  });
+  it.each(['420', 's/n', 1.5, 2_147_483_648, -2_147_483_649, Number.NaN, Number.POSITIVE_INFINITY])('rejects non-int32 organization street_number %j before creation', async street_number => {
+    const { mutationClient, upstreamFetch, budgetGate } = setup();
+    await expect(mutationClient.createOrganization({ name: 'Synthetic Company', address: { street_number } } as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+    expect(budgetGate).not.toHaveBeenCalled();
+  });
   it('validates the catalog-bound deal wrapper and record schemas consistently', async () => {
     const { createMutationSchemas } = await import('../src/agendor/crm/mutation-schemas');
     const schemas = createMutationSchemas(catalogFixture);

@@ -6,7 +6,7 @@ const safeKey = z.string().min(1).max(150).refine(v => !v.split(/[.\[\]]/).some(
 const text = (max: number) => z.string().trim().max(max);
 const contact = z.strictObject({ email: z.email().optional(), work: text(80).optional(), mobile: text(80).optional() }).refine(v => Object.values(v).some(x => x !== undefined));
 // Explicit write-side DTO. Never pass a read-side address object through.
-const address = z.strictObject({ street_name: text(150).optional(), street_number: text(30).optional(), additional_info: text(150).optional(), district: text(100).optional(), postal_code: text(20).optional(), city: crmIdSchema.optional() });
+const address = z.strictObject({ street_name: text(150).optional(), street_number: z.int32().optional(), additional_info: text(150).optional(), district: text(100).optional(), postal_code: text(20).optional(), city: crmIdSchema.optional() });
 export const customFieldValueSchema = z.union([z.string().max(4000), z.number().finite(), z.boolean(), z.null(), z.array(z.union([z.string().max(300), z.number().finite()])).max(100)]);
 export const customFieldSchema = z.strictObject({ id: z.union([safeKey, crmIdSchema]), value: customFieldValueSchema });
 const customFields = z.array(customFieldSchema).max(100).refine(v => new Set(v.map(f => String(f.id))).size === v.length, 'Duplicate custom field.');

@@ -24,6 +24,19 @@ describe('bounded CRM enrichment', () => {
     const { client } = setup();
     expect(await client.enrichPerson(42, { contact: { email: 'synthetic@example.test' } })).toEqual({ state: 'confirmed', ref: { kind: 'person', id: 42 }, returnedFields: { contact: { email: 'synthetic@example.test' } } });
   });
+  it.each([420, 2_147_483_647])('sends organization address street_number as int32 %i on enrichment', async street_number => {
+    const { client, upstreamFetch } = setup();
+    expect(await client.enrichOrganization(42, { address: { street_number } })).toMatchObject({ state: 'confirmed' });
+    const request = upstreamFetch.mock.calls[0]![0];
+    expect(request.url).toBe('https://api.agendor.com.br/v3/organizations/42');
+    expect(request.method).toBe('PUT');
+    expect(await request.json()).toEqual({ address: { street_number } });
+  });
+  it.each(['420', 's/n', 1.5, 2_147_483_648, -2_147_483_649, Number.NaN, Number.POSITIVE_INFINITY])('rejects non-int32 organization street_number %j before enrichment', async street_number => {
+    const { client, upstreamFetch } = setup();
+    await expect(client.enrichOrganization(42, { address: { street_number } } as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
   it.each([0, -1, 1.1, 2_147_483_648, '42'])('rejects an invalid update ID %j before transport', async id => {
     const { client, upstreamFetch } = setup();
     await expect(client.enrichPerson(id as number, { name: 'Synthetic' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
