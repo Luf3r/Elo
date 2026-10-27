@@ -50,7 +50,16 @@ for (const headers of [{}, { Authorization: 'Bearer intentionally-invalid-token'
 const listed = await inspect('tools/list');
 const names = listed.tools.map(tool => tool.name);
 const requiredTools = ['server_status', 'crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'chat_list_conversations', 'chat_get_conversation', 'chat_list_messages'];
-const optionalTools = ['crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
+const optionalTools = [
+  'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization',
+  'crm_get_person', 'crm_get_task', 'crm_get_configuration',
+  'chat_search_contacts', 'chat_get_contact', 'chat_list_contact_conversations', 'chat_list_attachments', 'chat_get_attachment',
+  'automation_prepare_sync', 'automation_submit_analysis', 'automation_apply_plan', 'automation_get_operation',
+  'automation_get_customer_context', 'automation_list_reviews', 'automation_resolve_review', 'automation_get_status',
+  'automation_list_audit', 'automation_update_policy', 'automation_reprocess',
+  'crm_create_organization', 'crm_create_person', 'crm_create_deal', 'crm_create_task',
+  'crm_enrich_organization', 'crm_enrich_person', 'crm_enrich_deal', 'crm_update_task',
+];
 assert(requiredTools.every(name => names.includes(name)), 'Required production tools are missing.');
 assert(names.every(name => requiredTools.includes(name) || optionalTools.includes(name)), 'Unexpected MCP tool is exposed.');
 await inspect('tools/call', 'server_status');
