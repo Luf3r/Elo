@@ -6,6 +6,7 @@ import { checkedReceipt, reconcileCommand, resolvedTarget, type ReconciliationRe
 import { safeError } from '../errors';
 
 export interface ExecutionDeps {
+  legacy?: Pick<import('../agendor/crm/types').AgendorCrmClient, 'updateOrganization' | 'updatePerson' | 'updateDeal' | 'updateDealStage'>;
   repository: AsyncRepository;
   basis: PlanBasis;
   requestId: string;
@@ -25,6 +26,12 @@ function expired(operation: ExecutionOperation) {
 async function dispatch(ledger: ExecutionCommand, deps: ExecutionDeps): Promise<MutationOutcome> {
   const c = ledger.command; const target = await resolvedTarget(c, ledger.operationId, deps.repository);
   switch (c.kind) {
+    case 'legacy_update_organization': case 'legacy_update_person': case 'legacy_update_deal': case 'legacy_update_stage': {
+      if (!deps.legacy) throw Error('LEGACY_ADAPTER_UNAVAILABLE');
+      const method = { legacy_update_organization: 'updateOrganization', legacy_update_person: 'updatePerson', legacy_update_deal: 'updateDeal', legacy_update_stage: 'updateDealStage' } as const;
+      const result = await deps.legacy[method[c.kind]](c.target.id, c.patch);
+      return { state: 'confirmed', ref: { kind: c.target.kind, id: result.id }, returnedFields: c.patch };
+    }
     case 'create_organization': return deps.mutations.createOrganization(c.payload);
     case 'create_person': return deps.mutations.createPerson({ ...c.payload, ...(target ? { organization: target.id } : {}) });
     case 'create_deal': if (!target || target.kind === 'deal' || target.kind === 'task') throw Error('DEPENDENCY_NOT_CONFIRMED'); return deps.mutations.createDeal({ kind: target.kind, id: target.id }, c.payload);

@@ -6,6 +6,8 @@ import { AccountRepository } from './repository';
 import type { OperationsStore, OperationInput } from '../operations';
 import { takeBudget } from './budget';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot } from '../types';
+import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
+import type { AutomationPolicy } from '../types';
 export class AutomationAccount extends DurableObject<Env> {
   private readonly repository: AccountRepository;
   constructor(ctx: DurableObjectState, env: Env) {
@@ -20,7 +22,17 @@ export class AutomationAccount extends DurableObject<Env> {
   async reserveWork(input: ReserveWorkInput) { return this.repository.reserveWork(input); }
   async prepareOperation(input: OperationInput) { return this.repository.prepareOperation(input); }
   async getOperation(id: string) { return this.repository.getOperation(id); }
+  async completeDirectOperation(id: string) { return this.repository.completeDirectOperation(id); }
   async getExecutionPolicy() { return this.repository.getExecutionPolicy(); }
+  async getWorkflow(id: string): Promise<string | undefined> { const state = this.repository.getWorkflow(id); return state ? JSON.stringify(state) : undefined; }
+  async saveWorkflow(state: WorkflowState, revision: number) { return this.repository.saveWorkflow(state, revision); }
+  async getServicePlan(id: string): Promise<string | undefined> { const plan = this.repository.getServicePlan(id); return plan ? JSON.stringify(plan) : undefined; }
+  async findContext(customerId: string) { try { return this.repository.getContext(customerId); } catch { return undefined; } }
+  async updatePolicy(policy: AutomationPolicy, version: number) { return this.repository.updatePolicy(policy, version); }
+  async putReview(review: WorkflowReview) { return this.repository.putReview(review); }
+  async listReviews(input: ListReviewsInput, owner: WorkLease['owner']) { return this.repository.listReviews(input, owner); }
+  async resolveReview(input: unknown, owner: WorkLease['owner']) { return this.repository.resolveReview(input, owner); }
+  async getServiceStatus(owner: WorkLease['owner']) { return this.repository.getServiceStatus(owner); }
   async getOperationByRequest(id: string) { return this.repository.getOperationByRequest(id); }
   async reserveExecutionCommand(id: string, key: string) { return this.repository.reserveExecutionCommand(id, key); }
   async getExecutionCommand(key: string) { return this.repository.getExecutionCommand(key); }

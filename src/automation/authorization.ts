@@ -29,6 +29,7 @@ export function requirePolicyCapabilities(auth: AuthContext, policy: AutomationP
 }
 
 const commandCapability = {
+  legacy_update_organization: 'crm:write', legacy_update_person: 'crm:write', legacy_update_deal: 'crm:write', legacy_update_stage: 'crm:write',
   create_organization: 'crm:create', create_person: 'crm:create', create_deal: 'crm:create', create_task: 'crm:create',
   enrich_organization: 'crm:enrich', enrich_person: 'crm:enrich', enrich_deal: 'crm:enrich', update_task: 'crm:enrich',
   change_stage: 'crm:write',

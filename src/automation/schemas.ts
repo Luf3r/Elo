@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { CatalogSnapshot } from '../agendor/crm/types';
 import type { ConversationSnapshot, Coverage } from '../agendor/chat/types';
-import { positiveId } from '../agendor/crm/schemas';
+import { positiveId, updateOrganizationInput, updatePersonInput, updateDealInput, updateDealStageInput } from '../agendor/crm/schemas';
 import { crmIdSchema, entityRefSchema, taskParentSchema, customFieldValueSchema, customFieldMatchesCatalog, createOrganizationSchema, createPersonSchema, createDealRecordSchema, createTaskRecordSchema, enrichOrganizationSchema, enrichPersonSchema, enrichDealSchema, updateTaskSchema, changeStageSchema } from '../agendor/crm/mutation-schemas';
 import { automationPolicySchema, capabilitySchema, stageKeySchema } from './policy-types';
 export { entityRefSchema, taskParentSchema, stageKeySchema };
@@ -92,6 +92,10 @@ const existingOrganization = z.strictObject({ kind: z.literal('organization'), i
 const existingPerson = z.strictObject({ kind: z.literal('person'), id: crmIdSchema });
 const existingDeal = z.strictObject({ kind: z.literal('deal'), id: crmIdSchema });
 export const mutationCommandSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ ...commandMeta, kind: z.literal('legacy_update_organization'), target: existingOrganization, patch: updateOrganizationInput }),
+  z.strictObject({ ...commandMeta, kind: z.literal('legacy_update_person'), target: existingPerson, patch: updatePersonInput }),
+  z.strictObject({ ...commandMeta, kind: z.literal('legacy_update_deal'), target: existingDeal, patch: updateDealInput }),
+  z.strictObject({ ...commandMeta, kind: z.literal('legacy_update_stage'), target: existingDeal, patch: updateDealStageInput }),
   z.strictObject({ ...commandMeta, kind: z.literal('create_organization'), payload: createOrganizationSchema }),
   z.strictObject({ ...commandMeta, kind: z.literal('create_person'), target: z.union([existingOrganization, z.strictObject({ kind: z.literal('organization'), commandKey: key })]).optional(), payload: createPersonSchema }).refine(v => !v.target || v.payload.organization === undefined, 'Use one explicit organization link.'),
   z.strictObject({ ...commandMeta, kind: z.literal('create_deal'), target: commandTargetSchema, payload: createDealRecordSchema }).refine(v => v.target.kind !== 'deal', 'Deal requires one company/person parent.'),
@@ -141,7 +145,7 @@ export const dealSnapshotSchema = z.strictObject({ ref: existingDeal, demandId: 
 export const workflowSnapshotSchema = z.strictObject({ conversations: z.array(conversationSnapshotSchema).max(100), candidates: customerCandidatesSchema, catalog: catalogSnapshotSchema, sourceRefs: internalSources.optional(), records: z.array(recordSnapshotSchema).max(1000).optional(), deals: z.array(dealSnapshotSchema).max(1000).optional() });
 export const preparedWorkSchema = z.strictObject({ workId: key, leaseToken: key, expiresAt: date, snapshotVersion: version, contextVersion: z.number().int().min(0), customerId: key, markdown: z.string().max(32768), snapshot: workflowSnapshotSchema, catalogVersion: key, coverage: coverageSchema });
 export const snapshotManifestSchema = z.strictObject({ workId: key, snapshotVersion: version, contextVersion: z.number().int().min(0), catalogVersion: key, readAt: date, sources: internalSources, messages: z.array(z.strictObject({ conversationId: positiveId, id: positiveId, revision: key, hash: key, direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']), senderType: z.string().max(80).optional(), senderId: positiveId.optional() })).max(10000), records: z.array(z.strictObject({ ref: taskParentSchema, revision: key, hash: key })).max(1000), coverage: coverageSchema });
-export const prepareResultSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('ready'), work: preparedWorkSchema }), z.strictObject({ state: z.literal('continue'), workId: key, continuation: key, manifest: snapshotManifestSchema, coverage: coverageSchema }), z.strictObject({ state: z.literal('deferred'), workId: key, retryAt: date }), z.strictObject({ state: z.literal('empty') }), z.strictObject({ state: z.literal('review'), workId: key, reviewIds: z.array(key).min(1) })]);
+export const prepareResultSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('ready'), work: preparedWorkSchema }), z.strictObject({ state: z.literal('continue'), workId: key, continuation: key, leaseToken: key.optional(), manifest: snapshotManifestSchema, coverage: coverageSchema }), z.strictObject({ state: z.literal('deferred'), workId: key, retryAt: date, leaseToken: key.optional(), continuation: key.optional() }), z.strictObject({ state: z.literal('empty') }), z.strictObject({ state: z.literal('review'), workId: key, reviewIds: z.array(key).min(1) })]);
 export const customerContextSchema = z.strictObject({ customerId: key, version, verifiedAt: date, markdown: z.string().refine(v => new TextEncoder().encode(v).length <= 32768, 'Context exceeds 32 KiB.'), evidenceRefs: internalSources });
 export const demandRecordSchema = z.strictObject({ demandId: key, customerId: key, clientKey: key, dealRef: existingDeal.optional(), references: z.array(demandReferenceSchema).max(100).optional(), service: z.string().min(1).max(300), scope: z.string().min(1).max(2000), state: z.enum(['open', 'won', 'lost']), sourceRefs: internalSources });
 const reasons = z.array(key).max(100);

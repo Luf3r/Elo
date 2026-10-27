@@ -37,7 +37,7 @@ export async function readRef(ref: CrmMutationRef, reads: ReconciliationReads): 
   }
 }
 export async function checkedReceipt(ledger: ExecutionCommand, ref: CrmMutationRef, deps: ReconciliationDeps): Promise<OperationReceipt | undefined> {
-  const expectedKind = ledger.command.kind === 'change_stage' ? 'deal' : ledger.command.kind === 'update_task' ? 'task' : ledger.command.kind.split('_')[1];
+  const expectedKind = ledger.command.kind.startsWith('legacy_') && 'target' in ledger.command && ledger.command.target && 'id' in ledger.command.target ? ledger.command.target.kind : ledger.command.kind === 'change_stage' ? 'deal' : ledger.command.kind === 'update_task' ? 'task' : ledger.command.kind.split('_')[1];
   if (ref.kind !== expectedKind) return;
   const record = await readRef(ref, deps.reads); const data = object(record);
   const desired = await desiredFields(ledger.command, ledger.operationId, deps.repository);

@@ -17,8 +17,11 @@ describe('Streamable HTTP MCP', () => {
     expect(response.status).toBe(200);
     expect(data.result.tools.map((t: { name: string }) => t.name)).toContain('server_status');
     for (const tool of data.result.tools) {
-      expect(tool.name).not.toMatch(/create|delete|send|upsert|archive|move|request|fetch/);
-      if (tool.name.startsWith('crm_update_')) {
+      expect(tool.name).not.toMatch(/delete|send|upsert|archive|move|request|fetch/);
+      if (tool.name.startsWith('crm_create_') || tool.name.startsWith('crm_enrich_') || tool.name === 'crm_update_task') {
+        expect(tool.annotations.readOnlyHint).toBe(false);
+        expect(tool._meta.securitySchemes).toEqual([{ type: 'oauth2', scopes: [tool.name.startsWith('crm_create_') ? 'crm:create' : 'crm:enrich'] }]);
+      } else if (tool.name.startsWith('crm_update_')) {
         expect(tool.description).not.toContain('Read-only');
         expect(tool.annotations.readOnlyHint).toBe(false);
         expect(tool._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['crm:write']}]);

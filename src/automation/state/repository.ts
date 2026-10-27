@@ -9,6 +9,9 @@ import { resolveDemands } from '../demands';
 import { OperationsStore } from '../operations';
 import type { OperationInput } from '../operations';
 import { automationPolicySchema } from '../policy-types';
+import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
+import type { AutomationPolicy } from '../types';
+import { reviewResolutionInputSchema } from '../schemas';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -29,6 +32,11 @@ export class AccountRepository {
   async prepareOperation(input: OperationInput) { return this.operations.prepareOperation(input); }
   getOperation(id: string) { return this.operations.getOperation(id); }
   getOperationByRequest(id: string) { return this.operations.getOperationByRequest(id); }
+  completeDirectOperation(id: string): void {
+    const operation = this.operations.getOperation(id);
+    if (!operation || operation.status.state !== 'applied' || !this.getWorkflow(operation.input.basis.lease.workId)?.direct) return;
+    this.sql.exec('UPDATE work SET expires_at = ? WHERE work_id = ? AND fence = ?', Date.now(), operation.input.basis.lease.workId, operation.input.basis.lease.fence);
+  }
   async reserveExecutionCommand(id: string, key: string) { return this.operations.reserveExecutionCommand(id, key); }
   getExecutionCommand(key: string) { return this.operations.getExecutionCommand(key); }
   beginDispatch(id: string, key: string) { return this.operations.beginDispatch(id, key); }
@@ -40,6 +48,65 @@ export class AccountRepository {
     return row ? automationPolicySchema.parse(JSON.parse(row.data)) : undefined;
   }
   private get sql() { return this.storage.sql; }
+  getWorkflow(workId: string): WorkflowState | undefined {
+    const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM events WHERE event_id = ?', 'workflow:' + workId).toArray()[0];
+    if (!row?.data || row.evidence_expires_at <= Date.now()) return;
+    return JSON.parse(row.data) as WorkflowState;
+  }
+  saveWorkflow(state: WorkflowState, expectedRevision: number): void {
+    this.storage.transactionSync(() => {
+      this.checkLease(state.lease);
+      const prior = this.getWorkflow(state.lease.workId);
+      if ((prior?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1) throw Error('STATE_VERSION_CONFLICT');
+      this.sql.exec('INSERT INTO events VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', 'workflow:' + state.lease.workId, 'workflow', JSON.stringify(state), Date.now() + EVIDENCE_RETENTION_MS);
+    });
+  }
+  getServicePlan(planId: string): { plan: SyncPlan; workflow: WorkflowState } | undefined {
+    const row = this.sql.exec<{ work_id: string; data: string | null; evidence_expires_at: number; valid: number }>('SELECT work_id, data, evidence_expires_at, valid FROM plans WHERE plan_id = ?', planId).toArray()[0];
+    if (!row?.valid || !row.data || row.evidence_expires_at <= Date.now()) return;
+    const workflow = this.getWorkflow(row.work_id);
+    if (!workflow) return;
+    return { plan: syncPlanSchema.parse(JSON.parse(row.data)), workflow };
+  }
+  updatePolicy(policy: AutomationPolicy, expectedVersion: number): AutomationPolicy {
+    const valid = automationPolicySchema.parse(policy);
+    return this.storage.transactionSync(() => {
+      if ((this.getExecutionPolicy()?.version ?? 1) !== expectedVersion || valid.version !== expectedVersion + 1) throw Error('POLICY_VERSION_CONFLICT');
+      this.sql.exec('INSERT INTO policy VALUES (1, ?, ?) ON CONFLICT(singleton) DO UPDATE SET version = excluded.version, data = excluded.data', valid.version, JSON.stringify(valid));
+      this.sql.exec('UPDATE plans SET valid = 0');
+      return valid;
+    });
+  }
+  putReview(review: WorkflowReview): void {
+    this.sql.exec('INSERT INTO reviews VALUES (?, ?, ?, ?, ?) ON CONFLICT(review_id) DO NOTHING', review.reviewId, review.workId, review.version, JSON.stringify(review), Date.now() + EVIDENCE_RETENTION_MS);
+  }
+  listReviews(input: ListReviewsInput, owner: WorkLease['owner']) {
+    const rows = this.sql.exec<{ data: string }>('SELECT data FROM reviews WHERE data IS NOT NULL AND evidence_expires_at > ? AND review_id > ? ORDER BY review_id', Date.now(), input.cursor ?? '').toArray();
+    const selected = rows.map(r => JSON.parse(r.data) as WorkflowReview).filter(r => r.state === 'open' && r.owner.userId === owner.userId && r.owner.clientId === owner.clientId && (!input.customerId || r.customerId === input.customerId));
+    const reviews = selected.slice(0, input.limit);
+    return { reviews, ...(selected.length > input.limit ? { cursor: reviews.at(-1)!.reviewId } : {}) };
+  }
+  resolveReview(raw: unknown, owner: WorkLease['owner']): WorkflowReview {
+    const input = reviewResolutionInputSchema.parse(raw);
+    return this.storage.transactionSync(() => {
+      const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM reviews WHERE review_id = ?', input.reviewId).toArray()[0];
+      if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('REVIEW_UNAVAILABLE');
+      const review = JSON.parse(row.data) as WorkflowReview;
+      if (review.owner.userId !== owner.userId || review.owner.clientId !== owner.clientId || review.version !== input.expectedVersion || review.state !== 'open') throw Error('REVIEW_VERSION_CONFLICT');
+      // A decision invalidates the old plan. A fresh preparation and analysis
+      // must bind any corrected facts/selection to current sources before apply.
+      const resolved: WorkflowReview = { ...review, state: 'resolved', version: review.version + 1, decision: input.decision };
+      this.sql.exec('UPDATE reviews SET data = ?, version = ? WHERE review_id = ?', JSON.stringify(resolved), resolved.version, review.reviewId);
+      this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', review.workId);
+      return resolved;
+    });
+  }
+  getServiceStatus(owner: WorkLease['owner']) {
+    const policy = this.getExecutionPolicy();
+    const pendingReviews = this.listReviews({ limit: 100 }, owner).reviews.length;
+    const pendingOperations = this.sql.exec<{ data: string }>('SELECT data FROM execution_operations').toArray().map(r => JSON.parse(r.data) as import('../operations').ExecutionOperation).filter(o => o.input.authorization.actor.userId === owner.userId && o.input.authorization.actor.clientId === owner.clientId && ['queued', 'running', 'uncertain'].includes(o.status.state)).length;
+    return { mode: policy?.mode ?? 'disabled' as const, policyVersion: policy?.version ?? 1, pendingReviews, pendingOperations };
+  }
   private work(id: string): WorkRow | undefined { return this.sql.exec<WorkRow>('SELECT * FROM work WHERE work_id = ?', id).toArray()[0]; }
   private liveWork(id: string): WorkRow {
     const row = this.work(id);
@@ -71,7 +138,9 @@ export class AccountRepository {
     const authorization = input.authorization;
     const plan = authorization.plan;
     const policy = this.getExecutionPolicy();
-    if (policy && (policy.mode !== 'apply' || policy.version !== plan.policyVersion || input.command.requiredCapabilities.some(c => !policy.capabilities.includes(c)))) throw Error('POLICY_CHANGED');
+    const direct = this.getWorkflow(input.lease.workId)?.direct;
+    if (direct && (canonical(direct.command) !== canonical(input.command) || input.command.requiredCapabilities.length !== 1 || input.command.requiredCapabilities[0] !== direct.capability)) throw Error('COMMAND_NOT_AUTHORIZED');
+    if (!direct && policy && (policy.mode !== 'apply' || policy.version !== plan.policyVersion || input.command.requiredCapabilities.some(c => !policy.capabilities.includes(c)))) throw Error('POLICY_CHANGED');
     const row = this.sql.exec<{ data: string | null; work_id: string; version: number; valid: number; fence: number | null; snapshot_version: number | null; context_version: number | null; catalog_version: string | null; evidence_expires_at: number }>('SELECT * FROM plans WHERE plan_id = ?', plan.planId).toArray()[0];
     if (!row?.valid || !row.data || row.evidence_expires_at <= Date.now() || row.work_id !== input.lease.workId || row.version !== plan.version || row.fence !== input.lease.fence || row.snapshot_version !== input.snapshotVersion || row.context_version !== input.contextVersion || row.catalog_version !== input.catalogVersion || canonical(JSON.parse(row.data)) !== canonical(plan)) throw Error('PLAN_STALE');
     this.checkBasis(input);
@@ -81,7 +150,7 @@ export class AccountRepository {
     const validUntil = Date.parse(authorization.validUntil);
     if (validUntil <= now || actor.expiresAt === undefined || actor.expiresAt <= now || validUntil > actor.expiresAt) throw Error('AUTHORIZATION_EXPIRED');
     const grants = authorization.commandCapabilities.find(command => command.commandKey === input.command.commandKey)?.capabilities;
-    if (actor.userId !== input.lease.owner.userId || actor.clientId !== input.lease.owner.clientId || !actor.scopes.includes('automation:process') || !grants || input.command.requiredCapabilities.some(capability => !grants.includes(capability) || !actor.scopes.includes(capability))) throw Error('COMMAND_NOT_AUTHORIZED');
+    if (actor.userId !== input.lease.owner.userId || actor.clientId !== input.lease.owner.clientId || !direct && !actor.scopes.includes('automation:process') || !grants || input.command.requiredCapabilities.some(capability => !grants.includes(capability) || !actor.scopes.includes(capability))) throw Error('COMMAND_NOT_AUTHORIZED');
   }
   private invalidate(workId: string) {
     this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', workId);

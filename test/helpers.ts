@@ -33,3 +33,4 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
 
 export function budgetMock(env: Env) { const mock = budgetMocks.get(env.AUTOMATION_STATE); if (!mock) throw Error('Use testEnv'); return mock; }
 export const allowBudget = async () => {};
+export const expandedCrmToolNames = ['crm_create_organization', 'crm_create_person', 'crm_create_deal', 'crm_create_task', 'crm_enrich_organization', 'crm_enrich_person', 'crm_enrich_deal', 'crm_update_task'];

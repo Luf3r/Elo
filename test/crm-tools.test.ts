@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
-import { testEnv, budgetMock } from './helpers';
+import { testEnv, budgetMock, expandedCrmToolNames } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 const names = ['crm_get_person', 'crm_get_task', 'crm_get_configuration', 'crm_find_person_by_email', 'crm_search_people', 'crm_search_organizations', 'crm_get_organization', 'crm_search_deals', 'crm_get_deal', 'crm_list_tasks', 'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization'];
 describe('CRM tool boundary', () => {
   it('registers CRM tools with strict schemas and separate read/write scopes', async () => {
     const { data } = await rpc('tools/list');
-    expect(data.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([...names, 'server_status'].sort());
+    expect(data.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([...names, ...expandedCrmToolNames, 'server_status'].sort());
     for (const t of data.result.tools) expect(t.inputSchema.additionalProperties).toBe(false);
-    for (const t of data.result.tools.filter((tool: { name: string }) => tool.name.startsWith('crm_update_'))) {
+    for (const t of data.result.tools.filter((tool: { name: string }) => tool.name.startsWith('crm_update_') && tool.name !== 'crm_update_task')) {
       expect(t._meta.securitySchemes).toEqual([{type:'oauth2',scopes:['crm:write']}]);
       expect(t.annotations.readOnlyHint).toBe(false);
     }
@@ -53,9 +53,9 @@ describe('CRM tool boundary', () => {
   });
   it('updates an existing deal only with crm:write and returns no record content', async () => {
     const fetch = vi.fn(async (request: Request) => {
-      expect(request.method).toBe('PUT');
       expect(new URL(request.url).pathname).toBe('/v3/deals/42');
-      expect(await request.json()).toEqual({ title: 'Renewal' });
+      if (request.method === 'PUT') expect(await request.json()).toEqual({ title: 'Renewal' });
+      else expect(request.method).toBe('GET');
       return Response.json({ data: { id: 42, title: 'Renewal', description: 'private text' } });
     });
     vi.stubGlobal('fetch', fetch);
@@ -64,7 +64,7 @@ describe('CRM tool boundary', () => {
     expect(data.result.isError).not.toBe(true);
     expect(JSON.parse(data.result.content[0].text)).toEqual({ id: 42, updatedFields: ['title'] });
     expect(JSON.stringify(data)).not.toContain('private text');
-    expect(budgetMock(env)).toHaveBeenCalledTimes(1);
+    expect(budgetMock(env)).toHaveBeenCalledTimes(2);
   });
   it('returns safe MCP errors without upstream error text', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('secret body unit-crm-token', { status: 503 })));
