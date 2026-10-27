@@ -5,6 +5,7 @@ import { positiveId } from './schemas';
 import type { CatalogCoverage, CatalogNamedEntry, CatalogPage, CatalogSnapshot, ConfigurationInput } from './types';
 
 const named = z.object({ id: positiveId, name: z.string() });
+const user = named.extend({ active: z.boolean().optional() });
 const stage = named.extend({ sequence: z.number().int().nonnegative(), funnel: z.object({ id: positiveId }).optional() });
 const field = z.object({ id: z.union([positiveId, z.string().min(1)]).optional(), name: z.string().optional(), type: z.string().optional(), options: z.array(z.unknown()).optional() }).passthrough();
 const normalized = (value: string) => value.normalize('NFKC').trim().toLowerCase();
@@ -39,6 +40,7 @@ export function normalizeCatalogPage(upstream: unknown, input: ConfigurationInpu
       const value = validated(stage, item);
       if (value.funnel && value.funnel.id !== input.funnelId) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Invalid upstream catalog scope.', false);
     } else if (input.section === 'customFields') validated(field, item);
+    else if (input.section === 'users') validated(user, item);
     else validated(named, item);
   }
   return {
@@ -77,7 +79,7 @@ export function createCatalogSnapshot(input: { accountId: string; pages: Catalog
         if (!page.entityType) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Missing catalog entity scope.', false);
         snapshot.customFields.push({ ...validated(field, item), entityType: page.entityType });
       } else if (page.section === 'funnels' || page.section === 'users' || page.section === 'products') {
-        const entry = validated(named, item);
+        const entry = page.section === 'users' ? validated(user, item) : validated(named, item);
         if (!snapshot[page.section].some(existing => existing.id === entry.id)) snapshot[page.section].push(entry);
       }
     }

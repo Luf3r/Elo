@@ -20,7 +20,7 @@ export interface CatalogPage extends PagedResult<Record<string, unknown>> {
   section: CatalogSection; entityType?: CatalogEntityType; funnelId?: number; state?: string;
   fetchedAt: string; coverage: CatalogCoverage;
 }
-export interface CatalogNamedEntry { id: number; name: string }
+export interface CatalogNamedEntry { id: number; name: string; active?: boolean }
 export interface CatalogStage extends CatalogNamedEntry { sequence: number; funnelId: number }
 export interface CatalogCustomField { id?: string | number; name?: string; type?: string; options?: unknown[]; entityType: CatalogEntityType; [key: string]: unknown }
 export interface CatalogSnapshot {

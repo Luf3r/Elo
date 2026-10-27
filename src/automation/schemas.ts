@@ -21,7 +21,7 @@ const factFields = {
   person: new Set(['name', 'role', 'email', 'phone', 'organization', 'description', 'birthday', 'ranking']),
   demand: new Set(['service', 'scope', 'title', 'description', 'value', 'startTime', 'ownerUser']),
 };
-const factObject = z.strictObject({ entity: z.enum(['organization', 'person', 'demand']), field: safeField, value: factValueSchema, sources: internalSources.min(1), certainty: z.enum(['confirmed', 'ambiguous']) });
+const factObject = z.strictObject({ entity: z.enum(['organization', 'person', 'demand']), clientKey: key.optional(), field: safeField, value: factValueSchema, sources: internalSources.min(1), certainty: z.enum(['confirmed', 'ambiguous']) });
 const allowedFactField = (v: z.infer<typeof factObject>) => factFields[v.entity].has(v.field) || /^customFields\.[a-zA-Z0-9_-]+$/.test(v.field);
 export const factSchema = factObject.refine(allowedFactField, 'Unsupported fact field.');
 export const submittedFactSchema = factObject.extend({ sources }).refine(allowedFactField, 'Unsupported fact field.');
@@ -30,9 +30,12 @@ const selectionSchema = z.union([entityRefSchema,
   z.strictObject({ kind: z.literal('new'), entity: z.literal('person'), record: createPersonSchema }),
 ]);
 const approachSchema = z.strictObject({ value: z.enum(['client', 'elotenant', 'unknown']), sources });
-const stageEvidenceSchema = z.strictObject({ value: stageKeySchema, sources });
+const stageEvent = z.enum(['request', 'preparation', 'internal_approval_pending', 'internal_approval_completed', 'proposal_sent', 'future_send', 'client_approval', 'proposal_received']);
+const stageActor = z.enum(['elotenant', 'client', 'third_party', 'unknown']);
+const stageObservation = z.strictObject({ demandKey: key, event: stageEvent, actor: stageActor, sources });
+const stageEvidenceSchema = z.strictObject({ value: stageKeySchema, sources, observations: z.array(stageObservation).max(100).optional() });
 const itemSchema = z.strictObject({ productId: crmIdSchema, quantity: z.number().finite().positive(), unitValue: z.number().finite().min(0).max(1_000_000_000_000).optional(), unit: z.string().min(1).max(80).optional(), discount: z.number().finite().min(0).max(100).optional(), sources });
-const commitmentSchema = z.strictObject({ text: z.string().min(1).max(2000), dueAt: date, assignedUserId: crmIdSchema.optional(), sources });
+const commitmentSchema = z.strictObject({ text: z.string().min(1).max(2000), dueAt: date.optional(), relativeDue: z.strictObject({ days: z.number().int().min(0).max(366), time: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/) }).optional(), type: createTaskRecordSchema.shape.type.optional(), assignedUserId: crmIdSchema.optional(), sources }).refine(v => (v.dueAt !== undefined) !== (v.relativeDue !== undefined), 'Provide one explicit due date or relative date.');
 const demandReferenceSchema = z.strictObject({ kind: z.enum(['order', 'proposal', 'project']), value: key, sources });
 export const demandAnalysisSchema = z.strictObject({ clientKey: key, existingDemandId: key.optional(), references: z.array(demandReferenceSchema).max(100).optional(), service: z.string().min(1).max(300), scope: z.string().min(1).max(2000), explicitRequest: z.strictObject({ value: z.boolean(), sources }), approach: approachSchema, stage: stageEvidenceSchema, items: z.array(itemSchema).max(100), commitments: z.array(commitmentSchema).max(100) });
 export const ambiguitySchema = z.strictObject({ code: key, description: z.string().min(1).max(2000), sources, clientKey: key.optional() });
@@ -40,7 +43,7 @@ export const agentAnalysisSchema = z.strictObject({ customerSelection: selection
 export const workTargetSchema = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('conversation'), conversationId: positiveId }), z.strictObject({ kind: z.literal('customer'), customerId: key }), z.strictObject({ kind: z.literal('pending') })]);
 export const prepareInputSchema = z.union([z.strictObject({ requestId: key, target: workTargetSchema, mode: z.enum(['preview', 'apply']) }), z.strictObject({ requestId: key, workId: key, leaseToken: key, continuation: key })]);
 export const analysisInputSchema = z.strictObject({ workId: key, leaseToken: key, expectedSnapshotVersion: version, expectedContextVersion: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), analysis: agentAnalysisSchema });
-export type AnalysisValidationContext = { sourceRefs: z.infer<typeof submittedSourceRefSchema>[]; candidates: z.infer<typeof entityRefSchema>[]; existingDemandIds: string[]; catalog: CatalogSnapshot };
+export type AnalysisValidationContext = { sourceRefs: z.infer<typeof submittedSourceRefSchema>[]; candidates: z.infer<typeof entityRefSchema>[]; existingDemandIds: string[]; catalog: CatalogSnapshot; policy?: z.infer<typeof automationPolicySchema> };
 /** Bind this to the persisted work, never to a manifest supplied by the agent. */
 export function createAnalysisInputSchema(context: AnalysisValidationContext) {
   return analysisInputSchema.superRefine((input, ctx) => {
@@ -61,15 +64,20 @@ export function createAnalysisInputSchema(context: AnalysisValidationContext) {
     };
     checkSources(input.analysis, ['analysis']);
     input.analysis.facts.forEach((fact, i) => {
+      if (fact.clientKey !== undefined && (fact.entity !== 'demand' || !input.analysis.demands.some(d => d.clientKey === fact.clientKey))) reject(['analysis', 'facts', i], 'Fact demand absent from analysis.');
       if (fact.entity === 'person' && fact.field === 'organization' && (!crmIdSchema.safeParse(fact.value).success || !knownEntity('organization', fact.value as number))) reject(['analysis', 'facts', i], 'Organization absent from snapshot.');
       if (fact.field === 'ownerUser' && !context.catalog.users.some(u => u.id === fact.value)) reject(['analysis', 'facts', i], 'User absent from catalog.');
       if (fact.field.startsWith('customFields.')) {
         const entity = { organization: 'organizations', person: 'people', demand: 'deals' } as const;
-        if (!customFieldMatchesCatalog({ id: fact.field.slice(13), value: fact.value }, entity[fact.entity], context.catalog)) reject(['analysis', 'facts', i], 'Invalid catalog field.');
+        const logical = fact.field.slice(13);
+        const mappings = context.policy?.customFieldMapping.filter(m => m.entity === entity[fact.entity] && m.field === logical) ?? [];
+        const id = mappings.length === 1 ? mappings[0]!.catalogFieldId : logical;
+        if (mappings.length > 1 || !customFieldMatchesCatalog({ id, value: fact.value }, entity[fact.entity], context.catalog)) reject(['analysis', 'facts', i], 'Invalid catalog field.');
       }
     });
     if (selection.kind === 'new') for (const f of selection.record.customFields ?? []) if (!customFieldMatchesCatalog(f, selection.entity === 'person' ? 'people' : 'organizations', context.catalog)) reject(['analysis', 'customerSelection'], 'Invalid catalog field.');
     input.analysis.demands.forEach((d, i) => {
+      d.stage.observations?.forEach((observation, j) => { if (observation.demandKey !== d.clientKey) reject(['analysis', 'demands', i, 'stage', 'observations', j], 'Stage evidence belongs to another demand.'); });
       if (d.existingDemandId && !context.existingDemandIds.includes(d.existingDemandId)) reject(['analysis', 'demands', i, 'existingDemandId'], 'Demand absent from work.');
       d.items.forEach((item, j) => { if (!context.catalog.products.some(p => p.id === item.productId)) reject(['analysis', 'demands', i, 'items', j], 'Product absent from catalog.'); });
       d.commitments.forEach((c, j) => { if (c.assignedUserId !== undefined && !context.catalog.users.some(u => u.id === c.assignedUserId)) reject(['analysis', 'demands', i, 'commitments', j], 'User absent from catalog.'); });
@@ -92,9 +100,9 @@ export const mutationCommandSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...commandMeta, kind: z.literal('enrich_person'), target: existingPerson, patch: enrichPersonSchema }),
   z.strictObject({ ...commandMeta, kind: z.literal('enrich_deal'), target: existingDeal, patch: enrichDealSchema }),
   z.strictObject({ ...commandMeta, kind: z.literal('update_task'), target: z.strictObject({ kind: z.literal('task'), id: crmIdSchema }), patch: updateTaskSchema }),
-  z.strictObject({ ...commandMeta, kind: z.literal('change_stage'), target: existingDeal, patch: changeStageSchema }),
+  z.strictObject({ ...commandMeta, kind: z.literal('change_stage'), target: z.union([existingDeal, z.strictObject({ kind: z.literal('deal'), commandKey: key })]), patch: changeStageSchema }),
 ]);
-export const syncPlanSchema = z.strictObject({ planId: key, version, policyVersion: version, workId: key, analysisRevision: version, orderedCommands: z.array(mutationCommandSchema).max(100), before: z.array(factSchema).max(500), after: z.array(factSchema).max(500), sourceRefs: internalSources, reviewIds: z.array(key).max(100), state: z.enum(['ready', 'review', 'noop']) }).superRefine((plan, ctx) => {
+export const syncPlanSchema = z.strictObject({ planId: key, version, policyVersion: version, workId: key, analysisRevision: version, orderedCommands: z.array(mutationCommandSchema).max(100), before: z.array(factSchema).max(500), after: z.array(factSchema).max(500), sourceRefs: internalSources, reviewIds: z.array(key).max(100), pendingFields: z.array(safeField).max(100).optional(), reviewReasons: z.array(key).max(100).optional(), state: z.enum(['ready', 'review', 'noop']) }).superRefine((plan, ctx) => {
   const previous = new Map<string, z.infer<typeof mutationCommandSchema>>();
   plan.orderedCommands.forEach((command, i) => {
     const fail = (message: string) => ctx.addIssue({ code: 'custom', path: ['orderedCommands', i], message });
@@ -128,7 +136,9 @@ const catalogSnapshotSchema = z.custom<CatalogSnapshot>(v => !!v && typeof v ===
 export const customerCandidateSchema = z.strictObject({ ref: entityRefSchema, name: z.string().min(1).max(255), document: z.string().max(30).optional(), email: z.email().optional(), phone: z.string().max(80).optional(), organizationIds: z.array(crmIdSchema).max(100), sourceRefs: internalSources });
 // Internal read metadata. This is never part of agentAnalysisSchema.
 export const customerCandidatesSchema = z.strictObject({ candidates: z.array(customerCandidateSchema).max(1000), coverage: coverageSchema, identifierCoverage: z.array(z.strictObject({ entity: z.literal('organization'), field: z.literal('cnpj'), value: key, coverage: coverageSchema })).max(100).optional(), customerId: key.optional(), verifiedLinks: z.array(z.strictObject({ ref: entityRefSchema, sourceRefs: internalSources.min(1) })).max(100).optional() });
-export const workflowSnapshotSchema = z.strictObject({ conversations: z.array(conversationSnapshotSchema).max(100), candidates: customerCandidatesSchema, catalog: catalogSnapshotSchema });
+const recordSnapshotSchema = z.strictObject({ ref: taskParentSchema, fields: z.array(factSchema).max(500), lastWritten: z.array(factSchema).max(500).optional(), lockedFields: z.array(safeField).max(100).optional() });
+export const dealSnapshotSchema = z.strictObject({ ref: existingDeal, demandId: key.optional(), revision: key, status: z.enum(['open', 'won', 'lost']), funnelId: crmIdSchema, stageId: crmIdSchema, stage: stageKeySchema, fields: z.array(factSchema).max(500), lastWritten: z.array(factSchema).max(500).optional(), lockedFields: z.array(safeField).max(100).optional() });
+export const workflowSnapshotSchema = z.strictObject({ conversations: z.array(conversationSnapshotSchema).max(100), candidates: customerCandidatesSchema, catalog: catalogSnapshotSchema, sourceRefs: internalSources.optional(), records: z.array(recordSnapshotSchema).max(1000).optional(), deals: z.array(dealSnapshotSchema).max(1000).optional() });
 export const preparedWorkSchema = z.strictObject({ workId: key, leaseToken: key, expiresAt: date, snapshotVersion: version, contextVersion: z.number().int().min(0), customerId: key, markdown: z.string().max(32768), snapshot: workflowSnapshotSchema, catalogVersion: key, coverage: coverageSchema });
 export const snapshotManifestSchema = z.strictObject({ workId: key, snapshotVersion: version, contextVersion: z.number().int().min(0), catalogVersion: key, readAt: date, sources: internalSources, messages: z.array(z.strictObject({ conversationId: positiveId, id: positiveId, revision: key, hash: key, direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']), senderType: z.string().max(80).optional(), senderId: positiveId.optional() })).max(10000), records: z.array(z.strictObject({ ref: taskParentSchema, revision: key, hash: key })).max(1000), coverage: coverageSchema });
 export const prepareResultSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('ready'), work: preparedWorkSchema }), z.strictObject({ state: z.literal('continue'), workId: key, continuation: key, manifest: snapshotManifestSchema, coverage: coverageSchema }), z.strictObject({ state: z.literal('deferred'), workId: key, retryAt: date }), z.strictObject({ state: z.literal('empty') }), z.strictObject({ state: z.literal('review'), workId: key, reviewIds: z.array(key).min(1) })]);
@@ -139,10 +149,9 @@ export const customerResolutionSchema = z.discriminatedUnion('kind', [z.strictOb
 export const demandResolutionSchema = z.strictObject({ demands: z.array(z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('resolved'), clientKey: key, demandId: key, sourceRefs: internalSources, reviewReasons: reasons }), z.strictObject({ kind: z.literal('create'), clientKey: key, demandId: key, sourceRefs: internalSources, reviewReasons: reasons }), z.strictObject({ kind: z.literal('review'), clientKey: key, sourceRefs: internalSources, reviewReasons: reasons.min(1) })])).max(100), reviewReasons: reasons });
 export const resolutionBundleSchema = z.strictObject({ customer: customerResolutionSchema, demands: demandResolutionSchema });
 export const plannerDecisionSchema = z.strictObject({ canCreateDeal: z.boolean(), pendingFields: z.array(safeField).max(100), commands: z.array(mutationCommandSchema).max(100), reviewReasons: reasons });
-export const dealSnapshotSchema = z.strictObject({ ref: existingDeal, revision: key, status: z.enum(['open', 'won', 'lost']), funnelId: crmIdSchema, stageId: crmIdSchema, stage: stageKeySchema, fields: z.array(factSchema).max(500) });
-export const stageEvidenceSchemaForDecision = z.strictObject({ demandId: key, requested: stageKeySchema, sourceRefs: internalSources.min(1), approach: z.enum(['client', 'elotenant', 'unknown']), explicitRequest: z.boolean() });
+export const stageEvidenceSchemaForDecision = z.strictObject({ demandId: key, requested: stageKeySchema, sourceRefs: internalSources.min(1), approach: z.enum(['client', 'elotenant', 'unknown']), explicitRequest: z.boolean(), funnelMapping: automationPolicySchema.shape.funnelMapping.optional(), mapping: automationPolicySchema.shape.stageMapping.optional(), catalog: catalogSnapshotSchema.optional(), observations: z.array(z.strictObject({ demandId: key, event: stageEvent, actor: stageActor, direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']), sources: internalSources.min(1) })).max(100).optional() });
 export const stageDecisionSchema = z.strictObject({ ref: existingDeal, patch: changeStageSchema.optional(), reviewReasons: reasons, sourceRefs: internalSources });
-export const fieldPatchInputSchema = z.strictObject({ ref: entityRefSchema.or(existingDeal), facts: z.array(factSchema).max(500), current: z.array(factSchema).max(500), catalog: catalogSnapshotSchema });
+export const fieldPatchInputSchema = z.strictObject({ ref: entityRefSchema.or(existingDeal), facts: z.array(factSchema).max(500), current: z.array(factSchema).max(500), catalog: catalogSnapshotSchema, policy: automationPolicySchema.optional(), lastWritten: z.array(factSchema).max(500).optional(), lockedFields: z.array(safeField).max(100).optional() });
 export const fieldPatchDecisionSchema = z.strictObject({ ref: taskParentSchema, patch: z.union([enrichOrganizationSchema, enrichPersonSchema, enrichDealSchema]).optional(), reviewReasons: reasons, sourceRefs: internalSources });
 export const contextProjectionSchema = z.strictObject({ customerId: key, version, verifiedAt: date, primaryRef: entityRefSchema.optional(), facts: z.array(factSchema).max(500), contacts: z.array(customerCandidateSchema).max(100), demands: z.array(demandRecordSchema).max(100), receipts: z.array(operationReceiptSchema).max(100), pendingReasons: reasons, pendingPlanIds: z.array(key).max(100).optional(), corrections: z.array(z.strictObject({ previous: factSchema, replacement: factSchema }).refine(v => v.previous.entity === v.replacement.entity && v.previous.field === v.replacement.field && v.replacement.certainty === 'confirmed', 'Correction must replace the same confirmed field.')).max(100).optional() });
 export const reserveWorkInputSchema = z.strictObject({ requestId: key, target: workTargetSchema, mode: z.enum(['preview', 'apply']), actor: actorSchema, payloadDigest: key });
