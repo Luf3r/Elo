@@ -1,27 +1,17 @@
 # Elo Agendor Remote MCP
 
-Worker TypeScript para consultar e atualizar campos permitidos do Agendor CRM e ler conversas do Agendor Chat, com Streamable HTTP em `/mcp` e `GET /health` público.
+Worker TypeScript com OAuth e Streamable HTTP em `/mcp`. A versão candidata local **0.1.2** oferece **42 ferramentas** quando CRM e Chat estão configurados, preservando as 15 anteriores. Ela prepara conversas, contexto Markdown e catálogo para interpretação pelo agente MCP; submete análises e executa planos somente com política, evidência e escopos válidos. Não requer API ou segredo de IA.
 
-Endpoint: [MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). A implementação OAuth conecta ChatGPT Plus e Zapia por autorização no navegador e código enviado ao e-mail do proprietário. Estado da publicação e evidências em [deployment](docs/deployment.md); instruções em [OAuth](docs/oauth-setup.md). Não inclua credenciais na URL.
+Endpoint existente: [MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). A ampliação local ainda **não foi publicada** neste rollout. A última publicação registrada, seus destinos e o gate de ativação estão em [deployment](docs/deployment.md). O [manifesto inicial](docs/rollout-pilot.json) mantém automação `disabled`, capacidades e alvos vazios; não autoriza chamadas remotas ou escrita.
 
-Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars`, preencha `AGENDOR_CRM_TOKEN` e `ACCESS_CLIENT_SECRET` localmente e execute `npm run dev`. Os endpoints OIDC públicos e os bindings ficam em `wrangler.jsonc`. Nunca envie tokens no chat nem use `vars` do Wrangler para credenciais. `MCP_TEST_TOKEN` não autentica a implementação OAuth.
+Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars` e preencha os secrets apenas localmente. `npm run dev` inicia o runtime; no Windows, `npm run dev:ephemeral` contorna falhas locais de persistência SQLite. OAuth usa KV, e o estado da automação usa Durable Object SQLite. O modo ephemeral perde esse estado ao encerrar. [OAuth e Access](docs/oauth-setup.md) explicam a conexão dos clientes. Nunca inclua credenciais em URLs ou em `vars` do Wrangler.
 
-## Dependências verificadas
+O fluxo é `automation_prepare_sync` → ler mensagens/contexto e cobertura → interpretar → `automation_submit_analysis` → `automation_apply_plan` somente em apply delegado → `automation_get_operation` → conferir contexto. Preview termina antes de apply. GET/contexto não criam registros; submit grava estado interno e plano, sem escrever CRM. Automação desabilitada não bloqueia ferramentas diretas já autorizadas por seus próprios escopos.
 
-Em 2026-10-21, a [documentação oficial](https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/) recomenda `createMcpHandler` com uma factory que cria um novo servidor por requisição. O pacote Agents 0.29.0 exige exatamente MCP SDK **2.3.1** em seus peer dependencies; usamos essa versão, em vez do 2.0.0 do exemplo antigo. Inspector **2.11.0** foi validado em substituição ao 2.10.1, que traz dependências vulneráveis (GHSA-jm63-cq47-j5jp e GHSA-6prh-2h8m-c8cw). O pool Workers antigo está descontinuado e seu runtime não suporta a data do projeto: usamos o sucessor oficial `@cloudflare/vitest-plugin` 1.4.6 com Vitest 4.1.12. `nodejs_compat` é necessário pelas dependências do Agents SDK. Todas as versões diretas são fixadas e `package-lock.json` é versionado.
+As ferramentas CRM incluem leitura, catálogo, criação e enriquecimento tipados, além das quatro atualizações legadas. Criação exige `crm:create`, enriquecimento `crm:enrich`; `crm:write` antigo não concede esses poderes. As oito ferramentas Chat exigem `chat:read`, usam conta fixa e apenas leitura. O [inventário exato e matriz de permissões](docs/operations.md) explicam os 42 nomes e sua disponibilidade condicional.
 
-## Agendor CRM
+Cobertura parcial do Chat, anexos indisponíveis, ambiguidades e semântica não comprovada permanecem pendências. Escrita de produtos/preços e substituição de coleções continuam bloqueadas. Sem comprovação da exclusividade do criador nativo e do vínculo conversa/caixa, mantenha preview. Não há declaração de automação comercial completa ou de piloto real concluído.
 
-Contrato consultado em 2026-10-21: [OpenAPI V3 oficial](https://api.agendor.com.br/v3/swagger.json), publicado pela [documentação do Agendor](https://api.agendor.com.br/docs/). A API usa `https://api.agendor.com.br/v3`, autenticação `Authorization: Token <token>), GETs e quatro PUTs fixos com `crm:write`. Pessoas, organizações, negócios e tarefas preservam a paginação documentada. A API real exige data inferior para tarefas, então `updatedDateGt` é obrigatório e limitado aos últimos 31 dias.
+Verificação offline: `npm test`, `npm run test:scripts`, `npm run typecheck`, `npm run build` e `npm run verify:automation`. Build é dry-run. O verificador de automação não chama rede por padrão; leitura real e piloto exigem opções e alvos deliberados. Veja [operação](docs/operations.md), [fluxo do agente](docs/agent-workflow.md), [recuperação e piloto](docs/automation-operations.md) e [contratos e limites](docs/automation-contracts.md).
 
-As ferramentas de atualização permitem apenas campos explicitamente listados em [crm-write-api](docs/crm-write-api.md); não expõem criação, exclusão, status ganho/perdido, propriedade, associação nem campos personalizados. Não há alteração de registro real durante a validação.
-
-## Agendor Chat
-
-Quatro rotas GET documentadas foram confirmadas com a chave local: perfil, lista de conversas, detalhe e mensagens. O MCP oferece `chat_list_conversations`, `chat_get_conversation` e `chat_list_messages`, todas com `chat:read`. A origem e autenticação são fixas; `AGENDOR_CHAT_TOKEN` é independente da chave CRM. O verificador confirma a estrutura sem exibir dados e salva localmente o `account_id` do perfil em `.dev.vars`. Siga o contrato em [docs/agendor-chat-api.md](docs/agendor-chat-api.md). A API retornou 25 conversas e 20 mensagens na página padrão; continuação ainda não foi confirmada, portanto as ferramentas não seguem páginas automaticamente.
-
-## Comandos
-
-`npm test`, `npm run test:scripts`, `npm run test:watch`, `npm run typecheck`, `npm run build`, `npm run test:contract`, `npm run verify:chat-contract`, `npm run inspector`, `npm run verify:mcp`, `npm run deploy`.
-
-Veja [operação e Inspector](docs/operations.md), [estado e procedimento de deploy](docs/deployment.md) e [evidências de implementação](docs/implementation-progress.md). No Windows, `npm run dev:ephemeral` contorna falhas do SQLite de persistência do runtime local.
+As dependências diretas são fixadas em `package.json`/`package-lock.json`: Agents 0.29.0 com SDK MCP 2.3.1, Inspector 2.11.0 e biblioteca OAuth 1.2.3. `src/version.ts` deriva a versão do pacote; a versão local não é um identificador de publicação Cloudflare.

@@ -1,67 +1,50 @@
 # Operação e verificação
 
-Requer Node >=22.19.0 e npm. Instale com `npm ci`. Copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN` (Agendor → Menu → Integrações) e `ACCESS_CLIENT_SECRET` da aplicação OIDC. Nunca cole credenciais em issues, histórico de comandos ou chat. Veja [OAuth e configuração Access](oauth-setup.md).
+Requer Node >=22.19.0. Instale com `npm ci`, copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET` e, para Chat/automação, `AGENDOR_CHAT_TOKEN` e o account ID já verificado. Secrets não entram em argumentos, URLs, logs ou arquivos versionados. O token fixo `MCP_TEST_TOKEN` não autentica OAuth. Veja [configuração OAuth](oauth-setup.md).
 
-## Execução local
+Use `npm run dev`; `npm run dev:ephemeral` é a alternativa Windows sem persistência local. KV OAuth e SQLite da automação ficam temporários nesse modo. O callback Access existente aponta para produção; login local exige um callback de desenvolvimento deliberadamente configurado. `/health` é liveness público e não consulta o Agendor. `/mcp` exige identidade autorizada, access token válido e audiência correta; os escopos são verificados também por ferramenta.
 
-Use `npm run dev` e acesse `http://localhost:8787/health`. No Windows, caso workerd falhe com persistência SQLite, use `npm run dev:ephemeral`: mesmo runtime/bindings, com persistência de desenvolvimento desativada. O MCP continua stateless por requisição, mas OAuth usa KV para concessões; esse KV local é temporário no modo ephemeral. O callback Access desta instalação aponta para produção; um login OIDC local exige uma aplicação/callback de desenvolvimento deliberadamente configurados.
+## Inventário candidato: 42 ferramentas
 
-`GET /health` não exige token e não consulta o Agendor. `/mcp` exige access token OAuth válido, audiência MCP, identidade do proprietário e validade do token. Cada ferramenta também verifica o escopo próprio: `crm:read`, `chat:read` ou `crm:write`. `server_status` não precisa de escopo de produto. Um escopo não concede os outros. Clientes existentes precisam refazer a autorização para pedir novas permissões. `MCP_TEST_TOKEN` não autentica essa implementação.
+Com CRM e Chat configurados, o catálogo tem 42 nomes: 15 preservados e 27 adicionais (o inventário final inclui `automation_list_audit`). A coluna abaixo contém todos os nomes, cada um uma vez. Escopos anunciam o mínimo; apply também deriva os escopos de cada comando, sem confiar na declaração do chamador.
 
-## Inspector
+| Grupo / quantidade | Nomes | Escopos OAuth |
+|---|---|---|
+| Status / 1 | `server_status` | token autenticado, sem escopo de produto |
+| Leitura CRM / 10 | `crm_find_person_by_email`, `crm_search_people`, `crm_get_person`, `crm_search_organizations`, `crm_get_organization`, `crm_search_deals`, `crm_get_deal`, `crm_list_tasks`, `crm_get_task`, `crm_get_configuration` | `crm:read` |
+| Atualização legada / 4 | `crm_update_deal`, `crm_update_deal_stage`, `crm_update_person`, `crm_update_organization` | `crm:write` |
+| Criação CRM / 4 | `crm_create_organization`, `crm_create_person`, `crm_create_deal`, `crm_create_task` | `crm:create` |
+| Enriquecimento CRM / 4 | `crm_enrich_organization`, `crm_enrich_person`, `crm_enrich_deal`, `crm_update_task` | `crm:enrich` |
+| Leitura Chat / 8 | `chat_list_conversations`, `chat_get_conversation`, `chat_list_messages`, `chat_search_contacts`, `chat_get_contact`, `chat_list_contact_conversations`, `chat_list_attachments`, `chat_get_attachment` | `chat:read` |
+| Preparação e análise / 2 | `automation_prepare_sync`, `automation_submit_analysis` | `automation:process` + `chat:read` + `crm:read` |
+| Aplicação / 1 | `automation_apply_plan` | `automation:process` + capacidades CRM de todos os comandos |
+| Estado e auditoria / 3 | `automation_get_operation`, `automation_get_status`, `automation_list_audit` | `automation:read` |
+| Contexto e revisões / 2 | `automation_get_customer_context`, `automation_list_reviews` | `automation:read` + `chat:read` + `crm:read` |
+| Decisão e reprocessamento / 2 | `automation_resolve_review`, `automation_reprocess` | `automation:manage` + `chat:read` + `crm:read` |
+| Política / 1 | `automation_update_policy` | `automation:manage` + capacidades CRM que habilitar |
 
-`npm run inspector` inicia o Inspector **2.11.0 fixado localmente**. Escolha Streamable HTTP, URL de produção `/mcp` e autenticação OAuth. Não salve credenciais em configuração versionada.
+As 15 preservadas são status, sete leitores CRM anteriores, quatro updates e três leitores Chat anteriores. Sem secret CRM, create/enrich não são registrados. Sem token Chat e account ID numérico, as oito ferramentas Chat não são registradas; automação exige também CRM configurado. Leitores CRM/status/updates permanecem registrados, mas configuração ausente falha fechada. `tools/list` não transforma uma concessão antiga em nova autorização.
 
-Para verificação reproduzível, execute `npm run verify:oauth`, `npm run oauth:login`, conclua o login no navegador e execute `npm run verify:mcp`. A sessão fica em arquivo local ignorado. O Inspector usa o token somente em memória, verifica saúde e dois casos401, oito ferramentas, status e quatro consultas CRM reais. A saída contém apenas contagens/verificações; não há configuração Inspector com tokens.
+Reautorize cada cliente apenas para os escopos necessários. Preview requer `automation:process`, `automation:read`, `crm:read`, `chat:read`; não conceda criação/enriquecimento/gestão para esse ensaio. Gestão de política requer concessão separada. `crm:write`, `crm:create`, `crm:enrich` e `automation:process` não implicam uns aos outros.
 
-Para o Worker publicado, defina `MCP_URL` com a URL real `https://<worker>.<subdomínio>.workers.dev/mcp` e execute o mesmo comando. Só são aceitos endereços locais HTTP ou `workers.dev` HTTPS, sem query ou credenciais na URL. O token local deve corresponder ao secret de produção.
+## Entradas e limites
 
-## Ferramentas
+Schemas são estritos e não aceitam HTTP arbitrário, conta ou owner alternativo. Leitores por ID exigem inteiros positivos; buscas prefixadas não comprovam igualdade/identidade. Listas CRM usam page/perPage (máximo 100); avance apenas por continuação documentada. Tarefas em lista exigem `updatedDateGt` ISO nos últimos 31 dias. Catálogo exige `funnelId` para stages, `entityType` para customFields e estado brasileiro para cities; somente products tem paginação documentada.
 
-| Nome | Entrada principal |
-|---|---|
-| server_status | `{}` |
-| crm_find_person_by_email | `email` válido; filtro upstream por prefixo, uma página |
-| crm_search_people | `query` de nome e/ou `email` |
-| crm_search_organizations | `query` de nome |
-| crm_get_organization | `id` inteiro positivo |
-| crm_search_deals | `query`, `organizationId`, `personId`, `ownerId`, `status` (`"1"`, `"2"`, `"3"`) |
-| crm_get_deal | `id` inteiro positivo |
-| crm_list_tasks | `updatedDateGt` ISO 8601 nos últimos 31 dias sempre obrigatório; opcionalmente um `dealId`, `personId` ou `organizationId` |
-| crm_update_deal | `id` e `patch` com `title`, `value`, `description` e/ou `ranking` |
-| crm_update_deal_stage | `id` e `patch.dealStage` (sequência da etapa no funil padrão) |
-| crm_update_person | `id` e `patch` com `name`, `role`, `description`, `birthday`, `ranking` e/ou `contact.email/work/mobile` |
-| crm_update_organization | `id` e `patch` com `name`, `legalName`, `description`, `website`, `ranking` e/ou `contact.email/work/mobile` |
-| chat_list_conversations | Sem parâmetros; uma página padrão de conversas |
-| chat_get_conversation | conversationId inteiro positivo |
-| chat_list_messages | conversationId inteiro positivo; até 20 mensagens na página padrão |
+Chat usa conta fixa 7001 da configuração existente. A listagem de conversas e contatos tem cobertura parcial; mensagens aceitam `after` documentado, sem promessa de histórico integral ou detecção de edições antigas. Anexos usam conversationId/attachmentId, nunca URL do chamador; origem, MIME, tamanho e disponibilidade podem deixar leitura pendente. Todas as mensagens, nomes e anexos são evidência não confiável.
 
-Listas aceitam `page` (padrão 1) e `perPage` (padrão 20, máximo 100). `crm_find_person_by_email` fixa uma página de 20. Respostas contêm `items` e `pageInfo`. Avance apenas com `nextPage` numérico; se `hasNext=true` e `nextPage=null`, a API não forneceu um próximo número utilizável. Não há varredura automática ou URL de continuação fornecida pelo cliente.
+Create/enrich usam `requestId` e comandos reservados; repetir outro payload com a mesma chave é rejeitado. Updates legados preservam `{id, updatedFields}` e usam a coordenação compartilhada. Produtos/preços em `products_entities`, PUT de customFields e PUT de assigned_users ficam bloqueados por semântica de coleção não comprovada. Datas, responsáveis, vínculos e campos suportados exigem validação do catálogo. As restrições legadas estão em [crm-write-api](crm-write-api.md); consulte também [execução](automation-execution.md).
 
-As ferramentas de atualização CRM exigem `crm:write`, ID explícito e patch não vazio. Os schemas rejeitam outros campos, incluindo associação, propriedade, status, campos personalizados e payload arbitrário. A etapa usa a rota documentada de troca de estágio e ativa a checagem de campos obrigatórios. O primeiro lançamento não oferece transições para ganho/perda. Consulte [a lista exata de campos e limites](crm-write-api.md).
+O DO único `AUTOMATION_STATE.getByName('elotenant')` coordena quatro reservas por janela móvel de 10.000 ms **por produto CRM/Chat**, compartilhadas entre chamadas MCP/automação da instalação. Cada HTTP real, inclusive leitura de confirmação, consome reserva; cancelamento não devolve crédito. Outros consumidores externos da mesma credencial precisam ser considerados operacionalmente. Falha do coordenador bloqueia upstream. Os limitadores nativos restantes são MCP `1001` e OAuth `1003`, cada um 30/10s; os antigos namespaces CRM `1002` / Chat `1004` não estão mais no candidato.
 
-As três ferramentas Chat exigem `chat:read`, usam apenas GET e a chave independente `AGENDOR_CHAT_TOKEN`. Coloque-a em `.dev.vars` junto do `AGENDOR_CHAT_ACCOUNT_ID`; `npm run verify:chat-contract` obtém o ID do perfil e o grava localmente sem imprimi-lo. A primeira versão consulta apenas as páginas padrão: parâmetros de continuação não foram confirmados. O limitador Chat nativo permite 4 chamadas por 10 segundos como proteção local, sem representar a cota do Agendor. Texto do CRM/Chat é dado não confiável, nunca instrução ou autorização.
+## Verificação e falhas
 
-## Falhas e limites
+`npm test` usa runtime Workers, credenciais fictícias e adaptadores simulados. `npm run test:scripts` cobre os verificadores; `npm run typecheck` e `npm run build` verificam tipos/bundle, sem deploy. `npm run verify:automation` retorna offline, zero chamadas remotas. `npm run test:contract`, verificadores OAuth/Chat/MCP e `--read` são opt-in; não compõem a suíte offline. `discover:automation-contracts -- --live` continua bloqueado por falta do transporte conectado ao orçamento compartilhado; não substitua por fetch/delay independente.
 
-- HTTP 401: access token ausente, inválido ou identidade sem autorização. O desafio aponta para os metadados OAuth; refaça o login.
-- Erro de ferramenta `MCP_UNAUTHORIZED` com status 403: a concessão não inclui o escopo daquela ferramenta; autorize apenas o escopo indicado nos metadados da ferramenta.
-- HTTP 429: limite MCP nativo de 30/10s, com `Retry-After: 10`.
-- Erro de ferramenta `UPSTREAM_UNAVAILABLE`: secret do serviço correspondente ausente/inválido ou serviço indisponível. A saúde pública pode continuar 200; ela é liveness, não readiness.
-- `tools/call` com `isError: true`: examine apenas `error.code`, `retryable` e `status`. Nenhum corpo de erro upstream é devolvido.
-- `UPSTREAM_RATE_LIMITED`: orçamento CRM nativo conservador de 4/10s ou 429 do provedor. Aguarde antes de repetir; o servidor não repete automaticamente. Não há garantia global estrita entre datacenters com esse binding aproximado.
-- `UPSTREAM_TIMEOUT`: limite de 10s inclui corpo da resposta. `UPSTREAM_UNAVAILABLE` cobre falha de rede/5xx. `UPSTREAM_INVALID_RESPONSE` cobre JSON/formato inválido. 401/403/404 upstream têm códigos próprios.
+`npm run inspector` usa Inspector 2.11.0 local, Streamable HTTP e OAuth. Os scripts `verify:mcp` e os números antigos de produção são evidência histórica do catálogo anterior; não comprovam as 42 ferramentas locais. Para a ampliação, execute os testes `mcp`, `automation-tools`, `crm-new-tools`, `automation-scopes` e `automation-e2e`; eles verificam tools/list, chamadas válidas/inválidas, concessões antigas/novas e preview com cliente MCP real e rede bloqueada. O ensaio remoto ainda depende de autorização de alvos em [deployment](deployment.md).
 
-Os namespaces 1001/1002/1003/1004 precisam ser únicos na conta Cloudflare. O namespace Chat 1004 limita 4 chamadas/10s por localização como proteção local, não como quota do provedor. Aplique limites considerando outros consumidores do mesmo token Agendor. O terceiro limita login/registro, sem consumir o orçamento CRM.
+HTTP 401 exige nova autenticação; `MCP_UNAUTHORIZED` 403 exige o escopo anunciado. HTTP 429 MCP usa Retry-After 10s; `UPSTREAM_RATE_LIMITED` indica orçamento compartilhado ou provedor. `UPSTREAM_TIMEOUT` cobre até 10s incluindo corpo; erros upstream são sanitizados. `isError:true`, cobertura incompleta, review, deferred ou uncertain nunca significam sincronização completa. Resultado MCP JSON acima de 512 KiB falha fechado; o verificador limita continuações a dez e respeita deferred/retryAt.
 
-## Testes e registros
+Logs técnicos guardam códigos/contagens/IDs internos, sem headers, corpos, Markdown, mensagens, tokens ou leases. Observabilidade está habilitada com `invocation_logs:false`; não habilite captura de payloads. Contexto e evidências expiram após 90 dias, preservando tombstones e deduplicação. Recuperação, pausa, retenção e limitações estão em [automation-operations](automation-operations.md).
 
-`npm test` executa testes isolados no runtime Workers com credenciais fictícias; não depende de conta real. `npm run test:scripts` executa testes dos verificadores locais. `npm run typecheck` verifica os tipos. `npm run build` faz bundle dry-run.
-
-`npm run test:contract` é opt-in, carrega o token de `.dev.vars` e faz somente GETs sequenciais com pelo menos 350ms entre chamadas. Sem credencial, os testes reais são explicitamente pulados. Fixture de organização/negócio é descoberta por uma leitura de uma página, sem criar registros. 429 é testado por mocks: não provocamos excesso no Agendor. O contrato Chat é explicitamente pulado enquanto o gate estiver bloqueado.
-
-Não há logging de payloads, headers, tokens ou registros. Observabilidade automática está desligada. Para uma inspeção ao vivo use `npx wrangler tail --format json` durante chamadas controladas, sem registrar requisições/headers. Nunca compartilhe dumps de ambientes. Os scripts de verificação não exibem conteúdo de clientes.
-
-## Rotação
-
-Access tokens expiram em uma hora; `offline_access` permite renovação por 35 dias contados da autorização inicial. Renovar o access token não estende esse prazo. Refaça conexões expiradas e use o endpoint de revogação anunciado para revogar a credencial do cliente. Para a credencial do Access, o proprietário gera novo Client Secret na aplicação OIDC e atualiza o secret correspondente no Worker. Para Agendor CRM, obtenha novo token e atualize `AGENDOR_CRM_TOKEN`. A chave Chat, quando validada, usa `AGENDOR_CHAT_TOKEN` separada; não reutilize nem copie o token CRM. Não restaure o token fixo como solução automática para falhas OAuth.
+Access tokens duram até 1h; `offline_access` permite renovação por 35 dias desde a autorização inicial. A autorização de execução persiste só identidade/escopos/expiração por até cinco minutos, sem bearer. Para rotacionar use os fluxos de secrets/OAuth existentes; não restaure token fixo como correção de login.

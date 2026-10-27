@@ -1,10 +1,13 @@
 AGENDOR_CRM_TOKEN="replace-me"
 ACCESS_CLIENT_SECRET="replace-me"
-# Access public OIDC endpoints are in wrangler.jsonc.
-# MCP_TEST_TOKEN is retired from production; retain only for an explicit rollback.
-# Chat reads are enabled only after the local key and numeric account ID are configured.
-# After confirming this key is the Agendor Chat api_access_token, store it locally here:
-# AGENDOR_CHAT_TOKEN=""
-# Set the numeric account_id observed in the sanitized profile response; never put it in client configuration.
-# AGENDOR_CHAT_ACCOUNT_ID=""
-# AGENDOR_CHAT_CONVERSATION_ID=""
+# Optional independent Agendor Chat api_access_token; never reuse the CRM token.
+# AGENDOR_CHAT_TOKEN="replace-me"
+# Existing verified account ID is fixed by wrangler.jsonc; do not select another account here.
+# AGENDOR_CHAT_ACCOUNT_ID="7001"
+# Access public OIDC endpoints and infrastructure bindings are in wrangler.jsonc.
+# No OpenAI/LLM secret is required. Never put credentials in URLs or Wrangler vars.
+# AUTOMATION_CHAT_HINTS_ENABLED remains false (unsigned hint ingress is not a verified webhook).
+# Application mode/capabilities/mappings/inbox allowlist/native creator state live in
+# the versioned Durable Object policy, not environment variables. Initial policy is disabled.
+# docs/rollout-pilot.json is a non-authorizing, empty-target rollout manifest.
+# MCP_TEST_TOKEN is retired and does not authenticate OAuth.

@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 1,
+  "status": "prepared_not_authorized",
+  "applicationVersion": "0.1.2",
+  "cloudflareDeploymentVersion": null,
+  "worker": "elo-agendor-mcp",
+  "mcpEndpoint": "https://elo-agendor-mcp.example.workers.dev/mcp",
+  "accountKey": "elotenant",
+  "chatAccountId": "7001",
+  "remoteReadAuthorized": false,
+  "writeAuthorized": false,
+  "approvedBy": null,
+  "expiresAt": null,
+  "requestId": null,
+  "conversations": [],
+  "records": [],
+  "operations": [],
+  "nativeCreatorEvidence": [],
+  "policy": {
+    "version": 1,
+    "mode": "disabled",
+    "allowedInboxIds": [],
+    "capabilities": [],
+    "funnelMapping": {},
+    "stageMapping": [],
+    "customFieldMapping": [],
+    "nativeCreatorDisabled": false,
+    "limits": { "maxConversations": 10, "maxCommands": 20, "maxRequests": 20 }
+  }
+}
