@@ -22,7 +22,7 @@ export function resolveDemands(input: AgentAnalysis, customer: CustomerResolutio
     const match = proven[0];
     if (match) {
       if (match.state !== 'open') return review('DEMAND_CLOSED_REQUIRES_REVIEW');
-      return { kind: 'resolved', clientKey: request.clientKey, demandId: match.demandId, sourceRefs: uniqueSources([...sourceRefs, ...match.sourceRefs]), reviewReasons: [] };
+      return { kind: 'resolved', clientKey: request.clientKey, demandId: match.demandId, sourceRefs, reviewReasons: [] };
     }
     if (!request.explicitRequest.value) return review('EXPLICIT_REQUEST_REQUIRED');
     const earlier = created.filter(d => references.some(r => d.references.some(previous => sameReference(r, previous))));

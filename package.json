@@ -21,7 +21,8 @@
     "oauth:login": "node scripts/oauth-login.mjs",
     "verify:oauth": "node scripts/verify-oauth.mjs",
     "oauth:stage-secret": "node scripts/stage-oauth-secret.mjs",
-    "test:scripts": "node --test test/oauth-scripts.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs",
+    "test:scripts": "node --test test/oauth-scripts.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs test/automation-verifier.test.mjs",
+    "verify:automation": "node scripts/verify-automation-mcp.mjs",
     "discover:automation-contracts": "node scripts/discover-automation-contracts.mjs",
     "verify:chat-contract": "node scripts/verify-chat-contract.mjs",
     "cf:login": "wrangler login",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.4.6",
     "@cloudflare/workers-types": "5.20261021.1",
+    "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/inspector": "2.11.0",
     "@types/node": "26.6.5",
     "typescript": "7.0.2",

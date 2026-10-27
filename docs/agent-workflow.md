@@ -1,6 +1,6 @@
 # Fluxo do agente no MCP
 
-Com CRM e Chat configurados, `tools/list` publica 41 ferramentas: as 15 originais e 26 adicionais de catálogo, leitura, anexos, cadastro e automação. As ferramentas de Chat e automação dependem da configuração do Chat; criação e enriquecimento dependem do CRM. Descoberta de ferramentas não concede permissões.
+Com CRM e Chat configurados, `tools/list` publica 42 ferramentas: as 15 originais e 27 adicionais de catálogo, leitura, anexos, cadastro e automação. As ferramentas de Chat e automação dependem da configuração do Chat; criação e enriquecimento dependem do CRM. Descoberta de ferramentas não concede permissões.
 
 1. Chame `automation_prepare_sync` com `requestId`, um alvo explícito de conversa/cliente e `mode:"preview"` ou `mode:"apply"`. O alvo `pending` é recusado até existir uma seleção determinística de trabalho pendente; nenhuma conversa é escolhida arbitrariamente.
 2. Se receber `continue` ou `deferred`, reutilize `workId`, `leaseToken` e `continuation` retornados. Respeite `retryAt`. A continuação pertence ao trabalho e ao cliente OAuth; ela não é um cursor livre da API.
@@ -25,3 +25,13 @@ Use `automation_list_reviews` com `limit` e o `cursor` retornado. `automation_re
 `automation_update_policy` exige `expectedVersion` e um patch fechado. Mudanças invalidam planos anteriores. A política inicial é desabilitada; preview continua disponível para inspeção. `automation_reprocess` aceita um alvo explícito e intervalo de tempo validado, preparando novamente em preview; mensagens sem data verificável ficam fora do intervalo e a lacuna é declarada.
 
 As rotas de Chat atualmente verificadas não comprovam descoberta ou histórico exaustivos. Essa cobertura parcial bloqueia inferências de ausência e aplicação automática; ela não é convertida em certeza pelo serviço. Anexos não lidos permanecem pendentes. As ferramentas oferecem um protocolo explícito, mas não garantem que todo cliente agente o seguirá.
+
+## Dados recebidos depois
+
+Após confirmação, os recibos vinculam cliente e demanda aos IDs efetivamente conferidos. Uma nova conversa pode reutilizar o mesmo cliente quando o vínculo canônico do contato do Chat aponta para esse ID confirmado; nome semelhante sozinho continua exigindo revisão. O preparo lê novamente os candidatos e negócios vinculados, com hashes, campos atuais e últimos valores automatizados. Os GETs adicionais respeitam o limite por chamada e podem produzir `continue`.
+
+Um número explícito de pedido/proposta/projeto pode ligar o complemento à demanda anterior. O agente cita as fontes da nova conversa e mantém a referência comprovada; não cria outro negócio para preencher preço, contato ou escopo. Estado, funil ou etapa sem correspondência única no catálogo ficam pendentes. O Markdown é um resumo: dados mutáveis vêm do snapshot atual. Uma edição humana entre preparo e execução invalida o hash observado e segue para revisão.
+
+## Ensaio com cliente MCP
+
+`npm test -- test/automation-e2e.test.ts` usa o cliente SDK MCP 2.3.1 com negociação HTTP/OAuth real dentro do runtime de teste. A interpretação é um roteiro sintético explícito, sem API de modelo; adaptadores CRM/Chat são simulados e qualquer acesso de rede não previsto falha. Os cenários cobrem pessoa/empresa parcial, pedido sem preço, quatro etapas, Passivo/Ativo, tarefas, dois pedidos, complemento por outra conversa, contexto desatualizado, anexos não lidos, instruções maliciosas, homônimo, edição humana, replay, incerteza e retenção. Isso verifica encadeamento e permissões do protocolo; a qualidade da interpretação de conversas reais continua pertencendo ao piloto delimitado.

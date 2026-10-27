@@ -1,5 +1,5 @@
 import type { CatalogSnapshot } from '../../src/agendor/crm/types';
-import type { AnalysisInput, AnalysisValidationContext, MutationCommand, SyncPlan } from '../../src/automation/types';
+import type { AgentAnalysis, AnalysisInput, AnalysisValidationContext, MutationCommand, PreparedWork, SyncPlan } from '../../src/automation/types';
 export const catalogFixture: CatalogSnapshot = {
   version: 'catalog-1', accountId: 'synthetic-account', fetchedAt: '2026-10-26T10:00:00Z',
   funnels: [{ id: 1, name: 'Synthetic funnel' }], stages: [{ id: 2, name: 'Synthetic stage', sequence: 1, funnelId: 1 }],
@@ -24,3 +24,14 @@ export const validAnalysisInput: AnalysisInput = {
 };
 export const validCommand: MutationCommand = { kind: 'create_organization', commandKey: 'company-create', payload: { name: 'Synthetic Organization' }, dependencies: [], before: [], sourceRefs: [{ kind: 'message', id: '101:201', revision: 'message-rev-1' }], requiredCapabilities: ['crm:create'] };
 export const validPlan: SyncPlan = { planId: 'plan-1', version: 1, policyVersion: 1, workId: 'work-1', analysisRevision: 1, orderedCommands: [validCommand], before: [], after: [], sourceRefs: [{ kind: 'message', id: '101:201', revision: 'message-rev-1' }], reviewIds: [], state: 'ready' };
+
+/** Scripted agent interpretation of synthetic messages; no model API involved. */
+export function scenarioAnalysis(work: PreparedWork, entity: 'organization' | 'person' = 'organization'): AgentAnalysis {
+  const source = { ...work.snapshot.sourceRefs!.find(s => s.kind === 'message')!, kind: 'message' as const };
+  return {
+    customerSelection: { kind: 'new', entity, record: { name: 'Synthetic Customer' } },
+    facts: [{ entity, field: 'name', value: 'Synthetic Customer', certainty: 'confirmed', sources: [source] }],
+    demands: [{ clientKey: 'request-a', service: 'Water analysis', scope: 'Four samples; collection to be confirmed', explicitRequest: { value: true, sources: [source] }, approach: { value: 'client', sources: [source] }, stage: { value: 'new_request', sources: [source] }, items: [], commitments: [] }],
+    ambiguities: [],
+  };
+}

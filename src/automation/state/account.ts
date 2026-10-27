@@ -58,6 +58,8 @@ export class AutomationAccount extends DurableObject<Env> {
   async saveContextProjection(projection: ContextProjection, basis: PlanBasis) { return this.repository.saveContextProjection(projection, basis); }
   async refreshCustomerContext(customerId: string, expectedVersion: number) { return this.repository.refreshCustomerContext(customerId, expectedVersion); }
   async getCustomerDemand(customerId: string, demandId: string) { return this.repository.getCustomerDemand(customerId, demandId); }
+  async getPreparationBasis(customerId: string) { return this.repository.getPreparationBasis(customerId); }
+  async findLinkedCustomer(refs: CustomerCandidates['verifiedLinks']) { return this.repository.findLinkedCustomer(refs); }
   async resolveWork(analysis: AgentAnalysis, candidates: CustomerCandidates, catalog: CatalogSnapshot, basis: PlanBasis) { return this.repository.resolveWork(analysis, candidates, catalog, basis); }
   async reserveCommand(input: CommandReservation) { return this.repository.reserveCommand(input); }
   async completeCommand(input: CommandCompletion) { return this.repository.completeCommand(input); }

@@ -17,6 +17,7 @@ import { payloadDigest } from './operations';
 import { runPlan } from './executor';
 import { reconcileCommand } from './reconciliation';
 import { createQueueExecutionDeps, enqueueOperation } from './queue';
+import { hydrateRecord } from './hydration';
 import type { WorkflowState } from './service-state';
 import type { PrepareInput, PrepareResult, SourceRef, AutomationPolicy, OperationStatus, SyncPlan } from './types';
 import type { ConfigurationInput } from '../agendor/crm/types';
@@ -96,6 +97,11 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       if (state.step === 1) {
         const contact = state.conversations[0]?.contact;
         state.candidates = contact ? await readCustomerCandidates(crm, contact, state.conversations[0]!.revision) : { candidates: [], coverage: { complete: false, missingReasons: ['contact_unavailable'], pagesRead: 0 } };
+        if (state.lease.target.kind === 'conversation') {
+          const linked = await repository().findLinkedCustomer(state.candidates.verifiedLinks);
+          if (linked.customerId) state.customerId = linked.customerId;
+          if (linked.ambiguous) { state.candidates.coverage.complete = false; state.candidates.coverage.missingReasons.push('customer_binding_ambiguous'); }
+        }
         state.candidates.customerId = state.customerId; state.step++; await persistWorkflow(repository(), state);
       }
       const policy = await currentPolicy();
@@ -110,14 +116,51 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         catalogReads++;
       }
       state.catalog = createCatalogSnapshot({ accountId: 'elotenant', pages: state.pages });
-      const sources: SourceRef[] = uniqueSources([...state.conversations.flatMap(c => [...c.messages.map(m => ({ kind: 'message' as const, id: `${c.conversationId}:${m.id}`, revision: c.revision })), ...(c.contact ? [{ kind: 'contact' as const, id: String(c.contact.id), revision: c.revision }] : [])]), ...state.candidates.candidates.flatMap(c => c.sourceRefs), ...(state.candidates.verifiedLinks ?? []).flatMap(c => c.sourceRefs)]);
+      const retained = await repository().getPreparationBasis(state.customerId);
+      state.hydration ??= { offset: 0, records: [], deals: [], sources: [], missingReasons: [] };
+      const hydration = state.hydration;
+      const targets = [...state.candidates.candidates.map(c => ({ ref: c.ref, demand: undefined })), ...retained.demands.flatMap(d => d.dealRef ? [{ ref: d.dealRef, demand: d }] : [])].slice(0, 100);
+      if (retained.demands.length > 100 || retained.commands.length > 500 || state.candidates.candidates.length + retained.demands.filter(d => d.dealRef).length > 100) hydration.missingReasons.push('crm_hydration_limit');
+      while (hydration.offset < targets.length) {
+        if (catalogReads >= policy.limits.maxRequests) {
+          const coverage = { complete: false, missingReasons: ['crm_preparation_pending'], pagesRead: hydration.offset };
+          await persistWorkflow(repository(), state);
+          return { state: 'continue', workId: state.lease.workId, leaseToken: state.lease.leaseToken, continuation: state.continuation, coverage, manifest: { workId: state.lease.workId, snapshotVersion, contextVersion: 0, catalogVersion: state.catalog.version, readAt: new Date().toISOString(), sources: [], messages: [], records: [], coverage } };
+        }
+        const target = targets[hydration.offset]!;
+        try {
+          const raw = target.ref.kind === 'person' ? await crm.getPerson(target.ref.id) : target.ref.kind === 'organization' ? await crm.getOrganization(target.ref.id) : await crm.getDeal(target.ref.id);
+          const result = await hydrateRecord(raw, target.ref, state.catalog, policy, retained.commands, target.demand);
+          hydration.records.push(result.record); hydration.sources.push(result.source); if (result.deal) hydration.deals.push(result.deal);
+          const candidate = state.candidates.candidates.find(c => c.ref.kind === target.ref.kind && c.ref.id === target.ref.id);
+          if (candidate) {
+            candidate.sourceRefs = [result.source];
+            candidate.name = String(result.record.fields.find(f => f.field === 'name')!.value);
+            const email = result.record.fields.find(f => f.field === 'email')?.value;
+            const phone = result.record.fields.find(f => f.field === 'phone')?.value;
+            const document = result.record.fields.find(f => f.field === 'cnpj')?.value;
+            if (typeof email === 'string') candidate.email = email; else delete candidate.email;
+            if (typeof phone === 'string') candidate.phone = phone; else delete candidate.phone;
+            if (typeof document === 'string') candidate.document = document; else delete candidate.document;
+            const organization = raw && typeof raw === 'object' && 'organization' in raw ? raw.organization : undefined;
+            const organizationId = typeof organization === 'number' ? organization : organization && typeof organization === 'object' && 'id' in organization ? organization.id : undefined;
+            candidate.organizationIds = typeof organizationId === 'number' && Number.isSafeInteger(organizationId) && organizationId > 0 ? [organizationId] : [];
+            for (const link of state.candidates.verifiedLinks ?? []) if (link.ref.kind === target.ref.kind && link.ref.id === target.ref.id) link.sourceRefs = [...link.sourceRefs.filter(s => s.kind !== 'crm'), result.source];
+          }
+        } catch (error) {
+          if (error instanceof SafeError && error.retryable) throw error;
+          hydration.missingReasons.push('crm_record_unverified');
+        }
+        hydration.offset++; catalogReads++; await persistWorkflow(repository(), state);
+      }
+      const sources: SourceRef[] = uniqueSources([...state.conversations.flatMap(c => [...c.messages.map(m => ({ kind: 'message' as const, id: `${c.conversationId}:${m.id}`, revision: c.revision })), ...(c.contact ? [{ kind: 'contact' as const, id: String(c.contact.id), revision: c.revision }] : [])]), ...state.candidates.candidates.flatMap(c => c.sourceRefs), ...(state.candidates.verifiedLinks ?? []).flatMap(c => c.sourceRefs), ...hydration.sources]);
       let markdown = ''; let contextVersion = 0;
       const context = await repository().findContext(state.customerId); if (context) { markdown = context.markdown; contextVersion = context.version; }
-      const reasons = [...new Set([...state.conversations.flatMap(c => c.coverage.missingReasons), ...state.candidates.coverage.missingReasons, ...state.conversations.flatMap(c => c.attachments.length ? ['attachments_not_read'] : [])])];
+      const reasons = [...new Set([...state.conversations.flatMap(c => c.coverage.missingReasons), ...state.candidates.coverage.missingReasons, ...hydration.missingReasons, ...state.conversations.flatMap(c => c.attachments.length ? ['attachments_not_read'] : [])])];
       const coverage = { complete: reasons.length === 0 && state.conversations.every(c => c.coverage.complete) && state.candidates.coverage.complete, missingReasons: reasons, pagesRead: state.conversations.reduce((n, c) => n + c.coverage.pagesRead, 0) + state.candidates.coverage.pagesRead };
-      state.work = preparedWorkSchema.parse({ workId: state.lease.workId, leaseToken: state.lease.leaseToken, expiresAt: state.lease.expiresAt, snapshotVersion, contextVersion, customerId: state.customerId, markdown, snapshot: { conversations: state.conversations, candidates: state.candidates, catalog: state.catalog, sourceRefs: sources, records: [] }, catalogVersion: state.catalog.version, coverage, ...(state.pendingReview ? { reviewDecision: { reviewId: state.pendingReview.reviewId, version: state.pendingReview.version, decision: state.pendingReview.decision } } : {}) });
+      state.work = preparedWorkSchema.parse({ workId: state.lease.workId, leaseToken: state.lease.leaseToken, expiresAt: state.lease.expiresAt, snapshotVersion, contextVersion, customerId: state.customerId, markdown, snapshot: { conversations: state.conversations, candidates: state.candidates, catalog: state.catalog, sourceRefs: sources, records: hydration.records, deals: hydration.deals }, catalogVersion: state.catalog.version, coverage, ...(state.pendingReview ? { reviewDecision: { reviewId: state.pendingReview.reviewId, version: state.pendingReview.version, decision: state.pendingReview.decision } } : {}) });
       state.basis = { lease: state.lease, customerId: state.customerId, snapshotVersion, contextVersion, catalogVersion: state.catalog.version };
-      await repository().installSnapshot(state.lease, { workId: state.lease.workId, snapshotVersion, contextVersion, catalogVersion: state.catalog.version, readAt: new Date().toISOString(), sources, messages: state.conversations.flatMap(c => c.messages.map(m => ({ conversationId: c.conversationId, id: m.id, revision: c.revision, hash: c.revision, direction: m.direction ?? 'unknown', ...(m.senderType ? { senderType: m.senderType } : {}), ...(m.senderId ? { senderId: m.senderId } : {}) }))), records: state.candidates.candidates.map(c => ({ ref: c.ref, revision: c.sourceRefs.find(s => s.kind === 'crm')!.revision, hash: c.sourceRefs.find(s => s.kind === 'crm')!.revision })), coverage });
+      await repository().installSnapshot(state.lease, { workId: state.lease.workId, snapshotVersion, contextVersion, catalogVersion: state.catalog.version, readAt: new Date().toISOString(), sources, messages: state.conversations.flatMap(c => c.messages.map(m => ({ conversationId: c.conversationId, id: m.id, revision: c.revision, hash: c.revision, direction: m.direction ?? 'unknown', ...(m.senderType ? { senderType: m.senderType } : {}), ...(m.senderId ? { senderId: m.senderId } : {}) }))), records: [...state.candidates.candidates.map(c => ({ ref: c.ref, revision: c.sourceRefs.find(s => s.kind === 'crm')!.revision, hash: c.sourceRefs.find(s => s.kind === 'crm')!.revision })), ...hydration.deals.map(d => ({ ref: d.ref, revision: d.revision, hash: d.revision }))], coverage });
       await persistWorkflow(repository(), state); return { state: 'ready', work: state.work };
     } catch (error) {
       if (error instanceof SafeError && error.retryable) return { state: 'deferred', workId: state.lease.workId, retryAt: new Date(Date.now() + 10_000).toISOString(), leaseToken: state.lease.leaseToken, continuation: state.continuation };
@@ -130,7 +173,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     if (!state.work || !state.basis || !state.catalog || input.expectedSnapshotVersion !== state.work.snapshotVersion || input.expectedContextVersion !== state.work.contextVersion || Date.now() - Date.parse(state.catalog.fetchedAt) >= 900_000) return unavailable();
     const policy = await currentPolicy();
     input.analysis = await repository().reviewAnalysis(input.analysis, state.basis);
-    const selectedDemand = state.pendingReview?.decision.kind === 'selectDemand' ? [state.pendingReview.decision.demandId] : [];
+    const selectedDemand = [...(state.work.snapshot.deals ?? []).flatMap(d => d.demandId ? [d.demandId] : []), ...(state.pendingReview?.decision.kind === 'selectDemand' ? [state.pendingReview.decision.demandId] : [])];
     parseInput(createAnalysisInputSchema({ sourceRefs: (state.work.snapshot.sourceRefs ?? []).filter((s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator'), candidates: state.candidates.candidates.map(c => c.ref), existingDemandIds: selectedDemand, catalog: state.catalog, policy }), input);
     const resolution = await repository().resolveWork(input.analysis, state.candidates, state.catalog, state.basis);
     const plan = buildSyncPlan(input.analysis, state.work, resolution, policy);
@@ -145,6 +188,15 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
   }
   async function apply(raw: unknown): Promise<OperationStatus> {
     requireAutomationOperation(auth, 'apply'); automationActor(auth); const input = parseInput(applyInputSchema, raw);
+    // Context publication invalidates the source plan. An exact completed
+    // replay still returns its receipt without reauthorizing any dispatch.
+    const prior = await repository().getOperationByRequest(input.requestId);
+    if (prior?.status.state === 'applied') {
+      const caller = automationActor(auth); const original = prior.input.authorization;
+      const workflow = await readWorkflow(repository(), prior.input.basis.lease.workId);
+      if (original.actor.userId !== caller.userId || original.actor.clientId !== caller.clientId || original.plan.planId !== input.planId || original.plan.version !== input.planVersion || !workflow || workflow.chatAccountId !== env.AGENDOR_CHAT_ACCOUNT_ID) return unavailable();
+      return prior.status;
+    }
     const storedJson = await repository().getServicePlan(input.planId); if (!storedJson) return unavailable();
     const stored = JSON.parse(storedJson) as { plan: SyncPlan; workflow: WorkflowState };
     owns(stored.workflow, auth, env); const { plan, workflow } = stored;
@@ -160,6 +212,8 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     async getOperation(raw: string) {
       requireAutomationOperation(auth, 'operation'); const id = parseInput(key, raw); const caller = automationActor(auth); const operation = await repository().getOperation(id);
       if (!operation || operation.input.authorization.actor.userId !== caller.userId || operation.input.authorization.actor.clientId !== caller.clientId) return unavailable('Operation unavailable.');
+      const workflow = await readWorkflow(repository(), operation.input.basis.lease.workId);
+      if (!workflow || workflow.chatAccountId !== undefined && workflow.chatAccountId !== env.AGENDOR_CHAT_ACCOUNT_ID) return unavailable('Operation unavailable.');
       if (operation.status.state !== 'uncertain') return operation.status;
       const reads = createAgendorCrmClient(env, { signal }); const results = [];
       for (const command of operation.input.authorization.plan.orderedCommands) results.push(await reconcileCommand(command.commandKey, { repository: repository(), reads }));

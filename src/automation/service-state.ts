@@ -22,6 +22,7 @@ export interface WorkflowState {
   analysis?: AgentAnalysis;
   snapshotVersion?: number;
   pendingReview?: { reviewId: string; version: number; sourceSnapshotVersion: number; sourceRefs: SourceRef[]; analysis: AgentAnalysis; policyVersion: number; decision: NonNullable<WorkflowReview['decision']>; clientKey?: string };
+  hydration?: { offset: number; records: NonNullable<PreparedWork['snapshot']['records']>; deals: NonNullable<PreparedWork['snapshot']['deals']>; sources: SourceRef[]; missingReasons: string[] };
   direct?: { digest: string; capability: 'crm:create' | 'crm:enrich' | 'crm:write'; command: MutationCommand };
 }
 export interface WorkflowReview {

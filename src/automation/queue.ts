@@ -49,7 +49,10 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
       }
       const policy = await repository.getExecutionPolicy();
       if (!policy || policy.mode !== 'apply' || policy.version !== stored.input.authorization.plan.policyVersion || command.requiredCapabilities.some(c => !policy.capabilities.includes(c))) return ['POLICY_CHANGED'];
-      for (const source of command.sourceRefs) {
+      // A field absent during preparation may have been filled by a human.
+      // Verify the full observed record hash as well as the new fact sources.
+      const verificationSources = [...command.sourceRefs, ...command.before.flatMap(f => f.sources)];
+      for (const source of verificationSources) {
         if (source.kind === 'message' || source.kind === 'contact') {
           const conversationIds = source.kind === 'message' ? [Number(source.id.split(':')[0])] : [...new Set(stored.input.authorization.plan.sourceRefs.filter(s => s.kind === 'message').map(s => Number(s.id.split(':')[0])))];
           if (!conversationIds.length || conversationIds.some(id => !Number.isSafeInteger(id) || id <= 0)) return ['SOURCE_UNVERIFIED'];

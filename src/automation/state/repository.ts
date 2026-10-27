@@ -13,7 +13,7 @@ import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service
 import type { AutomationPolicy } from '../types';
 import { reviewResolutionInputSchema } from '../schemas';
 import { WATCHDOG_INTERVAL_MS } from '../maintenance';
-import type { ExecutionOperation } from '../operations';
+import type { ExecutionCommand, ExecutionOperation } from '../operations';
 import { applyReviewDecision } from '../reviews';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
@@ -111,6 +111,24 @@ export class AccountRepository {
       if (!pending?.data) return;
       const envelope = JSON.parse(pending.data) as { basis: PlanBasis; projection: ContextProjection };
       if (canonical(envelope.basis) !== canonical(basis)) throw Error('CONTEXT_STALE');
+      for (const command of operation.input.authorization.plan.orderedCommands) {
+        const receipt = this.operations.getExecutionCommand(command.commandKey)?.receipt;
+        if (receipt?.state !== 'confirmed' || !receipt.checkedAt || !receipt.crmRef) continue;
+        if ((command.kind === 'create_person' || command.kind === 'create_organization') && receipt.crmRef.kind === (command.kind === 'create_person' ? 'person' : 'organization')) {
+          envelope.projection.primaryRef = { kind: receipt.crmRef.kind, id: receipt.crmRef.id };
+          const bindingKey = `confirmed-crm:${receipt.crmRef.kind}:${receipt.crmRef.id}`;
+          const bound = this.sql.exec<{ customer_id: string }>('SELECT customer_id FROM bindings WHERE binding_key = ?', bindingKey).toArray()[0];
+          if (bound && bound.customer_id !== basis.customerId) throw Error('CUSTOMER_BINDING_CONFLICT');
+          this.sql.exec('INSERT INTO bindings VALUES (?, ?, ?, ?) ON CONFLICT(binding_key) DO NOTHING', bindingKey, basis.customerId, 'confirmed-crm', String(receipt.crmRef.id));
+        }
+        if (command.kind === 'create_deal' && receipt.crmRef.kind === 'deal') {
+          const demand = envelope.projection.demands.find(d => command.commandKey === `deal:${d.demandId}`);
+          if (demand) {
+            demand.dealRef = { kind: 'deal', id: receipt.crmRef.id };
+            this.sql.exec('UPDATE demands SET data = ? WHERE demand_id = ? AND customer_id = ?', JSON.stringify(demand), demand.demandId, basis.customerId);
+          }
+        }
+      }
       envelope.projection.pendingPlanIds = (envelope.projection.pendingPlanIds ?? []).filter(planId => planId !== operation.input.authorization.plan.planId);
       this.sql.exec('UPDATE facts SET data = ? WHERE fact_id = ?', JSON.stringify(envelope), 'customer-context:' + basis.customerId);
       this.refreshCustomerContext(basis.customerId, basis.contextVersion, true);
@@ -218,7 +236,7 @@ export class AccountRepository {
           ...(decision.kind === 'selectDemand' ? { clientKey: workflow.analysis.demands[0]!.clientKey } : {}) };
         workflow.snapshotVersion = workflow.work.snapshotVersion + 1;
         workflow.revision++; workflow.step = 0; workflow.pages = []; workflow.conversations = []; workflow.continuation = crypto.randomUUID();
-        delete workflow.work; delete workflow.catalog; delete workflow.basis; delete workflow.analysis;
+        delete workflow.work; delete workflow.catalog; delete workflow.basis; delete workflow.analysis; delete workflow.hydration;
         this.sql.exec('UPDATE events SET data = ? WHERE event_id = ?', JSON.stringify(workflow), 'workflow:' + review.workId);
         // Discard only unpublished projections from the old reviewed snapshot.
         this.sql.exec('UPDATE facts SET valid = 0 WHERE work_id = ? AND version > COALESCE((SELECT version FROM contexts WHERE customer_id = ?), 0)', review.workId, review.customerId);
@@ -430,11 +448,11 @@ export class AccountRepository {
       if (customer.kind !== 'review') {
         this.sql.exec('INSERT INTO customers VALUES (?, 1) ON CONFLICT(customer_id) DO NOTHING', basis.customerId);
         for (const id of identities) this.sql.exec('INSERT INTO bindings VALUES (?, ?, ?, ?) ON CONFLICT(binding_key) DO NOTHING', `identity:${id}`, basis.customerId, 'identity', basis.lease.workId);
-        for (const decision of demands.demands) if (decision.kind === 'create') {
+        for (const decision of demands.demands) if (decision.kind === 'create' || decision.kind === 'resolved') {
           const request = validation.data.analysis.demands.find(d => d.clientKey === decision.clientKey)!;
           const record: DemandRecord = { demandId: decision.demandId, customerId: basis.customerId, clientKey: request.clientKey, service: request.service, scope: request.scope, state: 'open', sourceRefs: decision.sourceRefs, ...(request.references ? { references: request.references } : {}) };
           const prior = this.sql.exec<{ data: string }>('SELECT data FROM demands WHERE demand_id = ?', record.demandId).toArray()[0];
-          if (prior) { const previous = demandRecordSchema.parse(JSON.parse(prior.data)); record.sourceRefs = uniqueSources([...previous.sourceRefs, ...record.sourceRefs]); record.references = [...(previous.references ?? []), ...(record.references ?? [])]; }
+          if (prior) { const previous = demandRecordSchema.parse(JSON.parse(prior.data)); record.dealRef = previous.dealRef; record.state = previous.state; record.references = [...new Map([...(previous.references ?? []), ...(record.references ?? [])].map(r => [`${r.kind}:${r.value}`, r])).values()]; }
           this.sql.exec('INSERT INTO demands VALUES (?, ?, 1, ?, ?) ON CONFLICT(demand_id) DO UPDATE SET data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', record.demandId, basis.customerId, JSON.stringify(record), Date.now() + EVIDENCE_RETENTION_MS);
         }
       }
@@ -517,6 +535,17 @@ export class AccountRepository {
     const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM demands WHERE demand_id = ? AND customer_id = ?', demandId, customerId).toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('DEMAND_UNAVAILABLE');
     return demandRecordSchema.parse(JSON.parse(row.data));
+  }
+  /** Structured retained state supplies IDs and previous automated values only.
+   * Mutable CRM fields must be read again before planning. */
+  getPreparationBasis(customerId: string) {
+    const demands = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM demands WHERE customer_id = ? LIMIT 101', customerId).toArray().filter(r => r.data && r.evidence_expires_at > Date.now()).map(r => demandRecordSchema.parse(JSON.parse(r.data!)));
+    const commands = this.sql.exec<{ data: string }>('SELECT e.data FROM execution_commands e JOIN commands c ON e.command_key = c.command_key JOIN work_customers w ON c.work_id = w.work_id WHERE w.customer_id = ? LIMIT 501', customerId).toArray().map(r => JSON.parse(r.data) as ExecutionCommand).filter(c => c.state === 'confirmed' && c.receipt.checkedAt && c.receipt.crmRef);
+    return { demands, commands };
+  }
+  findLinkedCustomer(refs: CustomerCandidates['verifiedLinks']) {
+    const ids = new Set((refs ?? []).flatMap(link => this.sql.exec<{ customer_id: string }>('SELECT customer_id FROM bindings WHERE binding_key = ?', `confirmed-crm:${link.ref.kind}:${link.ref.id}`).toArray().map(row => row.customer_id)));
+    return { customerId: ids.size === 1 ? [...ids][0] : undefined, ambiguous: ids.size > 1 };
   }
   async reserveCommand(raw: CommandReservation): Promise<ReservationResult> {
     const input = commandReservationSchema.parse(raw); const fingerprint = await digest({ command: input.command, payloadDigest: input.payloadDigest });

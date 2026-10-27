@@ -22,6 +22,7 @@ async function fixture() {
   vi.spyOn(crm, 'createAgendorCrmClient').mockReturnValue({ ...crmClient,
     searchPeople: async () => ({ items: [], pageInfo }),
     searchOrganizations: async () => ({ items: [{ id: 11, name: 'Synthetic Customer' }], pageInfo }),
+    getOrganization: async id => ({ id, name: 'Synthetic Customer' }),
     getConfiguration: async input => ({ ...input, items: [], pageInfo, fetchedAt: new Date().toISOString(), coverage: { status: 'complete', pages: [1] } }),
   });
   const service = createAutomationService(runtime, actor);
