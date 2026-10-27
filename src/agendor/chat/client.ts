@@ -8,6 +8,7 @@ import {
   chatConversationIdInput, conversationDetailSchema, conversationsEnvelopeSchema,
   messagesEnvelopeSchema, summarizeConversation, summarizeMessage,
   chatMessageInput, chatContactInput, chatSearchContactsInput, chatAttachmentInput,
+  chatConversationPageInput,
   contactsEnvelopeSchema, contactConversationsEnvelopeSchema, attachmentsEnvelopeSchema,
   summarizeContact, summarizeAttachment, record,
 } from './schemas';
@@ -106,8 +107,12 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
     return parse(attachmentsEnvelopeSchema, await get(`/accounts/${account}/conversations/${conversationId}/attachments`));
   }
   return {
-    async listConversations() {
-      const result = parse(conversationsEnvelopeSchema, await get(`/accounts/${account}/conversations`));
+    async listConversations(input: { status?: string; assigneeTypeId?: number; assigneeType?: string; sortOrder?: string } = {}) {
+      const filters = chatConversationPageInput.parse(input); const query = new URLSearchParams();
+      if (filters.status) query.set('status', filters.status); if (filters.assigneeTypeId !== undefined) query.set('assignee_type_id', String(filters.assigneeTypeId));
+      if (filters.assigneeType) query.set('assignee_type', filters.assigneeType); if (filters.sortOrder) query.set('sort_order', filters.sortOrder);
+      const suffix = query.toString() ? `?${query.toString()}` : '';
+      const result = parse(conversationsEnvelopeSchema, await get(`/accounts/${account}/conversations${suffix}`));
       const rawMeta = result.data.meta;
       const meta = rawMeta !== null && typeof rawMeta === 'object' && !Array.isArray(rawMeta)
         ? rawMeta as Record<string, unknown> : {};

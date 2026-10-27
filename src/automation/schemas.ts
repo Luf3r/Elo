@@ -131,7 +131,7 @@ export const coverageSchema: z.ZodType<Coverage> = z.strictObject({ complete: z.
 // Read DTO ownership stays with the Chat and CRM adapters. These are internal,
 // server-produced snapshots, not accepted as part of submit_analysis.
 const conversationSnapshotSchema: z.ZodType<ConversationSnapshot> = z.strictObject({
-  conversationId: positiveId, revision: key,
+  conversationId: positiveId, inboxId: positiveId.optional(), revision: key,
   contact: z.strictObject({ id: positiveId, name: z.string().optional(), email: z.string().optional(), phoneNumber: z.string().optional(), crmPersonId: positiveId.optional() }).nullable(),
   messages: z.array(z.strictObject({ id: positiveId, conversationId: positiveId.optional(), content: z.string().optional(), createdAt: z.number().finite().optional(), updatedAt: z.number().finite().optional(), private: z.boolean().optional(), senderType: z.string().optional(), senderName: z.string().optional(), senderId: positiveId.optional(), messageType: z.union([z.string(), z.number()]).optional(), direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']).optional() })).max(10000),
   attachments: z.array(z.strictObject({ id: positiveId, fileType: z.string().optional(), mimeType: z.string().optional(), byteSize: z.number().int().min(0).optional(), messageId: positiveId.optional() })).max(10000),

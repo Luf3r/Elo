@@ -2,7 +2,7 @@ import { conversationReadInput } from './schemas';
 import type { AttachmentPage, ChatContact, ChatMessage, ConversationReadInput, ConversationSnapshot, MessagePage } from './types';
 
 export interface ConversationReaderDependencies {
-  getConversation(id: number): Promise<{ id: number; contact?: ChatContact | null }>;
+  getConversation(id: number): Promise<{ id: number; inboxId?: number; contact?: ChatContact | null }>;
   listMessages(id: number, input?: { after?: number }): Promise<MessagePage>;
   listAttachments(id: number): Promise<AttachmentPage>;
 }
@@ -54,11 +54,11 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
     }
     const selectedMessages = [...messages.values()].sort((a, b) => a.id - b.id);
     const selectedAttachments = [...attachments.attachments].sort((a, b) => a.id - b.id);
-    const bytes = new TextEncoder().encode(JSON.stringify({ conversationId: parsed.conversationId, contact, messages: selectedMessages, attachments: selectedAttachments }));
+    const bytes = new TextEncoder().encode(JSON.stringify({ conversationId: parsed.conversationId, inboxId: conversation.inboxId, contact, messages: selectedMessages, attachments: selectedAttachments }));
     const hash = await crypto.subtle.digest('SHA-256', bytes);
     const revision = [...new Uint8Array(hash)].map(v => v.toString(16).padStart(2, '0')).join('');
     return {
-      conversationId: parsed.conversationId, revision, contact, messages: selectedMessages, attachments: selectedAttachments,
+      conversationId: parsed.conversationId, ...(conversation.inboxId !== undefined ? { inboxId: conversation.inboxId } : {}), revision, contact, messages: selectedMessages, attachments: selectedAttachments,
       coverage: { complete: complete && attachments.coverage.complete && reasons.size === 0, missingReasons: [...reasons], pagesRead },
       ...(continuation ? { continuation } : {}),
     };

@@ -46,7 +46,7 @@ export const changeStageSchema = z.strictObject({ funnel: crmIdSchema, dealStage
 /** Catalog validation is compulsory at the mutation adapter boundary. Unknown
  * upstream field types remain blocked until an explicit mapper is verified. */
 export function customFieldMatchesCatalog(field: z.infer<typeof customFieldSchema>, entity: CatalogEntityType, catalog: CatalogSnapshot): boolean {
-  const entry = catalog.customFields.find(f => f.entityType === entity && customFieldSchema.shape.id.safeParse(f.id).success && String(f.id) === String(field.id));
+  const entry = catalog.customFields.find(f => f.entityType === entity && (String(f.id) === String(field.id) || f.identifier === field.id || f.name === field.id));
   if (!entry) return false;
   const optionIds = (entry.options ?? []).flatMap(o => typeof o === 'string' || typeof o === 'number' ? [o] : o && typeof o === 'object' && 'id' in o ? [(o as { id: unknown }).id] : []);
   switch (entry.type) {

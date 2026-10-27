@@ -3,7 +3,7 @@ import type { ChatContact } from './types';
 
 export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 export const chatConversationIdInput = z.strictObject({ conversationId: positiveId });
-export const chatConversationPageInput = z.strictObject({});
+export const chatConversationPageInput = z.strictObject({ status: z.enum(['open', 'resolved', 'pending', 'snoozed', 'all']).optional(), assigneeTypeId: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(), assigneeType: z.enum(['all', 'me', 'unassigned']).optional(), sortOrder: z.enum(['latest_first', 'oldest_first']).optional() });
 export const chatMessageInput = z.strictObject({ conversationId: positiveId, after: positiveId.optional() });
 export const chatContactInput = z.strictObject({ contactId: positiveId });
 export const chatSearchContactsInput = z.strictObject({ query: z.string().trim().min(1).max(200) });
@@ -14,7 +14,7 @@ export const conversationReadInput = z.strictObject({
 }).refine(v => !(v.after && v.continuation) && (!v.continuation || v.continuation.conversationId === v.conversationId));
 export const contactSchema = z.object({ id: positiveId }).passthrough();
 const conversationSchema = z.object({
-  id: positiveId,
+  id: positiveId, inbox_id: z.unknown().optional(),
   status: z.unknown().optional(), inbox_name: z.unknown().optional(),
   created_at: z.unknown().optional(), timestamp: z.unknown().optional(),
   unread_count: z.unknown().optional(), meta: z.unknown().optional(),
@@ -68,6 +68,8 @@ export function summarizeConversation(value: Conversation) {
   const assignee = record(record(value.meta)?.assignee);
   const status = text(value.status);
   const inboxName = text(value.inbox_name);
+  const meta = record(value.meta);
+  const inboxId = positive(value.inbox_id) ?? positive(meta?.inbox_id) ?? positive(record(meta?.inbox)?.id);
   const createdAt = finite(value.created_at);
   const timestamp = finite(value.timestamp);
   const unreadCount = count(value.unread_count);
@@ -76,7 +78,7 @@ export function summarizeConversation(value: Conversation) {
   const latestMessage = text(latest?.content);
   return {
     id: value.id,
-    ...(status ? { status } : {}), ...(inboxName ? { inboxName } : {}),
+    ...(status ? { status } : {}), ...(inboxName ? { inboxName } : {}), ...(inboxId !== undefined ? { inboxId } : {}),
     ...(createdAt !== undefined ? { createdAt } : {}),
     ...(timestamp !== undefined ? { lastActivityAt: timestamp } : {}),
     ...(unreadCount !== undefined ? { unreadCount } : {}),

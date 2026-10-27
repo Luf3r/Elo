@@ -46,6 +46,7 @@ export interface MessagePage {
 export interface AttachmentPage { attachments: AttachmentMetadata[]; coverage: Coverage }
 export interface ConversationSnapshot {
   conversationId: number;
+  inboxId?: number;
   /** Hash of the observed snapshot, not a claim of upstream revision or complete history. */
   revision: string;
   contact: ChatContact | null;

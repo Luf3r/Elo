@@ -25,6 +25,7 @@ import type { ConfigurationInput } from '../agendor/crm/types';
 export const defaultAutomationPolicy: AutomationPolicy = { version: 1, mode: 'disabled', allowedInboxIds: [], capabilities: [], funnelMapping: {}, stageMapping: [], customFieldMapping: [], nativeCreatorDisabled: false, limits: { maxConversations: 10, maxCommands: 20, maxRequests: 20 } };
 const key = z.string().trim().min(1).max(200);
 const unavailable = (message = 'Work is unavailable or stale; prepare again.'): never => { throw new SafeError('INVALID_INPUT', message, false, 409); };
+function enforceInboxPolicy(conversations: Array<{ inboxId?: number }>, policy: AutomationPolicy): void { if (!policy.allowedInboxIds.length) return; if (conversations.some(conversation => conversation.inboxId === undefined || !policy.allowedInboxIds.includes(conversation.inboxId))) throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not allowed by the current automation policy.', false, 403); }
 export function automationActor(auth: AuthContext) {
   requireCapabilities(auth, []);
   if (!auth.userId || !auth.clientId || !auth.expiresAt || auth.expiresAt <= Date.now()) throw new SafeError('MCP_UNAUTHORIZED', 'A current, expiring actor authorization is required.', false, 403);
@@ -86,6 +87,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       if (state.step === 0) {
         state.conversations = [];
         for (const conversationId of state.conversationIds) state.conversations.push(await createConversationReader(chat).readConversation({ conversationId }));
+        enforceInboxPolicy(state.conversations, await currentPolicy());
         if (state.range) for (const conversation of state.conversations) {
           const range = state.range;
           if (conversation.messages.some(m => m.createdAt === undefined)) { conversation.coverage.complete = false; conversation.coverage.missingReasons.push('message_time_unverified'); }
@@ -201,7 +203,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     const stored = JSON.parse(storedJson) as { plan: SyncPlan; workflow: WorkflowState };
     owns(stored.workflow, auth, env); const { plan, workflow } = stored;
     if (plan.version !== input.planVersion || workflow.lease.mode !== 'apply' || !workflow.basis || !workflow.catalog) return unavailable('Preview or stale plans cannot be applied.');
-    const authorization = authorizePlan(auth, plan, await currentPolicy());
+    const policy = await currentPolicy(); enforceInboxPolicy(workflow.conversations, policy); const authorization = authorizePlan(auth, plan, policy);
     const operation = await repository().prepareOperation({ requestId: input.requestId, accountKey: 'elotenant', authorization, basis: workflow.basis, catalogJson: JSON.stringify(workflow.catalog) });
     const deps = await createQueueExecutionDeps({ accountKey: 'elotenant', operationId: operation.operationId, version: operation.version }, env);
     const status = await runPlan(authorization, { ...deps, signal, defer: true });

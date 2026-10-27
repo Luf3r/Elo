@@ -48,7 +48,7 @@ Validação da Task 14: o ensaio local usa conversas e registros sintéticos atr
 
 O artefato [rollout-pilot.json](rollout-pilot.json) é o manifesto exato de preparação, sem autorização: modo disabled, capacidades/caixas/mapeamentos e todos os alvos vazios; criador nativo não comprovado. Não é lido pelo runtime e não serve como manifesto válido de `--write`. Conta, endpoint e owner permanecem os existentes. Nenhum DO/fila/secret/política remotos foi alterado neste fechamento.
 
-O modo da aplicação, capacidades, mapeamentos reais, caixas e exclusividade são política versionada, separada da configuração de infraestrutura e da concessão OAuth. Na implementação atual `allowedInboxIds` e `nativeCreatorDisabled` são armazenados mas não verificados no caminho de execução; o DTO Chat não traz caixa comprovada. Não trate esses campos como barreira técnica. Sem gate implementado/verificado e sem evidência externa de exclusividade por caixa/escopo, mantenha disabled/preview e não conceda criação ao piloto. Uma conversa real delimitada e seu vínculo com a caixa precisam ser autorizados antes de GET/preview remoto.
+O modo da aplicação, capacidades, mapeamentos reais, caixas e exclusividade são política versionada, separada da configuração de infraestrutura e da concessão OAuth. `allowedInboxIds` agora é verificado no preparo e novamente no apply: toda conversa precisa trazer `inboxId` comprovado e pertencer à lista permitida. `nativeCreatorDisabled` também é uma barreira no autorizador final; precisa ser `true` antes de qualquer mutação CRM. A cobertura do Chat continua explícita e, sem vínculo conversa/caixa ou histórico suficiente, o fluxo deve permanecer em review/preview.
 
 ## Pausa, retomada e rollback do rollout
 

@@ -1,6 +1,6 @@
 # Operação e verificação
 
-Requer Node >=22.19.0. Instale com `npm ci`, copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET` e, para Chat/automação, `AGENDOR_CHAT_TOKEN` e o account ID já verificado. Secrets não entram em argumentos, URLs, logs ou arquivos versionados. O token fixo `MCP_TEST_TOKEN` não autentica OAuth. Veja [configuração OAuth](oauth-setup.md).
+Requer Node >=22.19.0. Instale com `npm ci`, copie `.dev.vars.example` para `.dev.vars` e preencha `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET` e, para Chat/automação, `AGENDOR_CHAT_TOKEN`; o account ID permanece o binding verificado do ambiente. Secrets não entram em argumentos, URLs, logs ou arquivos versionados. O token fixo `MCP_TEST_TOKEN` não autentica OAuth. Veja [configuração OAuth](oauth-setup.md).
 
 Use `npm run dev`; `npm run dev:ephemeral` é a alternativa Windows sem persistência local. KV OAuth e SQLite da automação ficam temporários nesse modo. O callback Access existente aponta para produção; login local exige um callback de desenvolvimento deliberadamente configurado. `/health` é liveness público e não consulta o Agendor. `/mcp` exige identidade autorizada, access token válido e audiência correta; os escopos são verificados também por ferramenta.
 

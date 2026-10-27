@@ -58,6 +58,7 @@ export function authorizePlan(auth: AuthContext, plan: SyncPlan, policy: Automat
   if (currentPolicy.mode !== 'apply' || snapshot.policyVersion !== currentPolicy.version || snapshot.state === 'review') {
     deny('Plan is not authorized by the current policy.');
   }
+  if (!currentPolicy.nativeCreatorDisabled) deny('Native creator mode must be disabled before CRM mutations are authorized.');
   const commandCapabilities = snapshot.orderedCommands.map(command => {
     // Ignore claims made by requiredCapabilities; derive from the closed command kind.
     const capability = commandCapability[command.kind];
