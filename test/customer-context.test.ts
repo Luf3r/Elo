@@ -198,4 +198,35 @@ describe('SQLite context projection and refresh', () => {
     expect(context.markdown).toContain('old-uncertain: uncertain');
     expect(context.markdown).not.toContain('old-uncertain: confirmado');
   });
+  it.each(['confirmed', 'uncertain'] as const)('recovers a legacy %s tombstone from its stored customer work target without a published context', async receiptState => {
+    const { stub, basis } = await setup('apply');
+    const command = { ...validCommand, sourceRefs: [source] };
+    const plan = { ...validPlan, orderedCommands: [command], sourceRefs: [source], workId: basis.lease.workId };
+    await stub.savePlan(plan, basis);
+    const actor = { ...basis.lease.owner, scopes: ['automation:process', 'crm:create'], expiresAt: Date.now() + 60_000 };
+    const reservation = { ...basis, operationId: 'legacy-operation', command, authorization: { plan, actor, commandCapabilities: [{ commandKey: command.commandKey, capabilities: ['crm:create' as const] }], validUntil: new Date(actor.expiresAt).toISOString() }, expectedVersion: 1, payloadDigest: 'legacy-command' };
+    await stub.reserveCommand(reservation);
+    await stub.completeCommand({ operationId: reservation.operationId, commandKey: command.commandKey, expectedVersion: 1, fence: basis.lease.fence, receipt: { operationId: reservation.operationId, commandKey: command.commandKey, state: receiptState, updatedFields: [], ...(receiptState === 'confirmed' ? { crmRef: { kind: 'organization' as const, id: 11 }, checkedAt: verifiedAt } : {}) } });
+    const nextBasis = await conversationBasis(stub, 0);
+    // Recreate the pre-v3 shape. There is deliberately no context row from
+    // which migration 3 could recover the original customer association.
+    await runInDurableObject(stub, (_instance, ctx) => {
+      ctx.storage.sql.exec('DROP TABLE work_customers; DELETE FROM schema_migrations WHERE version >= 3');
+      ctx.storage.sql.exec('INSERT INTO work VALUES (?, ?, ?, ?, ?, ?, ?)', 'ambiguous-work', 'ambiguous-request', 'digest', 'ambiguous-target', JSON.stringify({ ...basis.lease, workId: 'different-work-id' }), Date.now() + 60_000, 1);
+      ctx.storage.sql.exec('INSERT INTO work VALUES (?, ?, ?, ?, ?, ?, ?)', 'malformed-work', 'malformed-request', 'digest', 'malformed-target', '{invalid-json', Date.now() + 60_000, 1);
+    });
+    await evictDurableObject(stub);
+    const replay = await runInDurableObject(stub, async instance => {
+      try { return (await instance.reserveCommand(reservation)).state; }
+      catch (error) { return (error as Error).message; }
+    });
+    expect(replay).toBe(receiptState === 'confirmed' ? 'already_confirmed' : 'uncertain');
+    const associations = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT work_id, customer_id FROM work_customers').toArray());
+    expect(associations).toEqual([{ work_id: basis.lease.workId, customer_id: 'opaque-customer-1' }]);
+    await stub.saveContextProjection(projection(), nextBasis);
+    const context = await stub.refreshCustomerContext('opaque-customer-1', 0);
+    expect(context.markdown).toContain(`${command.commandKey}: ${receiptState === 'confirmed' ? 'confirmado' : 'uncertain'}`);
+    await evictDurableObject(stub);
+    expect(await stub.reserveCommand(reservation)).toMatchObject({ state: receiptState === 'confirmed' ? 'already_confirmed' : 'uncertain' });
+  });
 });
