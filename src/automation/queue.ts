@@ -7,6 +7,8 @@ import { createAgendorCrmClient } from '../agendor/crm/client';
 import { createAgendorChatClient, createConversationReader } from '../agendor/chat/client';
 import { matchesFields, readRef, resolvedTarget } from './reconciliation';
 import type { CatalogSnapshot } from '../agendor/crm/types';
+import { canonical } from './operations';
+import type { WorkflowState } from './service-state';
 
 export const automationQueuePayloadSchema = z.strictObject({ accountKey: z.literal('elotenant'), operationId: z.string().min(1).max(200), version: z.number().int().positive() });
 export type AutomationQueuePayload = z.infer<typeof automationQueuePayloadSchema>;
@@ -28,9 +30,23 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
   if (!operation) throw Error('OPERATION_UNAVAILABLE');
   const reads = createAgendorCrmClient(env);
   const catalog = JSON.parse(operation.input.catalogJson) as CatalogSnapshot;
-  const deps: ExecutionDeps = { repository, basis: operation.input.basis, requestId: operation.input.requestId, accountKey: 'elotenant', catalog, reads,
+  const deps: ExecutionDeps = { repository, basis: operation.input.basis, requestId: operation.input.requestId, accountKey: 'elotenant', catalog, reads, legacy: reads,
     mutations: createCrmMutationClient({ env, catalog }),
     async verify(command, phase, stored) {
+      const workflowJson = await repository.getWorkflow(stored.input.basis.lease.workId);
+      const workflow = workflowJson ? JSON.parse(workflowJson) as WorkflowState : undefined;
+      if (workflow?.direct) {
+        const direct = workflow.direct; const actor = stored.input.authorization.actor;
+        if (canonical(direct.command) !== canonical(command) || canonical(workflow.lease) !== canonical(stored.input.basis.lease) || workflow.lease.owner.userId !== actor.userId || workflow.lease.owner.clientId !== actor.clientId || command.requiredCapabilities.length !== 1 || command.requiredCapabilities[0] !== direct.capability || !actor.scopes.includes(direct.capability) || command.sourceRefs.length !== 1 || command.sourceRefs[0]?.kind !== 'operator' || command.sourceRefs[0].id !== actor.userId || command.sourceRefs[0].revision !== direct.digest) return ['DIRECT_AUTHORIZATION_CHANGED'];
+        // A direct request remains bound to the original typed command and
+        // actor. Queue bodies carry only a reference, never operator evidence.
+        if (command.kind === 'create_deal' || command.kind === 'create_task') {
+          if (!('id' in command.target)) return ['PARENT_UNVERIFIED'];
+          const parent = await readRef(command.target, reads);
+          if (!parent || typeof parent !== 'object' || !('id' in parent) || parent.id !== command.target.id) return ['PARENT_UNVERIFIED'];
+        }
+        return [];
+      }
       const policy = await repository.getExecutionPolicy();
       if (!policy || policy.mode !== 'apply' || policy.version !== stored.input.authorization.plan.policyVersion || command.requiredCapabilities.some(c => !policy.capabilities.includes(c))) return ['POLICY_CHANGED'];
       for (const source of command.sourceRefs) {
@@ -77,6 +93,7 @@ export async function handleAutomationQueue(batch: QueueBatch, env: Env, factory
       const operation = await deps.repository.getOperation(parsed.data.operationId);
       if (!operation || operation.version !== parsed.data.version || operation.input.accountKey !== parsed.data.accountKey) { message.ack(); continue; }
       const status = await resumeOperation(operation, { ...deps, defer: false });
+      if (status.state === 'applied') await accountState(env).completeDirectOperation(operation.operationId);
       if (status.state === 'queued' || status.state === 'uncertain') message.retry({ delaySeconds: 10 }); else message.ack();
     } catch { message.retry({ delaySeconds: 10 }); }
   }

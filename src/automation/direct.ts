@@ -12,6 +12,7 @@ import { accountState } from './state/budget';
 import { automationActor, persistWorkflow, readWorkflow } from './service';
 import { payloadDigest, canonical } from './operations';
 import { runPlan } from './executor';
+import { enqueueOperation } from './queue';
 import { mutationCommandSchema, authorizedPlanSchema, syncPlanSchema } from './schemas';
 import { readRef } from './reconciliation';
 import type { WorkflowState } from './service-state';
@@ -36,6 +37,7 @@ export async function executeDirectCommand(env: Env, auth: AuthContext, name: Di
   if (existing) {
     const state = await readWorkflow(repo, existing.input.basis.lease.workId);
     if (state?.direct?.digest !== digest || existing.input.authorization.actor.userId !== caller.userId || existing.input.authorization.actor.clientId !== caller.clientId) throw new SafeError('INVALID_INPUT', 'requestId already belongs to another payload or actor.', false, 409);
+    if (existing.status.state === 'queued') await enqueueOperation(existing.operationId, { repository: repo, accountKey: 'elotenant', queue: env.AUTOMATION_QUEUE });
     return existing.status;
   }
   const record = input.record ?? input.patch ?? {};
@@ -65,5 +67,6 @@ export async function executeDirectCommand(env: Env, auth: AuthContext, name: Di
   const result = await runPlan(authorization, { repository: repo, basis, requestId: input.requestId, accountKey: 'elotenant', catalog, reads: crm, legacy: crm, mutations: createCrmMutationClient({ env, catalog, signal }), signal,
     async verify(current) { const stored = await readWorkflow(repo, lease.workId); if (stored?.direct?.digest !== digest || canonical(stored.direct.command) !== canonical(current)) return ['DIRECT_AUTHORIZATION_CHANGED']; if (input.parent) { const parent = await readRef(input.parent, crm); if (!parent || typeof parent !== 'object' || !('id' in parent) || parent.id !== input.parent.id) return ['PARENT_UNVERIFIED']; } return []; } });
   if (result.state === 'applied') await repo.completeDirectOperation(result.operationId);
+  if (result.state === 'queued') await enqueueOperation(result.operationId, { repository: repo, accountKey: 'elotenant', queue: env.AUTOMATION_QUEUE });
   return result;
 }

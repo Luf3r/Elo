@@ -3,6 +3,9 @@ import { callTool, rpc } from './mcp-helper';
 import { testEnv } from './helpers';
 import { executeDirectCommand } from '../src/automation/direct';
 import { createAutomationService } from '../src/automation/service';
+import { runInDurableObject } from 'cloudflare:test';
+import { handleAutomationQueue } from '../src/automation/queue';
+import { accountState } from '../src/automation/state/budget';
 const actor = { userId: 'operator', clientId: 'direct-client', scopes: ['crm:create'], expiresAt: Date.now() + 600_000 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -78,5 +81,29 @@ describe('direct coordinated CRM tools', () => {
     expect((await service.getOperation(result.operationId)).state).toBe('applied');
     expect(fetch.mock.calls.filter(([r]) => r.method === 'POST')).toHaveLength(1);
     expect(fetch.mock.calls.slice(1).every(([r]) => r.method === 'GET')).toBe(true);
+  });
+  it('queues reference-only recovery after a direct 429 and retries the reserved command once', async () => {
+    let attempts = 0;
+    const fetch = vi.fn(async (request: Request) => {
+      if (request.method === 'POST' && ++attempts === 1) return new Response('', { status: 429, headers: { 'Retry-After': '0' } });
+      return Response.json({ data: { id: 99, name: 'Synthetic Contact' } });
+    });
+    vi.stubGlobal('fetch', fetch); const env = testEnv();
+    const send = vi.fn(async (_body: unknown) => undefined);
+    env.AUTOMATION_QUEUE = new Proxy(env.AUTOMATION_QUEUE, { get(target, prop) { if (prop === 'send') return send; return Reflect.get(target, prop); } });
+    const input = { requestId, record: { name: 'Synthetic Contact' } };
+    const first = await executeDirectCommand(env, actor, 'crm_create_person', input);
+    expect(first.state).toBe('queued');
+    expect(send).toHaveBeenCalledWith({ accountKey: 'elotenant', operationId: first.operationId, version: 1 });
+    await executeDirectCommand(env, actor, 'crm_create_person', input);
+    expect(send).toHaveBeenCalledTimes(2); expect(attempts).toBe(1);
+    await runInDurableObject(env.AUTOMATION_STATE.get(accountState(env).id), (_instance, ctx) => ctx.storage.sql.exec('UPDATE execution_commands SET next_attempt_at = 0').toArray());
+    const ack = vi.fn(); const retry = vi.fn(); const batch = { messages: [{ body: send.mock.calls[0]![0], ack, retry }] };
+    await handleAutomationQueue(batch, env);
+    await handleAutomationQueue(batch, env);
+    expect((await accountState(env).getOperation(first.operationId))?.status.state).toBe('applied');
+    expect(attempts).toBe(2); expect(fetch.mock.calls.map(([r]) => r.method)).toEqual(['POST', 'POST', 'GET']);
+    expect(ack).toHaveBeenCalledTimes(2); expect(retry).not.toHaveBeenCalled();
+    await expect(executeDirectCommand(env, actor, 'crm_create_person', input)).resolves.toMatchObject({ state: 'applied', operationId: first.operationId });
   });
 });

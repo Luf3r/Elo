@@ -6,7 +6,7 @@ import { throwIfCancelled } from '../../cancellation';
 import { createAgendorChatClient } from '../../agendor/chat/client';
 import { chatConversationIdInput, chatConversationPageInput, chatMessageInput, chatContactInput, chatSearchContactsInput, chatAttachmentInput } from '../../agendor/chat/schemas';
 import { chatReadSecurity } from '../security';
-import { errorToolResult, jsonToolResult } from '../result';
+import { errorToolResult, jsonToolResult, MAX_TOOL_OUTPUT_BYTES } from '../result';
 import { readAnnotations } from './read';
 import type { AttachmentResult } from '../../agendor/chat/types';
 
@@ -19,12 +19,14 @@ async function execute(env: Env, auth: AuthContext, operation: (client: ReturnTy
     const value = await operation(createAgendorChatClient(env, { signal }));
     if (!attachment) return jsonToolResult(value);
     const { data, text, resource, ...metadata } = value as AttachmentResult;
-    return { content: [
+    const result = { content: [
       ...jsonToolResult(metadata).content,
       ...(text !== undefined ? [{ type: 'text' as const, text }] : []),
       ...(data && metadata.mimeType ? [{ type: 'image' as const, data, mimeType: metadata.mimeType }] : []),
       ...(resource ? [resource] : []),
     ] };
+    if (new TextEncoder().encode(JSON.stringify(result)).byteLength > MAX_TOOL_OUTPUT_BYTES) return jsonToolResult({ conversationId: metadata.conversationId, attachmentId: metadata.attachmentId, status: 'unavailable', pending: true, reason: 'output_size_limit' });
+    return result;
   } catch (error) { return errorToolResult(error); }
 }
 export function registerChat(server: McpServer, env: Env, auth: AuthContext, signal?: AbortSignal): void {

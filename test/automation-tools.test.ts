@@ -115,4 +115,11 @@ describe('agent workflow MCP boundary', () => {
     }
     throw Error('Catalog continuation did not finish');
   });
+  it('rejects an unsupported pending target before choosing or reading a conversation', async () => {
+    const fetch = upstream(); vi.stubGlobal('fetch', fetch); const env = configured();
+    const { data } = await callTool('automation_prepare_sync', { requestId: 'pending', target: { kind: 'pending' }, mode: 'preview' }, env, ['automation:process', 'crm:read', 'chat:read']);
+    expect(data.result?.isError).toBe(true);
+    expect(JSON.parse(data.result.content[0].text).error.code).toBe('INVALID_INPUT');
+    expect(fetch).not.toHaveBeenCalled(); expect(budgetMock(env)).not.toHaveBeenCalled();
+  });
 });

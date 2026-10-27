@@ -100,6 +100,19 @@ describe('read-only Agendor Chat tools', () => {
     expect(attachment.data.result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
     expect(handled).toEqual(['/api/v1/accounts/100/conversations/200/messages?after=10', '/api/v1/accounts/100/conversations/200/attachments', '/files/synthetic']);
   });
+  it.each(['image', 'text', 'resource'] as const)('bounds oversized %s attachment output and returns safe pending metadata', async format => {
+    const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
+    const uri = 'https://chat.agendor.com.br/files/' + (format === 'resource' ? 'x'.repeat(550_000) : 'synthetic');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async request => {
+      const req = request as Request;
+      if (req.url.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: uri }] });
+      return new Response(format === 'image' ? new Uint8Array(400_000) : format === 'text' ? 'x'.repeat(550_000) : 'SYNTHETIC', { headers: { 'content-type': format === 'image' ? 'image/png' : format === 'text' ? 'text/plain' : 'application/pdf' } });
+    });
+    const { data } = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400 }, env, ['chat:read']);
+    expect(new TextEncoder().encode(JSON.stringify(data.result)).byteLength).toBeLessThan(524_288);
+    expect(data.result.content).toHaveLength(1);
+    expect(JSON.parse(data.result.content[0].text)).toEqual({ conversationId: 200, attachmentId: 400, status: 'unavailable', pending: true, reason: 'output_size_limit' });
+  });
   it('fails closed on the dedicated Chat rate limiter before upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });

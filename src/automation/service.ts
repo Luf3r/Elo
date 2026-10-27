@@ -56,6 +56,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
   async function prepareWork(raw: PrepareInput, range?: WorkflowState['range']): Promise<PrepareResult> {
     const caller = automationActor(auth);
     const input = parseInput(prepareInputSchema, raw); throwIfCancelled(signal);
+    if ('target' in input && input.target.kind === 'pending') unavailable('Pending targets are not supported; select an explicit conversation or customer.');
     let state: WorkflowState;
     if ('workId' in input) {
       state = await load(input.workId);
@@ -69,6 +70,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         await persistWorkflow(repository(), state);
       }
     }
+    if (state.lease.target.kind === 'pending') unavailable('Pending targets are not supported; select an explicit conversation or customer.');
     if (state.work) return { state: 'ready', work: state.work };
     const crm = createAgendorCrmClient(env, { signal }); const chat = createAgendorChatClient(env, { signal });
     try {
@@ -76,11 +78,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         if (state.lease.target.kind === 'customer') {
           const context = await repository().findContext(state.customerId); if (context) state.conversationIds = [...new Set(context.evidenceRefs.filter(s => s.kind === 'message').map(s => Number(s.id.split(':')[0])))].filter(id => Number.isSafeInteger(id) && id > 0).slice(0, 10);
           if (!state.conversationIds.length) return { state: 'review', workId: state.lease.workId, reviewIds: [await review(state, ['CUSTOMER_CONVERSATIONS_UNAVAILABLE'])] };
-        } else {
-          const discovered = await chat.listConversations();
-          state.conversationIds = discovered.conversations.slice(0, 1).map(c => c.id);
-          if (!state.conversationIds.length) return { state: 'empty' };
-        }
+        } else unavailable('An explicit conversation or customer is required.');
         await persistWorkflow(repository(), state);
       }
       if (state.step === 0) {
