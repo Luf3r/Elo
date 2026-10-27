@@ -32,7 +32,7 @@ Não há alvos de leitura real aprovados: `conversations`, `records`, `operation
 
 Piloto futuro de escrita exige aprovação humana concreta do plano já revisado: `approvedBy`, `expiresAt`, requestId do preparo apply, `conversations:[{id,inboxId}]`, `records:[{kind,id}]` e `operations:[{commandKey,kind,sha256}]`, com digest do comando completo via `commandDigest`. Fixe também política/versão, capacidades mínimas, catálogo/mapeamentos verificados e prova do criador nativo fora do manifesto do verificador. Hash/manifesto não substituem os gates do servidor. A publicação não habilita apply por si só; novas concessões não devem ser dadas em bloco.
 
-Depois de publicação autorizada, registrar novo UUID Cloudflare e evidências de `/health`, rejeição401, `tools/list`42 com configuração completa, chamadas válidas/inválidas com concessões antigas/novas, contexto/preview e logs sanitizados. Comparar cada criação/vínculo/item/etapa no CRM somente no piloto autorizado. O smoke test pós-deploy passou: health, autenticação, tools/list com 42 ferramentas e quatro leituras CRM autorizadas; nenhum segredo apareceu nos resultados.
+Foi registrado o UUID Cloudflare `4da0255e-db66-4a85-a19d-346cf60d2ea3` e o smoke test pós-deploy passou: health, autenticação, `tools/list` com 42 ferramentas e quatro leituras CRM autorizadas; nenhum segredo apareceu nos resultados. Contexto/preview e comparações de criação/vínculo/item/etapa no CRM continuam reservados ao piloto autorizado.
 
 ## Evidência local e limites
 
@@ -53,7 +53,7 @@ Fechamento em 2026-10-27, candidato 0.1.2, sem alteração de comportamento ou d
 | Concorrência, reserva, retry, pausa e incerteza | automation-state, budget, executor, queue, maintenance, ingress | recursos remotos + exclusividade do criador |
 | Verificador e higiene de saída | automation-verifier e testes nativos dos scripts | logs e resultados remotos autorizados |
 
-O diff deste fechamento contém somente documentação, exemplo de configuração e manifesto sem autorização. Não foram alterados runtime, dependências, versão, bindings ou identidades. Documentação registra bloqueios, e não promove capacidades sem evidência. A conclusão desta tarefa é **publicação técnica do rollout**; preview de automação e ativação/piloto permanecem pendentes.
+O fechamento contém a publicação do runtime, documentação e manifesto sem autorização de piloto. Dependências, versão e identidade do Worker foram preservadas; bindings de filas e migração foram aplicados conforme configuração. Documentação registra os bloqueios restantes, sem promover capacidades sem evidência. A conclusão desta tarefa é **publicação técnica do rollout**; preview de automação e ativação/piloto permanecem pendentes.
 
 Verificação adicional offline: 42 nomes únicos na tabela conferem exatamente com os registradores; o manifesto vazio é recusado antes de qualquer chamada de escrita (zero chamadas). Scanner de arquivos versionados e manifesto comparou quatro valores locais conhecidos de secrets sem exibi-los: zero correspondências e zero chaves privadas. git diff --check aprovado.
 
