@@ -4,6 +4,7 @@ import type { ReserveWorkInput, PlanBasis, WorkLease, SnapshotManifest, SyncPlan
 import { migrate } from './migrations';
 import { AccountRepository } from './repository';
 import { takeBudget } from './budget';
+import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot } from '../types';
 export class AutomationAccount extends DurableObject<Env> {
   private readonly repository: AccountRepository;
   constructor(ctx: DurableObjectState, env: Env) {
@@ -22,6 +23,7 @@ export class AutomationAccount extends DurableObject<Env> {
   async saveContextProjection(projection: ContextProjection, basis: PlanBasis) { return this.repository.saveContextProjection(projection, basis); }
   async refreshCustomerContext(customerId: string, expectedVersion: number) { return this.repository.refreshCustomerContext(customerId, expectedVersion); }
   async getCustomerDemand(customerId: string, demandId: string) { return this.repository.getCustomerDemand(customerId, demandId); }
+  async resolveWork(analysis: AgentAnalysis, candidates: CustomerCandidates, catalog: CatalogSnapshot, basis: PlanBasis) { return this.repository.resolveWork(analysis, candidates, catalog, basis); }
   async reserveCommand(input: CommandReservation) { return this.repository.reserveCommand(input); }
   async completeCommand(input: CommandCompletion) { return this.repository.completeCommand(input); }
   async takeBudget(product: 'crm' | 'chat', now: number) { return takeBudget(this.ctx.storage, product, now); }

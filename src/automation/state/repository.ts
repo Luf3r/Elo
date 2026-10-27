@@ -2,6 +2,10 @@ import type { CommandCompletion, CommandReservation, ContextProjection, Customer
 import { commandCompletionSchema, commandReservationSchema, contextProjectionSchema, customerContextSchema, demandRecordSchema, reserveWorkInputSchema, snapshotManifestSchema, planBasisSchema, syncPlanSchema, workLeaseSchema } from '../schemas';
 import { contextEvidenceRefs, contextValue, renderCustomerContext } from '../context/render';
 import { SafeError } from '../../errors';
+import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot, ResolutionBundle, SourceRef } from '../types';
+import { createAnalysisInputSchema, customerCandidatesSchema, resolutionBundleSchema } from '../schemas';
+import { resolveCustomer, uniqueSources, normalizedPhone } from '../identity';
+import { resolveDemands } from '../demands';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -121,6 +125,60 @@ export class AccountRepository {
       if (previous?.version === plan.version && previous.digest === fingerprint && previous.valid && previous.fence === basis.lease.fence && previous.snapshot_version === basis.snapshotVersion && previous.context_version === basis.contextVersion && previous.catalog_version === basis.catalogVersion) return;
       if (plan.version !== (previous?.version ?? 0) + 1) throw Error('VERSION_CONFLICT');
       this.sql.exec('INSERT INTO plans (plan_id, work_id, version, digest, valid, data, evidence_expires_at, fence, snapshot_version, context_version, catalog_version) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT(plan_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, valid = 1, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at, fence = excluded.fence, snapshot_version = excluded.snapshot_version, context_version = excluded.context_version, catalog_version = excluded.catalog_version', plan.planId, plan.workId, plan.version, fingerprint, JSON.stringify(plan), Date.now() + EVIDENCE_RETENTION_MS, basis.lease.fence, basis.snapshotVersion, basis.contextVersion, basis.catalogVersion);
+    });
+  }
+  /** Backend-only resolver. The caller provides a server-created PlanBasis, never an agent customer ID.
+   * Reservations survive evidence cleanup and cover different conversations in this account. */
+  async resolveWork(rawAnalysis: AgentAnalysis, rawCandidates: CustomerCandidates, catalog: CatalogSnapshot, rawBasis: PlanBasis): Promise<ResolutionBundle> {
+    const basis = planBasisSchema.parse(rawBasis);
+    const candidates = customerCandidatesSchema.parse({ ...rawCandidates, customerId: basis.customerId });
+    const fingerprint = await digest({ analysis: rawAnalysis, candidates, catalogVersion: catalog.version, basis });
+    const identityValues: string[] = [];
+    for (const fact of rawAnalysis.facts) if (fact.certainty === 'confirmed' && typeof fact.value === 'string') {
+      if (fact.field === 'cnpj' && fact.entity === 'organization' && fact.value.replace(/\D/g, '').length === 14) identityValues.push('organization:cnpj:' + fact.value.replace(/\D/g, ''));
+      if (fact.field === 'email') identityValues.push(fact.entity + ':email:' + fact.value.trim().toLowerCase());
+      if (fact.field === 'phone' && normalizedPhone(fact.value)) identityValues.push('phone:' + normalizedPhone(fact.value));
+    }
+    if (rawAnalysis.customerSelection.kind !== 'new') identityValues.push(`${rawAnalysis.customerSelection.kind}:${rawAnalysis.customerSelection.id}`);
+    else if (!identityValues.length) identityValues.push(`${rawAnalysis.customerSelection.entity}:name-reservation:${rawAnalysis.customerSelection.record.name.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR')}`);
+    const identities = await Promise.all([...new Set(identityValues)].sort().map(value => digest(value)));
+    return this.storage.transactionSync(() => {
+      const manifest = this.checkBasis(basis);
+      if (catalog.version !== basis.catalogVersion) throw Error('STATE_VERSION_CONFLICT');
+      const eventId = `resolution:${basis.lease.workId}:${basis.snapshotVersion}`;
+      const previous = this.sql.exec<{ digest: string; data: string | null; evidence_expires_at: number }>('SELECT digest, data, evidence_expires_at FROM events WHERE event_id = ?', eventId).toArray()[0];
+      if (previous) {
+        if (previous.digest !== fingerprint) throw Error('IDEMPOTENCY_CONFLICT');
+        if (!previous.data || previous.evidence_expires_at <= Date.now()) throw Error('RESOLUTION_EVIDENCE_EXPIRED');
+        return resolutionBundleSchema.parse(JSON.parse(previous.data));
+      }
+      const existing = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM demands WHERE customer_id = ?', basis.customerId).toArray().filter(r => r.data && r.evidence_expires_at > Date.now()).map(r => demandRecordSchema.parse(JSON.parse(r.data!)));
+      const validation = createAnalysisInputSchema({ sourceRefs: manifest.sources.filter((s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator'), candidates: candidates.candidates.map(c => c.ref), existingDemandIds: existing.map(d => d.demandId), catalog }).safeParse({ workId: basis.lease.workId, leaseToken: basis.lease.leaseToken, expectedSnapshotVersion: basis.snapshotVersion, expectedContextVersion: basis.contextVersion, analysis: rawAnalysis });
+      if (!validation.success) throw Error('ANALYSIS_INVALID');
+      for (const candidate of candidates.candidates) if (!manifest.records.some(r => r.ref.kind === candidate.ref.kind && r.ref.id === candidate.ref.id)) throw Error('CANDIDATE_ABSENT_FROM_SNAPSHOT');
+      for (const source of uniqueSources([...candidates.candidates.flatMap(c => c.sourceRefs), ...(candidates.verifiedLinks ?? []).flatMap(l => l.sourceRefs)])) if (!manifest.sources.some(s => canonical(s) === canonical(source))) throw Error('STALE_SOURCE');
+      let customer = resolveCustomer(validation.data.analysis, candidates, catalog);
+      if (customer.kind !== 'review') {
+        const reservations = identities.flatMap(id => this.sql.exec<{ customer_id: string; external_id: string }>('SELECT customer_id, external_id FROM bindings WHERE binding_key = ?', `identity:${id}`).toArray());
+        const conflict = reservations.some(row => row.customer_id !== basis.customerId);
+        if (conflict) customer = { kind: 'review', sourceRefs: customer.sourceRefs, reviewReasons: ['IDENTITY_RESERVED_FOR_OTHER_CUSTOMER'] };
+        else if (customer.kind === 'create' && reservations.some(row => row.external_id !== basis.lease.workId)) customer = { kind: 'review', sourceRefs: customer.sourceRefs, reviewReasons: ['IDENTITY_CREATION_PENDING'] };
+      }
+      const demands = resolveDemands(validation.data.analysis, customer, existing);
+      const bundle = resolutionBundleSchema.parse({ customer, demands });
+      if (customer.kind !== 'review') {
+        this.sql.exec('INSERT INTO customers VALUES (?, 1) ON CONFLICT(customer_id) DO NOTHING', basis.customerId);
+        for (const id of identities) this.sql.exec('INSERT INTO bindings VALUES (?, ?, ?, ?) ON CONFLICT(binding_key) DO NOTHING', `identity:${id}`, basis.customerId, 'identity', basis.lease.workId);
+        for (const decision of demands.demands) if (decision.kind === 'create') {
+          const request = validation.data.analysis.demands.find(d => d.clientKey === decision.clientKey)!;
+          const record: DemandRecord = { demandId: decision.demandId, customerId: basis.customerId, clientKey: request.clientKey, service: request.service, scope: request.scope, state: 'open', sourceRefs: decision.sourceRefs, ...(request.references ? { references: request.references } : {}) };
+          const prior = this.sql.exec<{ data: string }>('SELECT data FROM demands WHERE demand_id = ?', record.demandId).toArray()[0];
+          if (prior) { const previous = demandRecordSchema.parse(JSON.parse(prior.data)); record.sourceRefs = uniqueSources([...previous.sourceRefs, ...record.sourceRefs]); record.references = [...(previous.references ?? []), ...(record.references ?? [])]; }
+          this.sql.exec('INSERT INTO demands VALUES (?, ?, 1, ?, ?) ON CONFLICT(demand_id) DO UPDATE SET data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', record.demandId, basis.customerId, JSON.stringify(record), Date.now() + EVIDENCE_RETENTION_MS);
+        }
+      }
+      this.sql.exec('INSERT INTO events VALUES (?, ?, ?, ?)', eventId, fingerprint, JSON.stringify(bundle), Date.now() + EVIDENCE_RETENTION_MS);
+      return bundle;
     });
   }
   getContext(customerId: string): CustomerContext {
