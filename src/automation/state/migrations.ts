@@ -64,5 +64,13 @@ export function migrate(storage: DurableObjectStorage): void {
       }
       sql.exec('INSERT INTO schema_migrations VALUES (4)');
     }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 5').toArray().length) {
+      sql.exec(`
+        CREATE TABLE execution_operations (operation_id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, digest TEXT NOT NULL, data TEXT NOT NULL);
+        CREATE TABLE execution_commands (command_key TEXT PRIMARY KEY, operation_id TEXT NOT NULL, next_attempt_at INTEGER NOT NULL, data TEXT NOT NULL);
+        CREATE INDEX execution_commands_by_operation ON execution_commands(operation_id);
+        INSERT INTO schema_migrations VALUES (5);
+      `);
+    }
   });
 }

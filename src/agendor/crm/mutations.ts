@@ -92,6 +92,10 @@ export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutat
     return send(kind, 'PUT', `/${paths[kind]}/${validId}`, parseInput(schema, patch) as Record<string, unknown>, validId);
   }
   return {
+    async changeStage(id, patch) {
+      const validId = parseInput(crmIdSchema, id);
+      return send('deal', 'PUT', `/deals/${validId}/stage`, { ...parseInput(schemas.changeStage, patch), checkRequiredFields: true }, validId);
+    },
     async createOrganization(record) { return send('organization', 'POST', '/organizations', parseInput(schemas.createOrganization, record)); },
     async createPerson(record) { return send('person', 'POST', '/people', parseInput(schemas.createPerson, record)); },
     async createDeal(parent, record) {

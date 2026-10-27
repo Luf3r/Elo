@@ -6,6 +6,9 @@ import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot, ResolutionBund
 import { createAnalysisInputSchema, customerCandidatesSchema, resolutionBundleSchema } from '../schemas';
 import { resolveCustomer, uniqueSources, normalizedPhone } from '../identity';
 import { resolveDemands } from '../demands';
+import { OperationsStore } from '../operations';
+import type { OperationInput } from '../operations';
+import { automationPolicySchema } from '../policy-types';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -22,6 +25,20 @@ type CommandRow = { command_key: string; operation_id: string; work_id: string; 
 /** Every mutation transaction below is synchronous. Hashing occurs before it; network never occurs inside it. */
 export class AccountRepository {
   constructor(private readonly storage: DurableObjectStorage) {}
+  private get operations() { return new OperationsStore(this.storage, { reserve: input => this.reserveCommand(input), assert: input => this.checkDispatch(input) }); }
+  async prepareOperation(input: OperationInput) { return this.operations.prepareOperation(input); }
+  getOperation(id: string) { return this.operations.getOperation(id); }
+  getOperationByRequest(id: string) { return this.operations.getOperationByRequest(id); }
+  async reserveExecutionCommand(id: string, key: string) { return this.operations.reserveExecutionCommand(id, key); }
+  getExecutionCommand(key: string) { return this.operations.getExecutionCommand(key); }
+  beginDispatch(id: string, key: string) { return this.operations.beginDispatch(id, key); }
+  finishDispatch(...args: Parameters<OperationsStore['finishDispatch']>) { return this.operations.finishDispatch(...args); }
+  settleReconciliation(...args: Parameters<OperationsStore['settleReconciliation']>) { return this.operations.settleReconciliation(...args); }
+  setOperationStatus(...args: Parameters<OperationsStore['setOperationStatus']>) { return this.operations.setOperationStatus(...args); }
+  getExecutionPolicy() {
+    const row = this.sql.exec<{ data: string }>('SELECT data FROM policy WHERE singleton = 1').toArray()[0];
+    return row ? automationPolicySchema.parse(JSON.parse(row.data)) : undefined;
+  }
   private get sql() { return this.storage.sql; }
   private work(id: string): WorkRow | undefined { return this.sql.exec<WorkRow>('SELECT * FROM work WHERE work_id = ?', id).toArray()[0]; }
   private liveWork(id: string): WorkRow {
@@ -53,6 +70,8 @@ export class AccountRepository {
   private checkDispatch(input: CommandReservation): void {
     const authorization = input.authorization;
     const plan = authorization.plan;
+    const policy = this.getExecutionPolicy();
+    if (policy && (policy.mode !== 'apply' || policy.version !== plan.policyVersion || input.command.requiredCapabilities.some(c => !policy.capabilities.includes(c)))) throw Error('POLICY_CHANGED');
     const row = this.sql.exec<{ data: string | null; work_id: string; version: number; valid: number; fence: number | null; snapshot_version: number | null; context_version: number | null; catalog_version: string | null; evidence_expires_at: number }>('SELECT * FROM plans WHERE plan_id = ?', plan.planId).toArray()[0];
     if (!row?.valid || !row.data || row.evidence_expires_at <= Date.now() || row.work_id !== input.lease.workId || row.version !== plan.version || row.fence !== input.lease.fence || row.snapshot_version !== input.snapshotVersion || row.context_version !== input.contextVersion || row.catalog_version !== input.catalogVersion || canonical(JSON.parse(row.data)) !== canonical(plan)) throw Error('PLAN_STALE');
     this.checkBasis(input);

@@ -90,3 +90,4 @@ export type EnrichOrganization = z.infer<typeof enrichOrganizationSchema>;
 export type EnrichPerson = z.infer<typeof enrichPersonSchema>;
 export type EnrichDeal = z.infer<typeof enrichDealSchema>;
 export type UpdateTask = z.infer<typeof updateTaskSchema>;
+export type ChangeStage = z.infer<typeof changeStageSchema>;

@@ -3,6 +3,7 @@ import type { Env } from '../../env';
 import type { ReserveWorkInput, PlanBasis, WorkLease, SnapshotManifest, SyncPlan, CommandReservation, CommandCompletion, ContextProjection } from '../types';
 import { migrate } from './migrations';
 import { AccountRepository } from './repository';
+import type { OperationsStore, OperationInput } from '../operations';
 import { takeBudget } from './budget';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot } from '../types';
 export class AutomationAccount extends DurableObject<Env> {
@@ -17,6 +18,16 @@ export class AutomationAccount extends DurableObject<Env> {
     });
   }
   async reserveWork(input: ReserveWorkInput) { return this.repository.reserveWork(input); }
+  async prepareOperation(input: OperationInput) { return this.repository.prepareOperation(input); }
+  async getOperation(id: string) { return this.repository.getOperation(id); }
+  async getExecutionPolicy() { return this.repository.getExecutionPolicy(); }
+  async getOperationByRequest(id: string) { return this.repository.getOperationByRequest(id); }
+  async reserveExecutionCommand(id: string, key: string) { return this.repository.reserveExecutionCommand(id, key); }
+  async getExecutionCommand(key: string) { return this.repository.getExecutionCommand(key); }
+  async beginDispatch(id: string, key: string) { return this.repository.beginDispatch(id, key); }
+  async finishDispatch(...args: Parameters<OperationsStore['finishDispatch']>) { return this.repository.finishDispatch(...args); }
+  async settleReconciliation(...args: Parameters<OperationsStore['settleReconciliation']>) { return this.repository.settleReconciliation(...args); }
+  async setOperationStatus(...args: Parameters<OperationsStore['setOperationStatus']>) { return this.repository.setOperationStatus(...args); }
   async installSnapshot(lease: WorkLease, manifest: SnapshotManifest) { return this.repository.installSnapshot(lease, manifest); }
   async savePlan(plan: SyncPlan, basis: PlanBasis) { return this.repository.savePlan(plan, basis); }
   async getContext(customerId: string) { return this.repository.getContext(customerId); }

@@ -16,6 +16,10 @@
   },
   "durable_objects": { "bindings": [{ "name": "AUTOMATION_STATE", "class_name": "AutomationAccount" }] },
   "migrations": [{ "tag": "automation-v1", "new_sqlite_classes": ["AutomationAccount"] }],
+  "queues": {
+    "producers": [{ "binding": "AUTOMATION_QUEUE", "queue": "elo-agendor-operations" }],
+    "consumers": [{ "queue": "elo-agendor-operations", "max_batch_size": 1, "max_concurrency": 1, "max_retries": 4, "dead_letter_queue": "elo-agendor-operations-dlq" }]
+  },
   "ratelimits": [
     { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
     { "name": "OAUTH_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 10 } }

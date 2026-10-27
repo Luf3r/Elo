@@ -38,6 +38,7 @@ export type MutationOutcome =
   | { state: 'uncertain'; reason: import('../../errors').ErrorCode | 'UPSTREAM_CANCELLED' }
   | { state: 'rejected'; code: import('../../errors').ErrorCode | 'COLLECTION_WRITE_UNVERIFIED'; retryAfterSeconds?: number };
 export interface CrmMutationClient {
+  changeStage(id: number, patch: import('./mutation-schemas').ChangeStage): Promise<MutationOutcome>;
   createOrganization(record: import('./mutation-schemas').CreateOrganization): Promise<MutationOutcome>;
   createPerson(record: import('./mutation-schemas').CreatePerson): Promise<MutationOutcome>;
   createDeal(parent: import('../../automation/types').EntityRef, record: import('./mutation-schemas').CreateDealRecord): Promise<MutationOutcome>;

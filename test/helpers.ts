@@ -12,6 +12,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
   const takeBudget = makeBudgetMock(realStub);
   const stub = new Proxy(realStub, { get(target, prop) { if (prop === 'takeBudget') return takeBudget; return Reflect.get(target, prop); } });
   const bindings: Env = {
+    AUTOMATION_QUEUE: (runtimeEnv as Env).AUTOMATION_QUEUE,
     AUTOMATION_STATE: new Proxy(namespace, { get(target, prop) { if (prop === 'getByName') return () => stub; const value = Reflect.get(target, prop); return typeof value === 'function' ? value.bind(target) : value; } }),
     AGENDOR_CRM_TOKEN: 'unit-crm-token',
     AGENDOR_CHAT_ACCOUNT_ID: '',
