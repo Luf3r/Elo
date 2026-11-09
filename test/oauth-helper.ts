@@ -38,13 +38,13 @@ export async function providerFetch(provider: OAuthProvider<Env>, env: Env, path
   await waitOnExecutionContext(ctx);
   return r;
 }
-export async function startAuthorization(provider: OAuthProvider<Env>, env: Env, clientName = 'Unit client') {
+export async function startAuthorization(provider: OAuthProvider<Env>, env: Env, clientName = 'Unit client', scope = 'crm:read offline_access') {
   const registered = await providerFetch(provider,env,'/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_name:clientName,redirect_uris:['https://client.example/callback'],grant_types:['authorization_code','refresh_token'],response_types:['code'],token_endpoint_auth_method:'none'})});
   if(registered.status!==201)throw new Error('Test client registration failed: '+await registered.text());
   const raw = await registered.json() as {client_id:string};
   const client = {clientId:raw.client_id};
   const verifier = 'unit-verifier-01234567890123456789012345678901234567890';
-  const query = new URLSearchParams({ client_id:client.clientId, redirect_uri:'https://client.example/callback', resource:RESOURCE, response_type:'code', scope:'crm:read offline_access', state:'client-state', code_challenge:await sha256(verifier), code_challenge_method:'S256' });
+  const query = new URLSearchParams({ client_id:client.clientId, redirect_uri:'https://client.example/callback', resource:RESOURCE, response_type:'code', scope, state:'client-state', code_challenge:await sha256(verifier), code_challenge_method:'S256' });
   const response = await providerFetch(provider,env,'/authorize?' + query);
   const html = await response.text();
   const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1];

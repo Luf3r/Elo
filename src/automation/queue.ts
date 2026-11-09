@@ -1,10 +1,14 @@
+import {SafeError} from '../errors';
+import {readVerificationSnapshot} from './verification-reader';
+import {readCanonicalConversation} from '../agendor/chat/canonical';
+import { assertInboxAllowed } from './inbox-policy';
 import { z } from 'zod';
 import type { Env } from '../env';
 import { accountState } from './state/budget';
 import { resumeOperation, type ExecutionDeps } from './executor';
 import { createCrmMutationClient } from '../agendor/crm/mutations';
 import { createAgendorCrmClient } from '../agendor/crm/client';
-import { createAgendorChatClient, createConversationReader } from '../agendor/chat/client';
+import { createAgendorChatClient } from '../agendor/chat/client';
 import { matchesFields, readRef, resolvedTarget } from './reconciliation';
 import type { CatalogSnapshot } from '../agendor/crm/types';
 import { canonical } from './operations';
@@ -47,8 +51,19 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
         }
         return [];
       }
+      if(command.kind==='create_person')return ['CHAT_PERSON_CREATION_REQUIRES_REVIEW'];
       const policy = await repository.getExecutionPolicy();
       if (!policy || policy.mode !== 'apply' || policy.version !== stored.input.authorization.plan.policyVersion || command.requiredCapabilities.some(c => !policy.capabilities.includes(c))) return ['POLICY_CHANGED'];
+      if (!workflow?.conversationIds.length) return ['INBOX_UNAVAILABLE'];
+      const chat = createAgendorChatClient(env,{waitForBudget:true});
+      const passKey=JSON.stringify([command.commandKey,phase]);
+      const persist=async()=>{const expected=workflow.revision;workflow.revision++;await repository.saveWorkflow(workflow,expected);};
+      if(workflow.verificationPass?.key!==passKey){workflow.verificationPass={key:passKey,inboxes:[]};workflow.verificationReads={};await persist();}
+      for (const conversationId of workflow.conversationIds) {
+        try {assertInboxAllowed(await chat.getConversation(conversationId),policy);}
+        catch(error){if(error instanceof SafeError && error.retryable)throw error;return ['INBOX_NOT_AUTHORIZED'];}
+
+      }
       // A field absent during preparation may have been filled by a human.
       // Verify the full observed record hash as well as the new fact sources.
       const verificationSources = [...command.sourceRefs, ...command.before.flatMap(f => f.sources)];
@@ -56,9 +71,10 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
         if (source.kind === 'message' || source.kind === 'contact') {
           const conversationIds = source.kind === 'message' ? [Number(source.id.split(':')[0])] : [...new Set(stored.input.authorization.plan.sourceRefs.filter(s => s.kind === 'message').map(s => Number(s.id.split(':')[0])))];
           if (!conversationIds.length || conversationIds.some(id => !Number.isSafeInteger(id) || id <= 0)) return ['SOURCE_UNVERIFIED'];
-          const reader = createConversationReader(createAgendorChatClient(env)); let found = false;
+          let found = false;
           for (const conversationId of conversationIds) {
-            const snapshot = await reader.readConversation({ conversationId });
+            const previous=workflow.verificationReads?.[String(conversationId)];
+            const snapshot=previous && !previous.continuation && !previous.attachmentListing?.nextPage ? previous : await readVerificationSnapshot({...chat,getConversation:id=>readCanonicalConversation(chat,id,policy),validateConversation:c=>assertInboxAllowed(c,policy)},conversationId,{previous,onProgress:async snapshot=>{workflow.verificationReads ??={};workflow.verificationReads[String(conversationId)]=snapshot;await persist();}});
             const known = source.kind === 'message' ? snapshot.messages.some(m => String(m.id) === source.id.split(':')[1]) : String(snapshot.contact?.id) === source.id;
             if (known && snapshot.revision === source.revision) found = true;
           }
@@ -83,6 +99,10 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
         const fields = Object.fromEntries(command.before.map(f => [f.field, f.value]));
         if (!matchesFields(current, fields)) return ['CRM_CHANGED'];
       }
+      // Recheck canonical inboxes on every dispatch attempt, including a retry
+      // that reused already-read source snapshots. A persisted pass is not authority.
+      for(const conversationId of workflow.conversationIds){try{assertInboxAllowed(await chat.getConversation(conversationId),policy);}catch(error){if(error instanceof SafeError && error.code==='MCP_UNAUTHORIZED')return ['INBOX_NOT_AUTHORIZED'];throw error;}}
+      delete workflow.verificationPass;delete workflow.verificationReads;await persist();
       return [];
     } };
   return deps;

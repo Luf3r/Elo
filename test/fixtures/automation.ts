@@ -29,7 +29,7 @@ export const validPlan: SyncPlan = { planId: 'plan-1', version: 1, policyVersion
 export function scenarioAnalysis(work: PreparedWork, entity: 'organization' | 'person' = 'organization'): AgentAnalysis {
   const source = { ...work.snapshot.sourceRefs!.find(s => s.kind === 'message')!, kind: 'message' as const };
   return {
-    customerSelection: { kind: 'new', entity, record: { name: 'Synthetic Customer' } },
+    customerSelection: entity==='person' && work.snapshot.candidates.crmContactLink?.status==='verified' ? {kind:'person',id:work.snapshot.candidates.crmContactLink.crmPersonId!} : { kind: 'new', entity, record: { name: 'Synthetic Customer' } },
     facts: [{ entity, field: 'name', value: 'Synthetic Customer', certainty: 'confirmed', sources: [source] }],
     demands: [{ clientKey: 'request-a', service: 'Water analysis', scope: 'Four samples; collection to be confirmed', explicitRequest: { value: true, sources: [source] }, approach: { value: 'client', sources: [source] }, stage: { value: 'new_request', sources: [source] }, items: [], commitments: [] }],
     ambiguities: [],

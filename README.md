@@ -12,6 +12,8 @@ As ferramentas CRM incluem leitura, catálogo, criação e enriquecimento tipado
 
 Cobertura parcial do Chat, anexos indisponíveis, ambiguidades e semântica não comprovada permanecem pendências. Escrita de produtos/preços e substituição de coleções continuam bloqueadas. Sem comprovação da exclusividade do criador nativo e do vínculo conversa/caixa, mantenha preview. Não há declaração de automação comercial completa ou de piloto real concluído.
 
-Verificação offline: `npm test`, `npm run test:scripts`, `npm run typecheck`, `npm run build` e `npm run verify:automation`. Build é dry-run. O verificador de automação não chama rede por padrão; leitura real e piloto exigem opções e alvos deliberados. Veja [operação](docs/operations.md), [fluxo do agente](docs/agent-workflow.md), [recuperação e piloto](docs/automation-operations.md) e [contratos e limites](docs/automation-contracts.md).
+Atualização local de confiabilidade: [histórico, inboxes, identidade e anexos](docs/agendor-reliability.md). Apenas inboxes 4101/4102; cobertura de mensagens é calculada e o vínculo nativo tem prioridade. Paginação de coleções e CDN continuam condicionadas à evidência da API real.
+
+Verificação offline: `npm test`, `npm run test:adapters`, `npm run test:scripts`, `npm run typecheck`, `npm run build` e `npm run verify:automation`. Build é dry-run. O verificador de automação não chama rede por padrão; leitura real e piloto exigem opções e alvos deliberados. Veja [operação](docs/operations.md), [fluxo do agente](docs/agent-workflow.md), [recuperação e piloto](docs/automation-operations.md) e [contratos e limites](docs/automation-contracts.md).
 
 As dependências diretas são fixadas em `package.json`/`package-lock.json`: Agents 0.29.0 com SDK MCP 2.3.1, Inspector 2.11.0 e biblioteca OAuth 1.2.3. `src/version.ts` deriva a versão do pacote; a versão local não é um identificador de publicação Cloudflare.

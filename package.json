@@ -26,7 +26,8 @@
     "discover:automation-contracts": "node scripts/discover-automation-contracts.mjs",
     "verify:chat-contract": "node scripts/verify-chat-contract.mjs",
     "cf:login": "wrangler login",
-    "cf:whoami": "wrangler whoami"
+    "cf:whoami": "wrangler whoami",
+    "test:adapters": "vitest run --config vitest.adapters.config.ts"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.3",

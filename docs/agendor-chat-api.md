@@ -1,3 +1,7 @@
+# Atualização de confiabilidade — 2026-10-28
+
+O comportamento atual está descrito em [Confiabilidade Chat → CRM](agendor-reliability.md). As seções abaixo registram evidências históricas e não substituem os contratos novos. A coleção Postman foi acessada pelo navegador nesta sessão: after está documentado; paginação de conversas/anexos e hosts de CDN não aparecem nas seções consultadas. Os testes do usuário nas conversas 42 e 203 validam a semântica de mensagens, independentemente da leitura ao vivo desta implementação.
+
 # Contrato de leitura do Agendor Chat
 
 A coleção Postman fornecida pelo usuário documenta a origem fixa `https://chat.agendor.com.br/api/v1`, autenticação pelo header `api_access_token` e as rotas GET abaixo. A coleção não documenta corpos de resposta nem parâmetros de paginação.

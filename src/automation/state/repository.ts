@@ -236,7 +236,7 @@ export class AccountRepository {
           ...(decision.kind === 'selectDemand' ? { clientKey: workflow.analysis.demands[0]!.clientKey } : {}) };
         workflow.snapshotVersion = workflow.work.snapshotVersion + 1;
         workflow.revision++; workflow.step = 0; workflow.pages = []; workflow.conversations = []; workflow.continuation = crypto.randomUUID();
-        delete workflow.work; delete workflow.catalog; delete workflow.basis; delete workflow.analysis; delete workflow.hydration;
+        delete workflow.verificationPass; delete workflow.verificationReads; delete workflow.candidateReadCache; delete workflow.work; delete workflow.catalog; delete workflow.basis; delete workflow.analysis; delete workflow.hydration;
         this.sql.exec('UPDATE events SET data = ? WHERE event_id = ?', JSON.stringify(workflow), 'workflow:' + review.workId);
         // Discard only unpublished projections from the old reviewed snapshot.
         this.sql.exec('UPDATE facts SET valid = 0 WHERE work_id = ? AND version > COALESCE((SELECT version FROM contexts WHERE customer_id = ?), 0)', review.workId, review.customerId);
@@ -448,6 +448,7 @@ export class AccountRepository {
       if (customer.kind !== 'review') {
         this.sql.exec('INSERT INTO customers VALUES (?, 1) ON CONFLICT(customer_id) DO NOTHING', basis.customerId);
         for (const id of identities) this.sql.exec('INSERT INTO bindings VALUES (?, ?, ?, ?) ON CONFLICT(binding_key) DO NOTHING', `identity:${id}`, basis.customerId, 'identity', basis.lease.workId);
+        if(customer.kind==='resolved') this.sql.exec('INSERT INTO bindings VALUES (?, ?, ?, ?) ON CONFLICT(binding_key) DO NOTHING', `confirmed-crm:${customer.ref.kind}:${customer.ref.id}`,basis.customerId,'confirmed-crm',String(customer.ref.id));
         for (const decision of demands.demands) if (decision.kind === 'create' || decision.kind === 'resolved') {
           const request = validation.data.analysis.demands.find(d => d.clientKey === decision.clientKey)!;
           const record: DemandRecord = { demandId: decision.demandId, customerId: basis.customerId, clientKey: request.clientKey, service: request.service, scope: request.scope, state: 'open', sourceRefs: decision.sourceRefs, ...(request.references ? { references: request.references } : {}) };

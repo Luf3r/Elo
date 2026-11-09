@@ -10,9 +10,10 @@ const actor = { userId: 'owner-sub', clientId: 'workflow-client', scopes: ['auto
 function upstream() {
   return vi.fn(async (request: Request) => {
     const url = new URL(request.url);
+    if(url.pathname.endsWith('/contacts/2'))return Response.json({payload:{id:2,name:'Synthetic Contact',email:'synthetic@example.com'}});
     if (url.pathname.endsWith('/attachments')) return Response.json({ payload: [] });
     if (url.pathname.endsWith('/messages')) return Response.json({ payload: [{ id: 201, conversation_id: 101, content: 'Synthetic request', message_type: 0, sender: { type: 'contact', id: 2 } }] });
-    if (url.pathname.endsWith('/conversations/101')) return Response.json({ id: 101, meta: { sender: { id: 2, name: 'Synthetic Contact', email: 'synthetic@example.com' } } });
+    if (url.pathname.endsWith('/conversations/101')) return Response.json({ id: 101, inbox_id:4101, meta: { sender: { id: 2, name: 'Synthetic Contact', email: 'synthetic@example.com' } } });
     return Response.json({ data: [] });
   });
 }

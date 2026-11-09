@@ -19,7 +19,7 @@
   "policy": {
     "version": 1,
     "mode": "disabled",
-    "allowedInboxIds": [],
+    "allowedInboxIds": [4101, 4102],
     "capabilities": [],
     "funnelMapping": {},
     "stageMapping": [],

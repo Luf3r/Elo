@@ -3,6 +3,7 @@ import type { CatalogSnapshot, CatalogEntityType } from './types';
 
 export const crmIdSchema = z.number().int().positive().max(2_147_483_647);
 const safeKey = z.string().min(1).max(150).refine(v => !v.split(/[.\[\]]/).some(p => ['__proto__', 'prototype', 'constructor'].includes(p)));
+const customFieldCatalogIdSchema = z.union([safeKey, crmIdSchema]);
 const text = (max: number) => z.string().trim().max(max);
 const contact = z.strictObject({ email: z.email().optional(), work: text(80).optional(), mobile: text(80).optional() }).refine(v => Object.values(v).some(x => x !== undefined));
 // Explicit write-side DTO. Never pass a read-side address object through.
@@ -46,8 +47,14 @@ export const changeStageSchema = z.strictObject({ funnel: crmIdSchema, dealStage
 /** Catalog validation is compulsory at the mutation adapter boundary. Unknown
  * upstream field types remain blocked until an explicit mapper is verified. */
 export function customFieldMatchesCatalog(field: z.infer<typeof customFieldSchema>, entity: CatalogEntityType, catalog: CatalogSnapshot): boolean {
-  const entry = catalog.customFields.find(f => f.entityType === entity && (String(f.id) === String(field.id) || f.identifier === field.id || f.name === field.id));
-  if (!entry) return false;
+  if (!customFieldCatalogIdSchema.safeParse(field.id).success) return false;
+  const entries = catalog.customFields.filter(f => f.entityType === entity
+    && customFieldCatalogIdSchema.safeParse(f.id).success
+    && String(f.id) === String(field.id));
+  // A display name or auxiliary identifier is not a substitute for its catalog
+  // ID. Missing, malformed, or duplicate IDs fail closed.
+  if (entries.length !== 1) return false;
+  const entry = entries[0]!;
   const optionIds = (entry.options ?? []).flatMap(o => typeof o === 'string' || typeof o === 'number' ? [o] : o && typeof o === 'object' && 'id' in o ? [(o as { id: unknown }).id] : []);
   switch (entry.type) {
     case 'text': return typeof field.value === 'string';

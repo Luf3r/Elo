@@ -16,6 +16,9 @@ export interface WorkflowState {
   conversations: ConversationSnapshot[];
   pages: CatalogPage[];
   candidates: CustomerCandidates;
+  candidateReadCache?: Record<string,string>;
+  verificationReads?: Record<string,ConversationSnapshot>;
+  verificationPass?: {key:string; inboxes:number[]};
   catalog?: CatalogSnapshot;
   work?: PreparedWork;
   basis?: PlanBasis;

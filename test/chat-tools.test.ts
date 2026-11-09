@@ -3,7 +3,7 @@ import { callTool, rpc } from './mcp-helper';
 import { testEnv, budgetMock } from './helpers';
 
 const conversation = {
-  id: 456, status: 'open', inbox_name: 'WhatsApp', created_at: 1700000000,
+  id: 456, inbox_id:4101, status: 'open', inbox_name: 'WhatsApp', created_at: 1700000000,
   unread_count: 2, meta: { sender: { name: 'Cliente', phone_number: '+5511999999999', agendor_person_id: 789 } },
   last_non_activity_message: { content: 'Última mensagem privada' },
 };
@@ -49,7 +49,9 @@ describe('read-only Agendor Chat tools', () => {
     const requests = fetch.mock.calls.map(([request]) => request as Request);
     expect(requests.map(request => new URL(request.url).pathname)).toEqual([
       '/api/v1/accounts/123/conversations',
+      '/api/v1/accounts/123/conversations',
     ]);
+    expect(new URL(requests[1]!.url).searchParams.get('page')).toBe('2');
     expect(requests.every(request => request.method === 'GET')).toBe(true);
     expect(requests.every(request => new URL(request.url).origin === 'https://chat.agendor.com.br')).toBe(true);
   });
@@ -95,23 +97,24 @@ describe('read-only Agendor Chat tools', () => {
     });
     const messages = await callTool('chat_list_messages', { conversationId: 200, after: 10 }, env, ['chat:read']);
     expect(messages.data.result.isError).toBeUndefined();
-    expect(JSON.parse(messages.data.result.content[0].text).coverage.missingReasons).toContain('older_edits_not_covered');
+    expect(JSON.parse(messages.data.result.content[0].text).coverage.missingReasons).toContain('history_start_not_reached');
     const attachment = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400 }, env, ['chat:read']);
     expect(attachment.data.result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
     expect(handled).toEqual(['/api/v1/accounts/100/conversations/200/messages?after=10', '/api/v1/accounts/100/conversations/200/attachments', '/files/synthetic']);
   });
-  it.each(['image', 'text', 'resource'] as const)('bounds oversized %s attachment output and returns safe pending metadata', async format => {
+  it.each(['image', 'text', 'resource'] as const)('returns bounded binary parts for a large %s attachment', async format => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
-    const uri = 'https://chat.agendor.com.br/files/' + (format === 'resource' ? 'x'.repeat(550_000) : 'synthetic');
+    const uri = 'https://chat.agendor.com.br/files/synthetic';
     vi.spyOn(globalThis, 'fetch').mockImplementation(async request => {
       const req = request as Request;
       if (req.url.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: uri }] });
-      return new Response(format === 'image' ? new Uint8Array(400_000) : format === 'text' ? 'x'.repeat(550_000) : 'SYNTHETIC', { headers: { 'content-type': format === 'image' ? 'image/png' : format === 'text' ? 'text/plain' : 'application/pdf' } });
+      return new Response(format === 'image' ? new Uint8Array(400_000) : 'x'.repeat(550_000), { headers: { 'content-type': format === 'image' ? 'image/png' : format === 'text' ? 'text/plain' : 'application/pdf' } });
     });
     const { data } = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400 }, env, ['chat:read']);
     expect(new TextEncoder().encode(JSON.stringify(data.result)).byteLength).toBeLessThan(524_288);
-    expect(data.result.content).toHaveLength(1);
-    expect(JSON.parse(data.result.content[0].text)).toEqual({ conversationId: 200, attachmentId: 400, status: 'unavailable', pending: true, reason: 'output_size_limit' });
+    expect(data.result.content).toHaveLength(2);
+    expect(JSON.parse(data.result.content[0].text)).toMatchObject({conversationId:200,attachmentId:400,status:'available',offset:0,nextOffset:196608,contentComplete:false});
+    expect(data.result.content[1].type).toBe('resource');
   });
   it('fails closed on the dedicated Chat rate limiter before upstream access', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
@@ -126,7 +129,7 @@ describe('read-only Agendor Chat tools', () => {
   it('tolerates variable optional upstream fields while retaining stable conversation IDs', async () => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ data: {
-      meta: { all_count: 1 }, payload: [{ id: 456, status: 2, meta: null, last_non_activity_message: { content: null } }],
+      meta: { all_count: 1 }, payload: [{ id: 456, inbox_id:4101,status: 2, meta: null, last_non_activity_message: { content: null } }],
     } }));
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
     expect(data.result.isError).toBeUndefined();

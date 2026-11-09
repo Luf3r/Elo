@@ -58,7 +58,7 @@ it('shares Chat credit across detail, messages, attachment listing and download 
   const bindings = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
   const client = createAgendorChatClient(bindings, { request: async request => {
     if (request.url.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] });
-    if (request.url.endsWith('/messages')) return Response.json({ payload: [] });
+    if (new URL(request.url).pathname.endsWith('/messages')) return Response.json({ payload: [] });
     if (request.url.endsWith('/200')) return Response.json({ id: 200 });
     return new Response('synthetic', { headers: { 'content-type': 'text/plain' } });
   } });
@@ -66,15 +66,19 @@ it('shares Chat credit across detail, messages, attachment listing and download 
   expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ status: 'available' });
   await expect(client.listMessages(200)).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
 });
-it('rejects unavailable budget before attachment download rather than disguising it as attachment absence', async () => {
+it('waits for shared credit before downloading an attachment after metadata consumed the last slot', async () => {
+  vi.useFakeTimers();
   const { createAgendorChatClient } = await import('../src/agendor/chat/client');
   const bindings = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
-  const request = vi.fn(async () => Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] }));
+  const request = vi.fn(async (request:Request) => request.url.endsWith('/attachments') ? Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] }) : new Response('file',{headers:{'content-type':'text/plain'}}));
   const client = createAgendorChatClient(bindings, { request });
   const stub = bindings.AUTOMATION_STATE.getByName('elotenant');
   for (let i = 0; i < 3; i++) await stub.takeBudget('chat', Date.now());
-  await expect(client.readAttachment({ conversationId: 200, attachmentId: 400 })).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
-  expect(request).toHaveBeenCalledTimes(1);
+  const download=client.readAttachment({conversationId:200,attachmentId:400});
+  await vi.waitFor(()=>expect(request).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(10_001);
+  expect(await download).toMatchObject({status:'available'});expect(request).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
 });
 it('routes the production factory to the same server-owned account key', async () => {
   const { accountState } = await import('../src/automation/state/budget');

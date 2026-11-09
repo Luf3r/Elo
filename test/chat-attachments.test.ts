@@ -31,6 +31,18 @@ describe('authorized Chat attachments', () => {
     expect(JSON.stringify(result)).not.toContain('PRIVATE');
     expect(count()).toBe(1);
   });
+  it('follows the observed Agendor Chat attachment redirect to its exact production S3 origin', async () => {
+    const requests: string[] = [];
+    const client = createAgendorChatClient(env, { budgetGate: allowBudget, request: async request => {
+      if (request.url.endsWith('/attachments')) return Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic', file_type: 'file' }] });
+      requests.push(new URL(request.url).origin);
+      if (requests.length === 1) return new Response(null, { status: 302, headers: { location: 'https://agendor-chat-sa-production.s3.sa-east-1.amazonaws.com/synthetic?signature=secret' } });
+      return new Response('SYNTHETIC', { headers: { 'content-type': 'text/plain' } });
+    } });
+    const result = await client.readAttachment({ conversationId: 200, attachmentId: 400 });
+    expect(result).toMatchObject({ status: 'available', mimeType: 'text/plain', text: 'SYNTHETIC' });
+    expect(requests).toEqual(['https://chat.agendor.com.br', 'https://agendor-chat-sa-production.s3.sa-east-1.amazonaws.com']);
+  });
   it('enforces the smaller client byte limit during streaming', async () => {
     const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response(new Uint8Array(33), { headers: { 'content-type': 'text/plain' } }), 32);
     expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ reason: 'size_limit', pending: true });
@@ -41,17 +53,17 @@ describe('authorized Chat attachments', () => {
       expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ status: 'available', mimeType: mime, pending: false });
     }
   });
-  it('returns an authorized link and pending reason for unsupported formats', async () => {
-    const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response('SYNTHETIC', { headers: { 'content-type': 'application/pdf' } }));
-    expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ reason: 'unsupported_format', pending: true, resource: { type: 'resource_link', uri: 'https://chat.agendor.com.br/files/synthetic' } });
+  it('rejects unsupported HTML without returning a signed URL', async () => {
+    const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response('SYNTHETIC', { headers: { 'content-type': 'text/html' } }));
+    expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ reason: 'unsupported_format', pending: true });
   });
   it('only downloads an attachment present in the authorized conversation list', async () => {
     const { client, count } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response('SYNTHETIC'));
-    expect(await client.readAttachment({ conversationId: 200, attachmentId: 401 })).toMatchObject({ reason: 'attachment_not_found' });
+    expect(await client.readAttachment({ conversationId: 200, attachmentId: 401 })).toMatchObject({ reason: 'attachment_listing_incomplete' });
     expect(count()).toBe(0);
   });
-  it('enforces the hard five MiB cap even if the client limit is larger', async () => {
-    const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response(new Uint8Array(5 * 1_048_576 + 1), { headers: { 'content-type': 'image/png' } }), 10 * 1_048_576);
+  it('enforces the hard twenty MiB cap even if the client limit is larger', async () => {
+    const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response(new Uint8Array(20 * 1_048_576 + 1), { headers: { 'content-type': 'image/png' } }), 30 * 1_048_576);
     expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ reason: 'size_limit' });
   });
   it('bounds attachment JSON metadata to one MiB before parsing', async () => {
@@ -68,14 +80,14 @@ describe('authorized Chat attachments', () => {
       if (!request.url.endsWith('/attachments')) throw new Error('Unexpected synthetic download');
       return Response.json({ payload: [{ id: 400, conversation_id: 201, data_url: 'https://chat.agendor.com.br/files/synthetic' }] });
     } });
-    expect(await client.readAttachment({ conversationId: 200, attachmentId: 400 })).toMatchObject({ status: 'unavailable', reason: 'attachment_identity_mismatch' });
+    await expect(client.readAttachment({ conversationId:200,attachmentId:400 })).rejects.toMatchObject({code:'UPSTREAM_INVALID_RESPONSE'});
   });
   it('times out a stalled attachment body and releases the reader', async () => {
     vi.useFakeTimers();
     let cancelled = false;
     const { client } = attachmentClient('https://chat.agendor.com.br/files/synthetic', () => new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: { 'content-type': 'text/plain' } }));
     const result = client.readAttachment({ conversationId: 200, attachmentId: 400 });
-    await vi.advanceTimersByTimeAsync(10_001);
+    await vi.advanceTimersByTimeAsync(30_001);
     const outcome = await Promise.race([result, Promise.resolve('still_pending')]);
     expect(outcome).toMatchObject({ status: 'unavailable', reason: 'download_timeout', pending: true });
     expect(cancelled).toBe(true);

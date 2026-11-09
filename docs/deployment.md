@@ -1,5 +1,13 @@
 # Rollout candidato da ampliação — 2026-10-27
 
+## Publicação atual — 2026-11-03
+
+O Worker `elo-agendor-mcp` está na versão `c53c5538-4cd5-4e09-af92-b6cfc39cb00f` (100%), publicada após corrigir a validação estrita de metadados de anexos nos snapshots de automação. Smoke checks: `/health` e `server_status` `ok`; política de automação `apply`, versão 5, sem operações ou revisões pendentes. A execução local informada pelo usuário passou com 43 arquivos e 612/612 testes. Nenhuma escrita CRM foi realizada neste deploy. A cobertura de conversas segue parcial quando a API não informa fim de paginação.
+
+## Atualização de confiabilidade Chat — 2026-10-28
+
+Atualização técnica autorizada do Worker existente `elo-agendor-mcp`: versão `45325820-bd85-4545-805f-3ae124e288ac` (100% no deployment). Mantidos endpoint, variáveis, secrets, bindings e política remota; nenhum secret foi escrito e nenhuma escrita CRM foi executada. Smoke test pós-deploy confirmou a leitura de um anexo autorizado como `audio/ogg`, 25,408 bytes, completo. A allowlist só inclui o origin HTTPS exato retornado pelo redirect observado. As evidências e limitações de paginação estão em [confiabilidade Agendor Chat](agendor-reliability.md).
+
 **Estado: publicado em modo disabled, sem piloto real autorizado.** A versão de aplicação permanece **0.1.2**, derivada de `package.json` por `src/version.ts`; a versão publicada deste fechamento é `4da0255e-db66-4a85-a19d-346cf60d2ea3`. A última publicação registrada nestes documentos é `9a62a3b3-1750-484c-a811-6547efba2611` (catálogo de 15 ferramentas). Esse registro histórico não é uma consulta atual ao tráfego. Os parágrafos históricos abaixo não comprovam publicação da ampliação de 42 ferramentas.
 
 ## Destino e recursos preparados

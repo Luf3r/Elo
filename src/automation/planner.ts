@@ -32,6 +32,7 @@ function validate(analysis: AgentAnalysis, work: PreparedWork, resolution: Resol
   if (policy.mode === 'disabled') return ['AUTOMATION_DISABLED'];
   if (work.catalogVersion !== work.snapshot.catalog.version) return ['CATALOG_VERSION_MISMATCH'];
   if (!work.coverage.complete || work.coverage.missingReasons.length || !work.snapshot.candidates.coverage.complete || work.snapshot.candidates.coverage.missingReasons.length || work.snapshot.conversations.some(c => !c.coverage.complete || c.coverage.missingReasons.length)) return ['SNAPSHOT_COVERAGE_INCOMPLETE'];
+  if(resolution.customer.kind==='create' && resolution.customer.proposal.kind==='new' && resolution.customer.proposal.entity==='person' && work.snapshot.conversations.length) return ['CHAT_PERSON_CREATION_REQUIRES_REVIEW'];
   if (resolution.customer.kind === 'review') return resolution.customer.reviewReasons;
   if (resolution.customer.customerId !== work.customerId || (work.snapshot.candidates.customerId && work.snapshot.candidates.customerId !== work.customerId)) return ['CUSTOMER_ID_MISMATCH'];
   const sources = knownSources(work);

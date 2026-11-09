@@ -21,6 +21,6 @@ export function consentPage(details: ConsentDescription, handle: string): string
   <p>Destino da autorização: <strong>${escape(details.redirectHost)}</strong>.</p>
   ${details.redirectIsLoopback ? '<p>O destino é um aplicativo neste computador. Continue apenas se você iniciou esta conexão.</p>' : ''}
   <p>Permissões: ${details.scope.map(escape).join(', ')}.</p>
-  ${details.scope.includes('offline_access') ? '<p>A conexão poderá ser renovada até a expiração ou revogação da autorização.</p>' : ''}
+  ${details.scope.includes('offline_access') ? '<p>Ao permitir, você autoriza a renovação automática da conexão por até 35 dias a partir deste login. Cada token de acesso dura 24 horas. A renovação não amplia as permissões acima e termina se a autorização for revogada.</p>' : ''}
   <form method="post" action="/authorize"><input type="hidden" name="handle" value="${escape(handle)}"><button name="decision" value="approve">Permitir e entrar por e-mail</button> <button name="decision" value="deny">Negar</button></form></html>`;
 }

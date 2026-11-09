@@ -47,14 +47,14 @@ describe('conservative customer resolution', () => {
     const result = identity.resolveCustomer(input, candidates([candidate(11, { name: 'Synthetic New' })]), catalogFixture);
     expect(result.kind).toBe('review');
   });
-  it('reads every candidate page and verifies a Chat CRM person by direct read', async () => {
+  it('uses the canonical direct read instead of unnecessary candidate pages', async () => {
     const pages: number[] = [];
     const result = await identity.readCustomerCandidates({
       async searchPeople(input) { pages.push(input.page!); return { items: input.page === 1 ? [{ id: 12, name: 'Other', contact: { email: 'person@example.test.br' } }] : [{ id: 13, name: 'Person', contact: { email: 'person@example.test' }, organization: 11 }], pageInfo: { page: input.page!, perPage: 100, hasNext: input.page === 1, nextPage: input.page === 1 ? 2 : null } }; },
       async searchOrganizations() { return { items: [], pageInfo: { page: 1, perPage: 100, hasNext: false, nextPage: null } }; },
       async getPerson() { return { id: 13, name: 'Person', contact: { email: 'person@example.test' }, organization: 11 }; },
     }, { id: 42, email: 'person@example.test', crmPersonId: 13 }, 'contact-r1');
-    expect(pages).toEqual([1, 2]);
+    expect(pages).toEqual([]);
     expect(result.coverage.complete).toBe(true);
     expect(result.candidates.map(c => c.ref.id)).toContain(13);
     expect(result.verifiedLinks?.[0]).toMatchObject({ ref: { kind: 'person', id: 13 } });
@@ -104,7 +104,7 @@ describe('conservative customer resolution', () => {
       async getPerson() { throw Error('unused'); },
     }, { id: 42, name: 'Synthetic New' }, 'contact-r1', input.facts);
     expect(result.coverage.complete).toBe(false);
-    expect(result.identifierCoverage).toEqual([{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: false, pagesRead: 0, missingReasons: ['candidate_read_unavailable'] } }]);
+    expect(result.identifierCoverage).toEqual([{ entity: 'organization', field: 'cnpj', value: '12345678000190', coverage: { complete: false, pagesRead: 0, missingReasons: ['candidate_query_failed'] } }]);
     expect(identity.resolveCustomer(input, result, catalogFixture).kind).toBe('review');
   });
   it('never declares CNPJ absence from a first page when a later page is unavailable', async () => {
@@ -115,7 +115,7 @@ describe('conservative customer resolution', () => {
       async getPerson() { throw Error('unused'); },
     }, { id: 42 }, 'contact-r1', input.facts);
     expect(result.coverage).toMatchObject({ complete: false, pagesRead: 1 });
-    expect(result.identifierCoverage?.[0]?.coverage).toMatchObject({ complete: false, pagesRead: 1, missingReasons: ['candidate_read_unavailable'] });
+    expect(result.identifierCoverage?.[0]?.coverage).toMatchObject({ complete: false, pagesRead: 1, missingReasons: ['candidate_query_failed'] });
     expect(identity.resolveCustomer(input, result, catalogFixture).kind).toBe('review');
   });
 });

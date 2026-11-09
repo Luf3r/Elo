@@ -14,7 +14,8 @@ async function fixture() {
   let message = 'Synthetic identity question';
   const complete = { complete: true, missingReasons: [], pagesRead: 1 };
   vi.spyOn(chat, 'createAgendorChatClient').mockReturnValue({ ...chatClient,
-    getConversation: async id => ({ id, contact: { id: 2, name: 'Synthetic Customer' }, coverage: complete }),
+    getContact:async id=>({contact:{id,name:'Synthetic Customer'},coverage:complete}),
+    getConversation: async id => ({ id, inboxId:4101, contact: { id: 2, name: 'Synthetic Customer' }, coverage: complete }),
     listMessages: async id => ({ conversationId: id, messages: [{ id: 201, conversationId: id, content: message, direction: 'incoming', senderType: 'contact', senderId: 2 }], coverage: complete }),
     listAttachments: async () => ({ attachments: [], coverage: complete }),
   });

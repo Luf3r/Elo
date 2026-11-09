@@ -1,3 +1,5 @@
+import {readCanonicalConversation} from '../agendor/chat/canonical';
+import { allowedInboxIds, assertInboxAllowed } from './inbox-policy';
 import { z } from 'zod';
 import type { Env } from '../env';
 import { requireCapabilities, type AuthContext } from '../auth';
@@ -8,7 +10,7 @@ import { createAgendorCrmClient } from '../agendor/crm/client';
 import { createCatalogSnapshot } from '../agendor/crm/catalog';
 import { parseInput } from '../agendor/crm/schemas';
 import { accountState } from './state/budget';
-import { readCustomerCandidates, uniqueSources } from './identity';
+import { readCustomerCandidates, readDuplicateCandidates, candidateLookupLinks, uniqueSources } from './identity';
 import { requireAutomationOperation, requirePolicyCapabilities, authorizeSubmission, authorizePlan } from './authorization';
 import { prepareInputSchema, preparedWorkSchema, analysisInputSchema, createAnalysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema, auditInputSchema } from './schemas';
 import { automationPolicySchema, updatePolicyInputSchema } from './policy-types';
@@ -22,10 +24,10 @@ import type { WorkflowState } from './service-state';
 import type { PrepareInput, PrepareResult, SourceRef, AutomationPolicy, OperationStatus, SyncPlan } from './types';
 import type { ConfigurationInput } from '../agendor/crm/types';
 
-export const defaultAutomationPolicy: AutomationPolicy = { version: 1, mode: 'disabled', allowedInboxIds: [], capabilities: [], funnelMapping: {}, stageMapping: [], customFieldMapping: [], nativeCreatorDisabled: false, limits: { maxConversations: 10, maxCommands: 20, maxRequests: 20 } };
+export const defaultAutomationPolicy: AutomationPolicy = { version: 1, mode: 'disabled', allowedInboxIds: [...allowedInboxIds], capabilities: [], funnelMapping: {}, stageMapping: [], customFieldMapping: [], nativeCreatorDisabled: false, limits: { maxConversations: 10, maxCommands: 20, maxRequests: 20 } };
 const key = z.string().trim().min(1).max(200);
 const unavailable = (message = 'Work is unavailable or stale; prepare again.'): never => { throw new SafeError('INVALID_INPUT', message, false, 409); };
-function enforceInboxPolicy(conversations: Array<{ inboxId?: number }>, policy: AutomationPolicy): void { if (!policy.allowedInboxIds.length) return; if (conversations.some(conversation => conversation.inboxId === undefined || !policy.allowedInboxIds.includes(conversation.inboxId))) throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not allowed by the current automation policy.', false, 403); }
+function enforceInboxPolicy(conversations: Array<{inboxId?: number}>, policy: AutomationPolicy): void { conversations.forEach(c=>assertInboxAllowed(c,policy)); }
 export function automationActor(auth: AuthContext) {
   requireCapabilities(auth, []);
   if (!auth.userId || !auth.clientId || !auth.expiresAt || auth.expiresAt <= Date.now()) throw new SafeError('MCP_UNAUTHORIZED', 'A current, expiring actor authorization is required.', false, 403);
@@ -73,7 +75,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       }
     }
     if (state.lease.target.kind === 'pending') unavailable('Pending targets are not supported; select an explicit conversation or customer.');
-    if (state.work) return { state: 'ready', work: state.work };
+    if (state.work) { enforceInboxPolicy(state.conversations,await currentPolicy()); return { state: 'ready', work: state.work }; }
     const snapshotVersion = state.snapshotVersion ?? 1;
     const crm = createAgendorCrmClient(env, { signal }); const chat = createAgendorChatClient(env, { signal });
     try {
@@ -85,8 +87,21 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         await persistWorkflow(repository(), state);
       }
       if (state.step === 0) {
-        state.conversations = [];
-        for (const conversationId of state.conversationIds) state.conversations.push(await createConversationReader(chat).readConversation({ conversationId }));
+        for (const conversationId of state.conversationIds) {
+          const previous = state.conversations.find(c=>c.conversationId===conversationId);
+          if (previous && !previous.continuation && !previous.attachmentListing?.nextPage) { assertInboxAllowed(await chat.getConversation(conversationId),await currentPolicy()); continue; }
+          const readPolicy = await currentPolicy();
+          const save = async (snapshot: import('../agendor/chat/types').ConversationSnapshot) => {
+            const index=state.conversations.findIndex(c=>c.conversationId===conversationId);
+            if(index<0) state.conversations.push(snapshot); else state.conversations[index]=snapshot;
+            await persistWorkflow(repository(),state);
+          };
+          const snapshot = await createConversationReader({...chat,getConversation:id=>readCanonicalConversation(chat,id,readPolicy),validateConversation:c=>assertInboxAllowed(c,readPolicy)}).readConversation({conversationId},{previous,onProgress:save});
+          if(snapshot.continuation || snapshot.attachmentListing?.nextPage) {
+            if(snapshot.coverage.missingReasons.includes('history_query_failed') || (snapshot.continuation && snapshot.messages.length>=10000)) return {state:'review',workId:state.lease.workId,reviewIds:[await review(state,snapshot.coverage.missingReasons)]};
+            return {state:'deferred',workId:state.lease.workId,retryAt:new Date(Date.now()+10_000).toISOString(),leaseToken:state.lease.leaseToken,continuation:state.continuation};
+          }
+        }
         enforceInboxPolicy(state.conversations, await currentPolicy());
         if (state.range) for (const conversation of state.conversations) {
           const range = state.range;
@@ -98,9 +113,23 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
       }
       if (state.step === 1) {
         const contact = state.conversations[0]?.contact;
-        state.candidates = contact ? await readCustomerCandidates(crm, contact, state.conversations[0]!.revision) : { candidates: [], coverage: { complete: false, missingReasons: ['contact_unavailable'], pagesRead: 0 } };
+        // Cache successful reads in server-owned work state before requesting another
+        // page, so a shared-budget deferral cannot restart the same search forever.
+        const remembered = async <T>(key:string,load:()=>Promise<T>):Promise<T> => {
+          state.candidateReadCache ??= {};
+          const cached=state.candidateReadCache[key];if(cached!==undefined)return JSON.parse(cached) as T;
+          const value=await load();const json=JSON.stringify(value);
+          if(Object.values(state.candidateReadCache).reduce((n,v)=>n+v.length,0)+json.length>500_000) throw new SafeError('UPSTREAM_INVALID_RESPONSE','Candidate read cache exceeded the work limit.',false);
+          state.candidateReadCache[key]=json;await persistWorkflow(repository(),state);return value;
+        };
+        const candidatesCrm={getPerson:(id:number)=>remembered('person:'+id,()=>crm.getPerson(id)),searchPeople:(input:Parameters<typeof crm.searchPeople>[0])=>remembered('people:'+JSON.stringify(input),()=>crm.searchPeople(input)),searchOrganizations:(input:Parameters<typeof crm.searchOrganizations>[0])=>remembered('organizations:'+JSON.stringify(input),()=>crm.searchOrganizations(input))};
+        state.candidates = contact ? await readCustomerCandidates(candidatesCrm, contact, state.conversations[0]!.revision) : { candidates: [], coverage: { complete: false, missingReasons: ['contact_unavailable'], pagesRead: 0 } };
+        if(state.candidates.crmContactLink?.status==='verified') {
+          const person=state.candidates.candidates.find(c=>c.ref.kind==='person' && c.ref.id===state.candidates.crmContactLink!.crmPersonId);
+          if(person) state.candidates.duplicateCheck=await readDuplicateCandidates(candidatesCrm,person);
+        }
         if (state.lease.target.kind === 'conversation') {
-          const linked = await repository().findLinkedCustomer(state.candidates.verifiedLinks);
+          const linked = await repository().findLinkedCustomer(candidateLookupLinks(state.candidates));
           if (linked.customerId) state.customerId = linked.customerId;
           if (linked.ambiguous) { state.candidates.coverage.complete = false; state.candidates.coverage.missingReasons.push('customer_binding_ambiguous'); }
         }
@@ -179,6 +208,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     parseInput(createAnalysisInputSchema({ sourceRefs: (state.work.snapshot.sourceRefs ?? []).filter((s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator'), candidates: state.candidates.candidates.map(c => c.ref), existingDemandIds: selectedDemand, catalog: state.catalog, policy }), input);
     const resolution = await repository().resolveWork(input.analysis, state.candidates, state.catalog, state.basis);
     const plan = buildSyncPlan(input.analysis, state.work, resolution, policy);
+    if(['possible_duplicate','high_confidence_duplicate'].includes(state.candidates.duplicateCheck?.status ?? '')) {plan.reviewReasons=[...(plan.reviewReasons ?? []),'POSSIBLE_DUPLICATE_REQUIRES_REVIEW'];}
     if (plan.state === 'review' || plan.reviewReasons?.length) { plan.state = 'review'; plan.orderedCommands = []; plan.reviewIds = [await review(state, plan.reviewReasons?.length ? plan.reviewReasons : ['ANALYSIS_REQUIRES_REVIEW'])]; }
     state.analysis = input.analysis; await repository().savePlan(plan, state.basis);
     const demands = [];

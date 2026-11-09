@@ -38,13 +38,9 @@ function project(requested: Record<string, unknown>, returned: Record<string, un
   }
   return result;
 }
-function writePayload(record: Record<string, unknown>, catalog: CatalogSnapshot): Record<string, unknown> {
+function writePayload(record: Record<string, unknown>): Record<string, unknown> {
   if (!Array.isArray(record.customFields)) return record;
-  return { ...record, customFields: Object.fromEntries(record.customFields.map((field: { id: string | number; value: unknown }) => {
-    const entry = catalog.customFields.find(candidate => String(candidate.id) === String(field.id) || candidate.identifier === field.id || candidate.name === field.id);
-    const key = typeof entry?.identifier === 'string' && entry.identifier.trim() ? entry.identifier.trim() : typeof entry?.name === 'string' && entry.name.trim() ? entry.name.trim() : String(field.id);
-    return [key, field.value];
-  })) };
+  return { ...record, customFields: Object.fromEntries(record.customFields.map((field: { id: string | number; value: unknown }) => [String(field.id), field.value])) };
 }
 
 /** Internal single-dispatch adapter. The executor reserves a durable commandKey
@@ -61,7 +57,7 @@ export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutat
     }
     throwIfCancelled(deps.signal);
     if (!isConfiguredSecret(deps.env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
-    const payload = writePayload(record, deps.catalog);
+    const payload = writePayload(record);
     const request = new Request(`https://api.agendor.com.br/v3${route}`, {
       method, signal: deps.signal, redirect: 'manual',
       headers: { Authorization: `Token ${deps.env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json', 'Content-Type': 'application/json' },

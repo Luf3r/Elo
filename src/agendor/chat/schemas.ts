@@ -3,11 +3,13 @@ import type { ChatContact } from './types';
 
 export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 export const chatConversationIdInput = z.strictObject({ conversationId: positiveId });
-export const chatConversationPageInput = z.strictObject({ status: z.enum(['open', 'resolved', 'pending', 'snoozed', 'all']).optional(), assigneeTypeId: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(), assigneeType: z.enum(['all', 'me', 'unassigned']).optional(), sortOrder: z.enum(['latest_first', 'oldest_first']).optional() });
+export const chatConversationPageInput = z.strictObject({ status: z.enum(['open', 'resolved', 'pending', 'snoozed', 'all']).optional(), assigneeTypeId: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(), assigneeType: z.enum(['all', 'me', 'unassigned']).optional(), page: positiveId.optional(), sortOrder: z.enum(['latest_first', 'oldest_first']).optional() });
 export const chatMessageInput = z.strictObject({ conversationId: positiveId, after: positiveId.optional() });
 export const chatContactInput = z.strictObject({ contactId: positiveId });
+export const chatContactConversationsInput = chatContactInput.extend({ page: positiveId.optional() });
 export const chatSearchContactsInput = z.strictObject({ query: z.string().trim().min(1).max(200) });
-export const chatAttachmentInput = z.strictObject({ conversationId: positiveId, attachmentId: positiveId });
+export const chatAttachmentListingInput = chatConversationIdInput.extend({page:positiveId.optional()});
+export const chatAttachmentInput = z.strictObject({ conversationId: positiveId, attachmentId: positiveId, listingPage:positiveId.optional(), offset: z.number().int().nonnegative().max(20*1048576).optional(), expectedSha256: z.string().regex(/^[a-f0-9]{64}$/).optional() }).refine(v=>!v.offset || !!v.expectedSha256, 'Continuation requires the previous content digest.');
 export const conversationReadInput = z.strictObject({
   conversationId: positiveId, after: positiveId.optional(),
   continuation: z.strictObject({ conversationId: positiveId, after: positiveId }).optional(),
@@ -35,12 +37,13 @@ export const messagesEnvelopeSchema = z.object({
 }).passthrough();
 function collection<T extends z.ZodType>(item: T) {
   return z.union([
-    z.object({ payload: z.array(item).max(100) }),
+    z.object({ payload: z.array(item).max(10000) }),
     z.object({ data: z.object({ payload: z.array(item).max(100) }) }),
     z.object({ data: z.array(item).max(100) }),
   ]).transform(v => 'payload' in v ? v.payload : Array.isArray(v.data) ? v.data : v.data.payload);
 }
 export const contactsEnvelopeSchema = collection(contactSchema);
+export const contactDetailSchema = z.union([contactSchema, z.object({payload:contactSchema}),z.object({data:contactSchema})]).transform(v=>'payload' in v ? v.payload as z.infer<typeof contactSchema> : 'data' in v ? v.data as z.infer<typeof contactSchema> : v as z.infer<typeof contactSchema>);
 export const contactConversationsEnvelopeSchema = collection(conversationSchema);
 export const attachmentsEnvelopeSchema = collection(z.object({ id: positiveId }).passthrough());
 type Conversation = z.infer<typeof conversationSchema>;
@@ -112,6 +115,7 @@ export function summarizeMessage(value: Message) {
     ...(typeof value.private === 'boolean' ? { private: value.private } : {}),
     ...(senderType ? { senderType } : {}), ...(senderName ? { senderName } : {}),
     ...(senderId ? { senderId } : {}), direction,
+    ...(Array.isArray(value.attachments) ? { attachments: value.attachments.flatMap(a=>record(a) && positive(record(a)!.id) ? [{...summarizeAttachment(record(a)!),messageId:value.id}] : []) } : {}),
     ...(typeof value.message_type === 'number' || typeof value.message_type === 'string' ? { messageType: value.message_type } : {}),
   };
 }

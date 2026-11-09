@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { analysisInputSchema, createAnalysisInputSchema, prepareInputSchema, mutationCommandSchema, syncPlanSchema, reviewResolutionInputSchema, reprocessInputSchema } from '../src/automation/schemas';
+import { analysisInputSchema, createAnalysisInputSchema, prepareInputSchema, mutationCommandSchema, syncPlanSchema, reviewResolutionInputSchema, reprocessInputSchema, preparedWorkSchema } from '../src/automation/schemas';
 import { createMutationSchemas, createPersonSchema, createDealSchema, createTaskSchema, enrichOrganizationSchema } from '../src/agendor/crm/mutation-schemas';
 import { automationPolicySchema } from '../src/automation/policy-types';
 import { validAnalysisInput, validationContext, validCommand, validPlan, catalogFixture } from './fixtures/automation';
+import { plannerWork } from './fixtures/planner';
 
 // These checks guard the trust boundary: changing a strict schema or dropping a
 // snapshot/catalog check must let an explicitly forbidden input through.
 describe('workflow contracts', () => {
+  it('accepts server-produced attachment provenance in a prepared snapshot', () => {
+    const work = plannerWork();
+    work.snapshot.conversations[0]!.attachmentListing = {
+      complete: true, pagesRead: 1, nextPage: null, endReached: true,
+      missingReasons: [], source: 'message_history', messagePagesRead: 2,
+    };
+    expect(preparedWorkSchema.safeParse(work).success).toBe(true);
+  });
   it('accepts a synthetic versioned analysis with snapshot-backed evidence', () => {
     expect(createAnalysisInputSchema(validationContext).safeParse(validAnalysisInput).success).toBe(true);
   });

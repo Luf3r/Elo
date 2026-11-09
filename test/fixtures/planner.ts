@@ -7,7 +7,7 @@ export const plannerCatalog: CatalogSnapshot = { ...catalogFixture,
   users: [{ id: 1, name: 'Active owner', active: true }, { id: 2, name: 'Inactive owner', active: false }],
   customFields: [...catalogFixture.customFields, { id: 'samples', entityType: 'deals', type: 'number' }, { id: 'logistics', entityType: 'deals', type: 'select', options: [{ id: 'included', name: 'Incluída' }] }],
 };
-export const plannerPolicy: AutomationPolicy = { version: 1, mode: 'preview', allowedInboxIds: [], capabilities: ['crm:read', 'chat:read', 'crm:create', 'crm:enrich', 'crm:write'],
+export const plannerPolicy: AutomationPolicy = { version: 1, mode: 'preview', allowedInboxIds: [4101,4102], capabilities: ['crm:read', 'chat:read', 'crm:create', 'crm:enrich', 'crm:write'],
   funnelMapping: { client: 10, elotenant: 20 }, stageMapping: [10, 20].flatMap(funnelId => (['new_request', 'preparing_proposal', 'internal_approval', 'proposal_sent'] as const).map((stage, i) => ({ funnelId, stage, stageId: funnelId * 10 + i + 1 }))),
   customFieldMapping: [{ entity: 'deals', field: 'sampleCount', catalogFieldId: 'samples' }, { entity: 'deals', field: 'logistics', catalogFieldId: 'logistics' }],
   nativeCreatorDisabled: true, limits: { maxConversations: 100, maxCommands: 100, maxRequests: 100 },

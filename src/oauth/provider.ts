@@ -7,13 +7,13 @@ import { errorData, safeError } from '../errors';
 import { createServer } from '../mcp/server';
 import { ORIGIN, RESOURCE, OWNER_EMAIL, SUPPORTED_SCOPES } from './config';
 import { loginHandler } from './handler';
-import { OFFLINE_REFRESH_TOKEN_TTL_SECONDS, refreshTokenTtlForScopes } from './lifetime';
+import { ACCESS_TOKEN_TTL_SECONDS, OFFLINE_REFRESH_TOKEN_TTL_SECONDS, refreshTokenTtlForScopes } from './lifetime';
 
 export const oauthOptions: OAuthProviderOptions<Env> = {
   apiRoute:'/mcp', authorizeEndpoint:'/authorize', tokenEndpoint:'/token', clientRegistrationEndpoint:'/register',
   resourceMetadata:{resource:RESOURCE,authorization_servers:[ORIGIN]},
   scopesSupported:[...SUPPORTED_SCOPES],
-  accessTokenTTL:3600,refreshTokenTTL:OFFLINE_REFRESH_TOKEN_TTL_SECONDS,clientRegistrationTTL:90*24*3600,
+  accessTokenTTL:ACCESS_TOKEN_TTL_SECONDS,refreshTokenTTL:OFFLINE_REFRESH_TOKEN_TTL_SECONDS,clientRegistrationTTL:90*24*3600,
   // ChatGPT CIMD currently returns HTTP 404; use the existing /register DCR flow.
   clientIdMetadataDocumentEnabled:false,
   onError:()=>undefined,

@@ -1,3 +1,7 @@
+# Atualização de contrato — 2026-10-28
+
+Veja [Confiabilidade Chat → CRM](agendor-reliability.md) para os estados atuais. Os registros de 2026-10-26 abaixo são históricos: messageHistory/messagePagination agora usam a evidência fornecida pelo operador, sem tratar edições upstream como falha do MCP. O script de descoberta continua sendo uma observação independente com transporte injetado; seu relatório antigo não invalida os testes de paginação relatados pelo usuário. A execução live do CLI permanece indisponível enquanto faltar integração ao orçamento remoto compartilhado.
+
 # Contratos de automação
 
 Revisão documental em 2026-10-26: [OpenAPI CRM V3](https://api.agendor.com.br/v3/swagger.json) e [Postman Chat fornecido](https://documenter.getpostman.com/view/28016625/2sAXxV4UX5). A coleção pública foi consultada pela representação vinculada em sua página; não foram executadas chamadas autenticadas nesta implementação.

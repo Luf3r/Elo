@@ -2,6 +2,9 @@ import type { Env } from '../../env';
 import { SafeError } from '../../errors';
 import type { BudgetTicket } from '../types';
 
+export class BudgetDeferredError extends SafeError {
+  constructor(){super('UPSTREAM_RATE_LIMITED','Shared request budget reached. Retry later.',true,429);}
+}
 export type BudgetGate = () => Promise<void>;
 /** Account routing is server-owned; no request argument can select another bucket. */
 export function accountState(env: Pick<Env, 'AUTOMATION_STATE'>) {
@@ -13,7 +16,7 @@ export function createBudgetGate(env: Partial<Pick<Env, 'AUTOMATION_STATE'>>, pr
     let ticket: BudgetTicket;
     try { ticket = await accountState(env as Pick<Env, 'AUTOMATION_STATE'>).takeBudget(product, Date.now()); }
     catch { throw new SafeError('UPSTREAM_UNAVAILABLE', 'Shared request budget unavailable.', true, 503); }
-    if (!ticket.allowed) throw new SafeError('UPSTREAM_RATE_LIMITED', 'Shared request budget reached. Retry later.', true, 429);
+    if (!ticket.allowed) throw new BudgetDeferredError();
   };
 }
 /** Reservation is irrevocable, including when transport cancellation follows it. */

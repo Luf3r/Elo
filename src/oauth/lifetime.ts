@@ -1,3 +1,4 @@
+export const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 export const OFFLINE_REFRESH_TOKEN_TTL_SECONDS = 35 * 24 * 60 * 60;
 
 export function refreshTokenTtlForScopes(scopes: readonly string[]): number {

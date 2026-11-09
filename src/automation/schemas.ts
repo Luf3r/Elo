@@ -18,7 +18,7 @@ const internalSources = z.array(sourceRefSchema).max(1000);
 export const factValueSchema = customFieldValueSchema;
 const factFields = {
   organization: new Set(['name', 'legalName', 'cnpj', 'email', 'phone', 'website', 'description', 'ranking', 'leadOrigin', 'category', 'sector']),
-  person: new Set(['name', 'role', 'email', 'phone', 'organization', 'description', 'birthday', 'ranking']),
+  person: new Set(['cpf','name', 'role', 'email', 'phone', 'organization', 'description', 'birthday', 'ranking']),
   demand: new Set(['service', 'scope', 'title', 'description', 'value', 'startTime', 'ownerUser']),
 };
 const factObject = z.strictObject({ entity: z.enum(['organization', 'person', 'demand']), clientKey: key.optional(), field: safeField, value: factValueSchema, sources: internalSources.min(1), certainty: z.enum(['confirmed', 'ambiguous']) });
@@ -127,20 +127,31 @@ export const authorizedPlanSchema = z.strictObject({ plan: syncPlanSchema, actor
 export const operationReceiptSchema = z.strictObject({ operationId: key, commandKey: key, state: z.enum(['reserved', 'running', 'confirmed', 'rejected', 'uncertain', 'review']), crmRef: z.union([crmRefSchema, z.strictObject({ kind: z.literal('task'), id: crmIdSchema })]).optional(), updatedFields: z.array(safeField).max(100), checkedAt: date.optional() });
 export const operationStatusSchema = z.strictObject({ operationId: key, state: z.enum(['queued', 'running', 'applied', 'review', 'uncertain', 'authorization_expired']), receipts: z.array(operationReceiptSchema).max(100), pendingReasons: z.array(key).max(100) });
 export const workLeaseSchema = z.strictObject({ workId: key, leaseToken: key, owner: actorSchema.pick({ userId: true, clientId: true }), fence: version, expiresAt: date, mode: z.enum(['preview', 'apply']), target: workTargetSchema });
-export const coverageSchema: z.ZodType<Coverage> = z.strictObject({ complete: z.boolean(), missingReasons: z.array(z.string().min(1).max(300)).max(100), pagesRead: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) });
+export const coverageSchema: z.ZodType<Coverage> = z.strictObject({ complete: z.boolean(), missingReasons: z.array(z.string().min(1).max(300)).max(100), pagesRead: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  history: z.strictObject({ startReached: z.boolean(), endReached: z.boolean(), messagesRead: z.number().int().nonnegative(), pagesRead: z.number().int().nonnegative(), complete: z.boolean() }).optional(),
+  messagePagination: z.literal('verified').optional(),
+  messageHistory:z.enum(['complete','partial']).optional(),conversationDiscovery:z.enum(['complete','partial']).optional(),attachmentListing:z.enum(['complete','partial']).optional(),
+  editedMessageContent: z.strictObject({ status: z.literal('unavailable'), reason: z.literal('upstream_whatsapp_api_limitation') }).optional(),
+  conversationsRead: z.number().int().nonnegative().optional(), attachmentCount: z.number().int().nonnegative().optional(),
+});
 // Read DTO ownership stays with the Chat and CRM adapters. These are internal,
 // server-produced snapshots, not accepted as part of submit_analysis.
 const conversationSnapshotSchema: z.ZodType<ConversationSnapshot> = z.strictObject({
   conversationId: positiveId, inboxId: positiveId.optional(), revision: key,
   contact: z.strictObject({ id: positiveId, name: z.string().optional(), email: z.string().optional(), phoneNumber: z.string().optional(), crmPersonId: positiveId.optional() }).nullable(),
-  messages: z.array(z.strictObject({ id: positiveId, conversationId: positiveId.optional(), content: z.string().optional(), createdAt: z.number().finite().optional(), updatedAt: z.number().finite().optional(), private: z.boolean().optional(), senderType: z.string().optional(), senderName: z.string().optional(), senderId: positiveId.optional(), messageType: z.union([z.string(), z.number()]).optional(), direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']).optional() })).max(10000),
+  messages: z.array(z.strictObject({ id: positiveId, conversationId: positiveId.optional(), content: z.string().optional(), createdAt: z.number().finite().optional(), updatedAt: z.number().finite().optional(), private: z.boolean().optional(), senderType: z.string().optional(), senderName: z.string().optional(), senderId: positiveId.optional(), messageType: z.union([z.string(), z.number()]).optional(), attachments: z.array(z.strictObject({id:positiveId,fileType:z.string().optional(),mimeType:z.string().optional(),byteSize:z.number().int().nonnegative().optional(),messageId:positiveId.optional()})).max(1000).optional(), direction: z.enum(['incoming', 'outgoing', 'activity', 'unknown']).optional() })).max(10000),
   attachments: z.array(z.strictObject({ id: positiveId, fileType: z.string().optional(), mimeType: z.string().optional(), byteSize: z.number().int().min(0).optional(), messageId: positiveId.optional() })).max(10000),
+  attachmentListing:z.strictObject({complete:z.boolean(),pagesRead:z.number().int().nonnegative(),nextPage:positiveId.nullable(),endReached:z.boolean(),missingReasons:z.array(z.string()),source:z.enum(['attachment_endpoint','message_history','combined']).optional(),messagePagesRead:z.number().int().nonnegative().optional()}).optional(),
   coverage: coverageSchema, continuation: z.strictObject({ conversationId: positiveId, after: positiveId }).optional(),
 });
 const catalogSnapshotSchema = z.custom<CatalogSnapshot>(v => !!v && typeof v === 'object' && typeof (v as CatalogSnapshot).version === 'string' && Array.isArray((v as CatalogSnapshot).customFields));
 export const customerCandidateSchema = z.strictObject({ ref: entityRefSchema, name: z.string().min(1).max(255), document: z.string().max(30).optional(), email: z.email().optional(), phone: z.string().max(80).optional(), organizationIds: z.array(crmIdSchema).max(100), sourceRefs: internalSources });
 // Internal read metadata. This is never part of agentAnalysisSchema.
-export const customerCandidatesSchema = z.strictObject({ candidates: z.array(customerCandidateSchema).max(1000), coverage: coverageSchema, identifierCoverage: z.array(z.strictObject({ entity: z.literal('organization'), field: z.literal('cnpj'), value: key, coverage: coverageSchema })).max(100).optional(), customerId: key.optional(), verifiedLinks: z.array(z.strictObject({ ref: entityRefSchema, sourceRefs: internalSources.min(1) })).max(100).optional() });
+export const customerCandidatesSchema = z.strictObject({ candidates: z.array(customerCandidateSchema).max(1000), coverage: coverageSchema, identifierCoverage: z.array(z.strictObject({ entity: z.literal('organization'), field: z.literal('cnpj'), value: key, coverage: coverageSchema })).max(100).optional(), customerId: key.optional(),
+  crmContactLink: z.strictObject({ status: z.enum(['verified','missing','stale','query_failed']), chatContactId: positiveId, crmPersonId: positiveId.optional(), method: z.literal('direct_agendor_link').optional() }).optional(),
+  candidateRead: z.strictObject({ status: z.enum(['not_needed','verified','no_candidate','ambiguous','query_failed']), selectedPersonId: positiveId.optional(), matchedBy: z.array(z.string()).optional() }).optional(),
+  duplicateCheck: z.strictObject({ status: z.enum(['not_checked','none','possible_duplicate','high_confidence_duplicate','query_failed']), currentPersonId: positiveId.optional(), candidatePersonIds: z.array(positiveId).optional(), reasons: z.array(z.string()).optional() }).optional(),
+  verifiedLinks: z.array(z.strictObject({ ref: entityRefSchema, sourceRefs: internalSources.min(1) })).max(100).optional() });
 const recordSnapshotSchema = z.strictObject({ ref: taskParentSchema, fields: z.array(factSchema).max(500), lastWritten: z.array(factSchema).max(500).optional(), lockedFields: z.array(safeField).max(100).optional() });
 export const dealSnapshotSchema = z.strictObject({ ref: existingDeal, demandId: key.optional(), revision: key, status: z.enum(['open', 'won', 'lost']), funnelId: crmIdSchema, stageId: crmIdSchema, stage: stageKeySchema, fields: z.array(factSchema).max(500), lastWritten: z.array(factSchema).max(500).optional(), lockedFields: z.array(safeField).max(100).optional() });
 export const workflowSnapshotSchema = z.strictObject({ conversations: z.array(conversationSnapshotSchema).max(100), candidates: customerCandidatesSchema, catalog: catalogSnapshotSchema, sourceRefs: internalSources.optional(), records: z.array(recordSnapshotSchema).max(1000).optional(), deals: z.array(dealSnapshotSchema).max(1000).optional() });
