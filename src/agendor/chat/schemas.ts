@@ -32,6 +32,7 @@ export const conversationsEnvelopeSchema = z.object({
   data: z.object({ meta: z.unknown().optional(), payload: z.array(conversationSchema).max(100) }).passthrough(),
 }).passthrough();
 export const conversationDetailSchema = conversationSchemaForDetail;
+export const conversationScopeSchema = conversationSchema.pick({ id: true, inbox_id: true, meta: true }).strip();
 export const messagesEnvelopeSchema = z.object({
   meta: z.unknown().optional(), payload: z.array(messageSchema).max(100),
 }).passthrough();
@@ -42,6 +43,11 @@ function collection<T extends z.ZodType>(item: T) {
     z.object({ data: z.array(item).max(100) }),
   ]).transform(v => 'payload' in v ? v.payload : Array.isArray(v.data) ? v.data : v.data.payload);
 }
+export const inboxEnvelopeSchema = z.union([
+  z.object({ payload: z.array(z.object({ id: positiveId }).passthrough()).max(100) }).passthrough(),
+  z.object({ data: z.object({ payload: z.array(z.object({ id: positiveId }).passthrough()).max(100) }).passthrough() }).passthrough(),
+  z.object({ data: z.array(z.object({ id: positiveId }).passthrough()).max(100) }).passthrough(),
+]).transform(value => 'payload' in value ? value.payload : Array.isArray(value.data) ? value.data : value.data.payload);
 export const contactsEnvelopeSchema = collection(contactSchema);
 export const contactDetailSchema = z.union([contactSchema, z.object({payload:contactSchema}),z.object({data:contactSchema})]).transform(v=>'payload' in v ? v.payload as z.infer<typeof contactSchema> : 'data' in v ? v.data as z.infer<typeof contactSchema> : v as z.infer<typeof contactSchema>);
 export const contactConversationsEnvelopeSchema = collection(conversationSchema);
@@ -64,6 +70,12 @@ export function summarizeContact(value: Record<string, unknown>): ChatContact | 
     ...(text(value.phone_number) ? { phoneNumber: text(value.phone_number) } : {}),
     ...(positive(value.agendor_person_id) ? { crmPersonId: positive(value.agendor_person_id) } : {}),
   };
+}
+export function verifiedConversationInbox(value: { inbox_id?: unknown; meta?: unknown }): number | undefined {
+  const meta = record(value.meta);
+  const candidates = [value.inbox_id, meta?.inbox_id, record(meta?.inbox)?.id].filter(v => v != null);
+  const inbox = positive(candidates[0]);
+  return inbox !== undefined && candidates.every(candidate => candidate === inbox) ? inbox : undefined;
 }
 export function summarizeConversation(value: Conversation) {
   const sender = record(record(value.meta)?.sender);

@@ -54,7 +54,7 @@ const optionalTools = [
   'crm_update_deal', 'crm_update_deal_stage', 'crm_update_person', 'crm_update_organization',
   'crm_get_person', 'crm_get_task', 'crm_get_configuration',
   'chat_search_contacts', 'chat_get_contact', 'chat_list_contact_conversations', 'chat_list_attachments', 'chat_get_attachment',
-  'automation_prepare_sync', 'automation_submit_analysis', 'automation_apply_plan', 'automation_get_operation',
+  'automation_preflight_sync', 'automation_discover_pending', 'automation_prepare_sync', 'automation_submit_analysis', 'automation_apply_plan', 'automation_get_operation',
   'automation_get_customer_context', 'automation_list_reviews', 'automation_resolve_review', 'automation_get_status',
   'automation_list_audit', 'automation_update_policy', 'automation_reprocess',
   'crm_create_organization', 'crm_create_person', 'crm_create_deal', 'crm_create_task',

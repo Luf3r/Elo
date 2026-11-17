@@ -111,7 +111,7 @@ export async function readCustomerCandidates(crm: Pick<AgendorCrmClient, 'search
     for (let count = 0; count < 10; count++) {
       if (seen.has(page)) return finish(false, 'candidate_cursor_repeated'); seen.add(page);
       let response: PagedResult<unknown>;
-      try { response = await load(page); } catch (error) { if (error instanceof SafeError && error.retryable) throw error; return finish(false, 'candidate_query_failed'); }
+      try { response = await load(page); } catch (error) { if (error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED')) throw error; return finish(false, 'candidate_query_failed'); }
       result.coverage.pagesRead++; coverage.pagesRead++;
       if (response.pageInfo.page !== page || !Array.isArray(response.items) || response.items.length > 100) return finish(false, 'candidate_page_invalid');
       for (const record of response.items) if (!await add(record, kind)) coverage.missingReasons.push('candidate_record_invalid');
@@ -140,7 +140,7 @@ export async function readCustomerCandidates(crm: Pick<AgendorCrmClient, 'search
         }
       }
     } catch (error) {
-      if(error instanceof BudgetDeferredError)throw error;
+      if(error instanceof BudgetDeferredError || error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED')throw error;
       if (error instanceof SafeError && error.code === 'UPSTREAM_NOT_FOUND') result.crmContactLink.status = 'stale';
       else {
         reasons.add('crm_contact_link_query_failed');

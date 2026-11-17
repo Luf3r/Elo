@@ -5,6 +5,7 @@ import type { AutomationAccount } from '../src/automation/state/account';
 import type { Env } from '../src/env';
 import type { CommandReservation, PlanBasis, WorkLease, SyncPlan, ReserveWorkInput, SnapshotManifest } from '../src/automation/types';
 import { validCommand, validPlan } from './fixtures/automation';
+import type { WorkflowState } from '../src/automation/service-state';
 
 const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
 const input = (requestId = 'request-1'): ReserveWorkInput => ({ requestId, target: { kind: 'conversation', conversationId: 101 }, mode: 'apply', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'digest-1' });
@@ -71,7 +72,7 @@ describe('durable account coordination', () => {
     await evictDurableObject(stub);
     expect(await stub.reserveWork(input())).toEqual(lease);
     const migrations = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-    expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }]);
+    expect(migrations).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }]);
   });
   it('treats abandoned in-flight commands as uncertain instead of retrying after lease expiry', async () => {
     const { stub, reservation } = await setup(); await stub.reserveCommand(reservation); await expire(stub);
@@ -207,5 +208,22 @@ it('migrates existing v1 plans as invalid and preserves command tombstones throu
   expect(row).toEqual({ valid: 0, fence: null });
   await evictDurableObject(stub);
   const versions = await runInDurableObject(stub, (_instance, ctx) => ctx.storage.sql.exec('SELECT version FROM schema_migrations').toArray());
-  expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }]);
+  expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }]);
+});
+
+it('keeps workflow and manifest atomic when a worker loses its revision race', async () => {
+  const stub = state();
+  const lease = await stub.reserveWork(input());
+  const workflow: WorkflowState = {
+    revision: 1, lease, customerId: 'synthetic', continuation: 'synthetic-continuation', step: 2,
+    conversationIds: [101], conversations: [], pages: [],
+    candidates: { candidates: [], coverage: { complete: false, missingReasons: [], pagesRead: 0 } },
+  };
+  await failure(stub, instance => instance.installSnapshot(lease, manifest(lease.workId), { ...workflow, revision: 2 }), 'STATE_VERSION_CONFLICT');
+  expect(await stub.getSnapshotVersion(lease.workId)).toBe(0);
+  expect(await stub.getWorkflow(lease.workId)).toBeUndefined();
+  await stub.installSnapshot(lease, manifest(lease.workId), workflow);
+  await evictDurableObject(stub);
+  expect(await stub.getSnapshotVersion(lease.workId)).toBe(1);
+  expect(JSON.parse((await stub.getWorkflow(lease.workId))!)).toEqual(workflow);
 });

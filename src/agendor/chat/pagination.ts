@@ -32,7 +32,7 @@ export async function readConversationBatch<T extends {conversations:Array<{id:n
   for(let batch=0;batch<maxPages;batch++) {
     let current:T;
     try{current=await load(batch===0 && start===1?undefined:page);}catch(error){
-      if(!result)throw error;
+      if(!result || error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED')throw error;
       if(error instanceof SafeError && error.retryable){reasons.add('conversation_read_deferred');if(probing){probeNextPage=page;probeStoppedBy='read_deferred';}}
       else {reasons.add('conversation_query_failed');if(probing){probeNextPage=page;probeStoppedBy='read_error';}}
       break;

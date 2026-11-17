@@ -1,12 +1,16 @@
 import type { CatalogPage, CatalogSnapshot, CustomerCandidates, PreparedWork, WorkLease, PlanBasis, AgentAnalysis, MutationCommand, SourceRef } from './types';
 import type { ConversationSnapshot } from '../agendor/chat/types';
 import type { z } from 'zod';
-import type { listReviewsInputSchema, reviewResolutionInputSchema } from './schemas';
+import type { listReviewsInputSchema, reviewResolutionInputSchema, preflightInputSchema } from './schemas';
 
 /** Server-owned state; neither this envelope nor an upstream route is an MCP input. */
 export interface WorkflowState {
   revision: number;
   chatAccountId?: string;
+  discoveryId?: string;
+  discoveryPlanId?: string;
+  preparationDeferral?: { checkpoint: string; attempts: number; reason: string; blocked: boolean; nextRetryAt: string };
+  scope?: Pick<z.infer<typeof preflightInputSchema>, 'inboxIds' | 'limits'>;
   range?: { from: string; to: string };
   lease: WorkLease;
   customerId: string;

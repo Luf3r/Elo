@@ -234,3 +234,27 @@ describe('review regressions',()=>{
     expect(candidateLookupLinks(c).map(l=>l.ref)).toEqual([{kind:'person',id:13}]);
   });
 });
+
+it('projects only scope evidence and rejects conflicting inbox fields', async () => {
+  const client = createAgendorChatClient(env, { budgetGate: async () => {}, request: async () => Response.json({
+    id: 200, inbox_id: 4101, meta: { inbox: { id: 4102 }, sender: { id: 300, email: 'private@example.test' } },
+    last_non_activity_message: { content: 'private content' }, messages: [{ id: 2, content: 'inline content' }],
+  }) });
+  const result = await client.getConversation(200, { scopeOnly: true });
+  expect(result).toEqual({ id: 200, contact: { id: 300 } });
+});
+
+it('stops attachment pagination at the requested cap even with a verified next link', async () => {
+  const urls: string[] = [];
+  const client = createAgendorChatClient(env, { budgetGate: async () => {}, request: async req => {
+    const path = new URL(req.url).pathname;
+    urls.push(path);
+    if (path.endsWith('/attachments')) return Response.json({ payload: [{ id: 31 }], links: { next: path + '?page=2' } });
+    return Response.json({ payload: [] });
+  } });
+  const reader = createConversationReader({ ...client, getConversation: async () => ({ id: 200, inboxId: 4101, contact: { id: 300 } }) });
+  const snapshot = await reader.readConversation({ conversationId: 200 }, { maxAttachmentPages: 1 });
+  expect(urls.filter(path => path.endsWith('/attachments'))).toHaveLength(1);
+  expect(snapshot.attachmentListing).toMatchObject({ pagesRead: 1, complete: false, nextPage: null });
+  expect(snapshot.coverage.missingReasons).toContain('attachment_page_limit');
+});

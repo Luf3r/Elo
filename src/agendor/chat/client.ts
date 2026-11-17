@@ -7,8 +7,8 @@ import type { ErrorCode } from '../../errors';
 import { isConfiguredSecret } from '../../auth';
 import { throwIfCancelled } from '../../cancellation';
 import {
-  chatConversationIdInput, conversationDetailSchema, conversationsEnvelopeSchema,
-  messagesEnvelopeSchema, summarizeConversation, summarizeMessage,
+  chatConversationIdInput, conversationDetailSchema, conversationScopeSchema, verifiedConversationInbox, conversationsEnvelopeSchema,
+  messagesEnvelopeSchema, inboxEnvelopeSchema, summarizeConversation, summarizeMessage,
   chatMessageInput, chatContactInput, chatSearchContactsInput, chatAttachmentInput,
   chatConversationPageInput, contactDetailSchema,
   contactsEnvelopeSchema, contactConversationsEnvelopeSchema, attachmentsEnvelopeSchema,
@@ -124,6 +124,37 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
     return {items,pageInfo:collectionPageInfo(raw,page ?? 1,path)};
   }
   const client = {
+    /** Caller must establish the scoped transport contract before using this route. */
+    async listInboxInventory() {
+      const path = `/accounts/${account}/inboxes`;
+      const raw = await get(path);
+      const parsedRows = inboxEnvelopeSchema.safeParse(raw);
+      if (!parsedRows.success) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned an unexpected inbox inventory.', false);
+      const rows: Array<{ id: number }> = parsedRows.data as Array<{ id: number }>;
+      const root = record(raw);
+      const links = record(root?.links) ?? record(record(root?.data)?.links);
+      const paginationVerified = links ? Object.hasOwn(links, 'next') && links.next === null : rows.length < 100;
+      if (!paginationVerified || new Set(rows.map(row => row.id)).size !== rows.length)
+        throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat inbox inventory is incomplete or inconsistent.', false);
+      return rows.map(row => row.id).sort((a,b) => a-b);
+    },
+    async listScopedActivity(inboxId: number, page: number) {
+      if (!isInboxAllowed(inboxId)) throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not authorized.', false, 403);
+      chatConversationPageInput.parse({ page });
+      const path = `/accounts/${account}/conversations`;
+      const query = new URLSearchParams({ inbox_id: String(inboxId), status: 'all', sort_order: 'latest_first', page: String(page) });
+      const raw = await get(path + '?' + query);
+      const rows = parse(conversationsEnvelopeSchema, raw).data.payload;
+      if (rows.some(row => verifiedConversationInbox(row) !== inboxId) || new Set(rows.map(row => row.id)).size !== rows.length) {
+        throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat did not prove a single authorized inbox for the entire page.', false);
+      }
+      return { rows: rows.map(row => {
+        const timestamp = typeof row.timestamp === 'number' && Number.isSafeInteger(row.timestamp) && row.timestamp > 0 ? row.timestamp : null;
+        const status = typeof row.status === 'string' && ['open', 'resolved', 'pending', 'snoozed'].includes(row.status) ? row.status : null;
+        const contact = chatContactInput.safeParse({ contactId: record(record(row.meta)?.sender)?.id });
+        return { id: row.id, inboxId, timestamp, status, contact: contact.success ? { id: contact.data.contactId } : null };
+      }), pageInfo: collectionPageInfo(raw, page, path) };
+    },
     async listConversations(input: { status?: string; assigneeTypeId?: number; assigneeType?: string; sortOrder?: string; page?:number } = {}) {
       const filters = chatConversationPageInput.parse(input); const query = new URLSearchParams();
       if(filters.page!==undefined) query.set('page',String(filters.page));
@@ -144,9 +175,16 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
       const coverage: Coverage = {complete:pageInfo.complete,missingReasons:pageInfo.complete?[]:['conversation_pagination_incomplete'],pagesRead:1,conversationsRead:conversations.length};
       return {conversations:[...new Map(conversations.map(c=>[c.id,c])).values()],counts,pageInfo,coverage};
     },
-    async getConversation(id: number) {
+    async getConversation(id: number, options?: { scopeOnly: boolean }) {
       const { conversationId } = chatConversationIdInput.parse({ conversationId: id });
-      const detail = parse(conversationDetailSchema, await get(`/accounts/${account}/conversations/${conversationId}`));
+      const raw = await get('/accounts/' + account + '/conversations/' + conversationId);
+      if (options?.scopeOnly) {
+        const detail = parse(conversationScopeSchema, raw);
+        const inboxId = verifiedConversationInbox(detail);
+        const senderId = chatContactInput.safeParse({ contactId: record(record(detail.meta)?.sender)?.id });
+        return { id: detail.id, ...(inboxId === undefined ? {} : { inboxId }), contact: senderId.success ? { id: senderId.data.contactId } : null };
+      }
+      const detail = parse(conversationDetailSchema, raw);
       const sender = record(record(detail.meta)?.sender);
       return { ...summarizeConversation(detail), contact: sender ? summarizeContact(sender) : null, coverage: partial('history_not_read') };
     },
@@ -210,8 +248,8 @@ export function createAgendorChatClient(env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'A
     },
   };
   return {...client,
-    async listAttachments(id:number,input:{page?:number}={}):Promise<AttachmentPage> {
-      const batch=await readConversationBatch(async page=>{const result=await client.listAttachments(id,{...input,...(page!==undefined?{page}:{})});return {...result,conversations:result.attachments};},input.page ?? 1);
+    async listAttachments(id:number,input:{page?:number;maxPages?:number;beforePage?():Promise<void>}={}):Promise<AttachmentPage> {
+      const batch=await readConversationBatch(async page=>{await input.beforePage?.();const result=await client.listAttachments(id,{...input,...(page!==undefined?{page}:{})});return {...result,conversations:result.attachments};},input.page ?? 1,{maxPages:input.maxPages});
       const {conversations,coverage,...rest}=batch;
       return {...rest,attachments:conversations,coverage:{complete:coverage.complete,pagesRead:coverage.pagesRead,attachmentCount:conversations.length,attachmentListing:coverage.complete?'complete':'partial',missingReasons:coverage.missingReasons.map(r=>r==='conversation_pagination_incomplete' && batch.pageInfo.hasNext===null?'attachment_pagination_unavailable':r.replace('conversation_','attachment_'))}};
     },

@@ -84,5 +84,20 @@ export function migrate(storage: DurableObjectStorage): void {
         INSERT INTO schema_migrations VALUES (6);
       `);
     }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 7').toArray().length) {
+      sql.exec(`
+        CREATE TABLE pending_cursors (cursor TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, data TEXT NOT NULL);
+        CREATE INDEX pending_cursors_expiry ON pending_cursors(expires_at);
+        CREATE TABLE pending_activity (event_id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, data TEXT NOT NULL, plan_id TEXT);
+        CREATE INDEX pending_activity_expiry ON pending_activity(expires_at);
+        INSERT INTO schema_migrations VALUES (7);
+      `);
+    }
+    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 8').toArray().length) {
+      sql.exec(`
+        CREATE TABLE preparation_locks (work_id TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at INTEGER NOT NULL);
+        INSERT INTO schema_migrations VALUES (8);
+      `);
+    }
   });
 }

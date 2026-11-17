@@ -5,6 +5,8 @@ import { authorizedPlanSchema, syncPlanSchema, workLeaseSchema } from './schemas
 import type { AnalysisInput, AuthorizedPlan, AutomationPolicy, Capability, MutationCommand, SyncPlan, WorkLease } from './types';
 
 export const automationOperationCapabilities = {
+  discover: ['automation:process', 'chat:read', 'crm:read'],
+  preflight: ['automation:process', 'chat:read', 'crm:read'],
   prepare: ['automation:process', 'chat:read', 'crm:read'],
   submit: ['automation:process', 'chat:read', 'crm:read'],
   apply: ['automation:process'],

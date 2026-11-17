@@ -1,6 +1,6 @@
 {
   "name": "elo-agendor-mcp",
-  "version": "0.1.2",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "engines": {

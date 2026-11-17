@@ -5,10 +5,10 @@ import type { AttachmentPage, ChatContact, ChatMessage, ConversationReadInput, C
 export interface ConversationReaderDependencies {
   getConversation(id: number): Promise<{ id: number; inboxId?: number; contact?: ChatContact | null }>;
   listMessages(id: number, input?: { after?: number }): Promise<MessagePage>;
-  listAttachments(id: number,input?:{page?:number}): Promise<AttachmentPage>;
+  listAttachments(id: number,input?:{page?:number;maxPages?:number}): Promise<AttachmentPage>;
   validateConversation?(conversation: { id: number; inboxId?: number }): void;
 }
-export interface ReadProgress { previous?: ConversationSnapshot; onProgress?(snapshot: ConversationSnapshot): Promise<void> }
+export interface ReadProgress { previous?: ConversationSnapshot; onProgress?(snapshot: ConversationSnapshot): Promise<void>; maxMessagePages?: number; maxAttachmentPages?: number }
 /** Every completed batch is resumable; a rate limit never discards a successful page. */
 export function createConversationReader(deps: ConversationReaderDependencies) {
   return { async readConversation(input: ConversationReadInput, progress: ReadProgress = {}): Promise<ConversationSnapshot> {
@@ -26,14 +26,22 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
     // Reuse metadata already persisted during this traversal; refresh on a new preparation.
     let attachmentListing=prior?.attachmentListing;
     if (prior) attachments = { attachments: prior.attachments, coverage: { complete: attachmentListing?.complete ?? !prior.coverage.missingReasons.some(r => r.startsWith('attachment')), missingReasons: attachmentListing?.missingReasons ?? prior.coverage.missingReasons.filter(r => r.startsWith('attachment')), pagesRead: attachmentListing?.pagesRead ?? 0 } };
-    if(!prior || attachmentListing?.nextPage) {
+    const attachmentPagesRemaining = (progress.maxAttachmentPages ?? Infinity) - (attachmentListing?.pagesRead ?? 0);
+    if ((!prior || attachmentListing?.nextPage) && attachmentPagesRemaining > 0) {
       try {
-        const page=await deps.listAttachments(parsed.conversationId,attachmentListing?.nextPage?{page:attachmentListing.nextPage}:undefined);
+        const options = { ...(attachmentListing?.nextPage ? { page: attachmentListing.nextPage } : {}),
+          ...(attachmentPagesRemaining < 3 ? { maxPages: attachmentPagesRemaining } : {}) };
+        const page = await deps.listAttachments(parsed.conversationId, Object.keys(options).length ? options : undefined);
         const values=new Map([...attachments.attachments,...page.attachments].map(a=>[a.id,a]));
         const complete=page.coverage.complete || (attachmentListing!==undefined && page.pageInfo?.endReached===true);
         attachmentListing={complete,pagesRead:(attachmentListing?.pagesRead ?? 0)+page.coverage.pagesRead,nextPage:page.pageInfo?.nextPage ?? null,endReached:page.pageInfo?.endReached ?? complete,missingReasons:complete?[]:page.coverage.missingReasons,source:'attachment_endpoint',messagePagesRead:attachmentListing?.messagePagesRead ?? 0};
         attachments={attachments:[...values.values()],coverage:{complete,missingReasons:attachmentListing.missingReasons,pagesRead:attachmentListing.pagesRead}};
-      }catch(error){if(error instanceof SafeError && error.retryable)throw error;}
+      }catch(error){if(error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED'))throw error;}
+    }
+    if (progress.maxAttachmentPages !== undefined && (!attachmentListing || attachmentListing.nextPage) &&
+        (attachmentListing?.pagesRead ?? 0) >= progress.maxAttachmentPages) {
+      attachmentListing = { complete: false, pagesRead: attachmentListing?.pagesRead ?? 0, nextPage: null, endReached: false, missingReasons: ['attachment_page_limit'] };
+      attachments.coverage = { complete: false, pagesRead: attachmentListing.pagesRead, missingReasons: attachmentListing.missingReasons };
     }
     attachments.coverage.missingReasons.forEach(r => reasons.add(r));
     if (!attachments.coverage.complete && !attachments.coverage.missingReasons.length) reasons.add('attachment_listing_incomplete');
@@ -53,7 +61,7 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
       const selectedAttachments = [...listed.values()].sort((a,b) => a.id-b.id);
       const attachmentEndpointComplete=attachmentListing?.complete ?? attachments.coverage.complete;
       const confirmedMediaDiscrepancy=attachmentEndpointComplete && reasons.has('attachment_collection_missing_media');
-      if (startReached && endReached && !confirmedMediaDiscrepancy) {
+      if (startReached && endReached && !confirmedMediaDiscrepancy && !reasons.has('attachment_page_limit')) {
         const recoverableReasons = new Set(['attachment_pagination_unavailable','attachment_pagination_incomplete','attachment_listing_incomplete','attachment_listing_query_failed','attachment_collection_missing_media']);
         for (const reason of recoverableReasons) reasons.delete(reason);
         attachmentListing = {
@@ -80,11 +88,12 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
     // Persist metadata even when the very first message request is deferred.
     await finish();
     if(endReached){continuation=undefined;return finish();}
-    for (let batch=0; batch<10 && messages.size<10000; batch++) {
+    const maxMessagePages = progress.maxMessagePages ?? Infinity;
+    for (let batch=0; batch<10 && messages.size<10000 && pagesRead<maxMessagePages; batch++) {
       let page: MessagePage;
       try { page = await deps.listMessages(conversation.id,{after}); }
       catch (error) {
-        if (!messages.size) throw error;
+        if (!messages.size || error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED') throw error;
         reasons.add(error instanceof SafeError && error.retryable ? 'history_read_deferred' : 'history_query_failed');
         return finish();
       }
@@ -101,9 +110,13 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
       if (seen.has(next.after) || next.after<=after) { reasons.add('cursor_repeated'); continuation=undefined; return finish(); }
       if (next.conversationId !== conversation.id || !Number.isSafeInteger(next.after) || next.after<=0 || next.after !== last) { reasons.add('cursor_invalid'); continuation=undefined; return finish(); }
       seen.add(next.after); after=next.after; continuation=next;
+      if (pagesRead >= maxMessagePages) break;
       await finish();
     }
-    reasons.add('history_read_limit');
+    if (pagesRead >= maxMessagePages) {
+      reasons.add('message_page_limit');
+      continuation = undefined;
+    } else reasons.add('history_read_limit');
     return finish();
   } };
 }

@@ -4,7 +4,8 @@ import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { createAutomationService } from '../../automation/service';
 import { automationOperationCapabilities, type AutomationOperation } from '../../automation/authorization';
-import { prepareInputSchema, analysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema, auditInputSchema } from '../../automation/schemas';
+import { preflightInputSchema, prepareInputSchema, analysisInputSchema, applyInputSchema, customerContextInputSchema, listReviewsInputSchema, reviewResolutionInputSchema, reprocessInputSchema, auditInputSchema } from '../../automation/schemas';
+import { discoveryInputSchema, discoveryTool } from '../../automation/discovery';
 import { updatePolicyInputSchema } from '../../automation/policy-types';
 import { oauthToolSecurity } from '../security';
 import { errorToolResult, jsonToolResult } from '../result';
@@ -19,7 +20,9 @@ export function registerAutomation(server: McpServer, env: Env, auth: AuthContex
       } catch (error) { return errorToolResult(error); }
     });
   }
-  register('automation_prepare_sync', 'prepare', prepareInputSchema, 'Prepare current Chat messages, customer Markdown, CRM candidates and catalog for agent analysis. Start with requestId,target,mode; resume only with returned workId,leaseToken,continuation after retryAt. Incomplete history and unread attachments remain explicit. Preview never writes CRM.', false, async (s, input) => { const result = await s.prepare(prepareInputSchema.parse(input)); return { ...result, actionRequired: result.state === 'ready' ? 'analyze' : result.state === 'continue' || result.state === 'deferred' ? 'continue' : result.state === 'review' ? 'review' : 'done' }; });
+  register('automation_preflight_sync', 'preflight', preflightInputSchema, 'Read-only effective mode, authenticated actor, authorized inboxes, requested scope, page limits and storage/lease availability. Does not contact Chat or CRM. Preparation still verifies the current inbox of each conversation.', true, (s, i) => s.preflight(i));
+  register(discoveryTool, 'discover', discoveryInputSchema, 'Discover pending or updated conversations in preview, one verified inbox page per call. Continue with the opaque cursor and original inboxIds. Returns metadata and exact prepare inputs; writes only discovery checkpoints in SQLite.', false, (s, i) => s.discover(i));
+  register('automation_prepare_sync', 'prepare', prepareInputSchema, 'Prepare current Chat messages, customer Markdown, CRM candidates and catalog for agent analysis. Start with requestId,target,mode and optionally narrow inboxIds or set page limits; resume only with returned workId,leaseToken,continuation after retryAt. Incomplete history and unread attachments remain explicit. Preview never writes CRM.', false, async (s, input) => { const result = await s.prepare(prepareInputSchema.parse(input)); return { ...result, actionRequired: result.state === 'ready' ? 'analyze' : result.state === 'continue' || result.state === 'deferred' ? 'continue' : result.state === 'review' || result.state === 'blocked' ? 'review' : 'done' }; });
   register('automation_submit_analysis', 'submit', analysisInputSchema, 'Submit structured interpretation against the exact prepared work, lease, snapshot and context versions. Cite only returned source revisions. Persists analysis and a plan/diff; never writes CRM. Stale or absent sources require a new preparation; ambiguity requires review.', false, (s, i) => s.submit(i));
   register('automation_apply_plan', 'apply', applyInputSchema, 'Apply only a server-stored reviewed plan version in apply mode with current policy and every command capability. Preview is rejected. Returns an operation; follow automation_get_operation and check customer context. Uncertain effects are reconciled without blindly retrying writes.', false, (s, i) => s.apply(i));
   const operationInput = z.strictObject({ operationId: z.string().min(1).max(200) });

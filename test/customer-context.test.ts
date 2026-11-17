@@ -211,7 +211,7 @@ describe('SQLite context projection and refresh', () => {
     // Recreate the pre-v3 shape. There is deliberately no context row from
     // which migration 3 could recover the original customer association.
     await runInDurableObject(stub, (_instance, ctx) => {
-      ctx.storage.sql.exec('DROP TABLE work_customers; DROP TABLE execution_commands; DROP TABLE execution_operations; DROP TABLE operation_delivery; DROP TABLE execution_tombstones; DROP TABLE operational_audit; DROP TABLE chat_hints; DELETE FROM schema_migrations WHERE version >= 3');
+      ctx.storage.sql.exec('DROP TABLE work_customers; DROP TABLE execution_commands; DROP TABLE execution_operations; DROP TABLE operation_delivery; DROP TABLE execution_tombstones; DROP TABLE operational_audit; DROP TABLE chat_hints; DROP TABLE pending_cursors; DROP TABLE pending_activity; DROP TABLE preparation_locks; DELETE FROM schema_migrations WHERE version >= 3');
       ctx.storage.sql.exec('INSERT INTO work VALUES (?, ?, ?, ?, ?, ?, ?)', 'ambiguous-work', 'ambiguous-request', 'digest', 'ambiguous-target', JSON.stringify({ ...basis.lease, workId: 'different-work-id' }), Date.now() + 60_000, 1);
       ctx.storage.sql.exec('INSERT INTO work VALUES (?, ?, ?, ?, ?, ?, ?)', 'malformed-work', 'malformed-request', 'digest', 'malformed-target', '{invalid-json', Date.now() + 60_000, 1);
     });

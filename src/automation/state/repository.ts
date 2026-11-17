@@ -15,6 +15,7 @@ import { reviewResolutionInputSchema } from '../schemas';
 import { WATCHDOG_INTERVAL_MS } from '../maintenance';
 import type { ExecutionCommand, ExecutionOperation } from '../operations';
 import { applyReviewDecision } from '../reviews';
+import { discoveryCursorMs, type DiscoveryCursor, type PendingActivity } from '../discovery';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 function canonical(value: unknown): string {
@@ -36,7 +37,7 @@ export class AccountRepository {
   getOperation(id: string) { return this.operations.getOperation(id); }
   getOperationByRequest(id: string) { return this.operations.getOperationByRequest(id); }
   hasCommandKey(key: string): boolean { return this.sql.exec('SELECT command_key FROM commands WHERE command_key = ?', key).toArray().length > 0; }
-  recordAudit(action: 'review_resolved' | 'review_consumed' | 'policy_updated' | 'reprocess_requested' | 'operation_archived', targetId: string, version: number, owner: WorkLease['owner'], now = Date.now()): void {
+  recordAudit(action: 'review_resolved' | 'review_consumed' | 'policy_updated' | 'reprocess_requested' | 'operation_archived' | 'work_created' | 'lease_acquired' | 'preparation_progress' | 'preparation_blocked' | 'snapshot_persisted' | 'preparation_lock_acquired' | 'preparation_lock_released' | `preparation_deferred_${string}` | `preparation_failed_${string}`, targetId: string, version: number, owner: WorkLease['owner'], now = Date.now()): void {
     this.sql.exec('INSERT INTO operational_audit VALUES (?, ?, ?, ?, ?, ?, ?)', crypto.randomUUID(), now, owner.userId, owner.clientId, action, targetId, version);
   }
   listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
@@ -55,6 +56,35 @@ export class AccountRepository {
     });
   }
   acknowledgeChatHints(conversationId: number): void { this.sql.exec('UPDATE chat_hints SET conversation_id = NULL WHERE conversation_id = ?', conversationId); }
+  getPendingCursor(cursor: string): DiscoveryCursor | undefined {
+    const row = this.sql.exec<{ data: string }>('SELECT data FROM pending_cursors WHERE cursor = ? AND expires_at > ?', cursor, Date.now()).toArray()[0];
+    return row ? JSON.parse(row.data) as DiscoveryCursor : undefined;
+  }
+  getPendingActivity(id: string): (PendingActivity & { planId: string | null }) | undefined {
+    const row = this.sql.exec<{ data: string; plan_id: string | null }>('SELECT data, plan_id FROM pending_activity WHERE event_id = ? AND expires_at > ?', id, Date.now()).toArray()[0];
+    return row ? { ...JSON.parse(row.data) as PendingActivity, planId: row.plan_id } : undefined;
+  }
+  savePendingPage(entries: PendingActivity[], policyVersion: number, next?: DiscoveryCursor) {
+    return this.storage.transactionSync(() => {
+      if (this.getExecutionPolicy()?.version !== policyVersion) throw new SafeError('MCP_UNAUTHORIZED', 'Discovery policy changed; start a new scan.', false, 403);
+      const now = Date.now();
+      const pending = entries.filter(entry => {
+        const prior = this.getPendingActivity(entry.eventId);
+        if (prior?.planId) return false;
+        this.sql.exec('INSERT INTO pending_activity VALUES (?, ?, ?, NULL) ON CONFLICT(event_id) DO UPDATE SET expires_at = excluded.expires_at, data = excluded.data',
+          entry.eventId, now + EVIDENCE_RETENTION_MS, JSON.stringify(entry));
+        return true;
+      });
+      if (!next) return { entries: pending };
+      this.sql.exec('DELETE FROM pending_cursors WHERE expires_at <= ?', now);
+      // Bound storage even if clients repeatedly abandon cursors.
+      if (this.sql.exec<{ count: number }>('SELECT COUNT(*) AS count FROM pending_cursors').one().count >= 1000)
+        throw new SafeError('UPSTREAM_RATE_LIMITED', 'Discovery cursor capacity reached; retry after cursors expire.', true, 429);
+      const cursor = crypto.randomUUID();
+      this.sql.exec('INSERT INTO pending_cursors VALUES (?, ?, ?)', cursor, next.startedAt + discoveryCursorMs, JSON.stringify(next));
+      return { entries: pending, cursor };
+    });
+  }
   recordDelivery(operationId: string, now: number, success: boolean): void {
     this.sql.exec('UPDATE operation_delivery SET next_attempt_at = MAX(next_attempt_at, ?), failures = CASE WHEN ? THEN 0 ELSE failures + 1 END WHERE operation_id = ?', now + WATCHDOG_INTERVAL_MS, success ? 1 : 0, operationId);
   }
@@ -65,6 +95,8 @@ export class AccountRepository {
   prepareMaintenance(now: number) {
     return this.storage.transactionSync(() => {
       const expiredEvidence = this.pruneEvidence(now);
+      this.sql.exec('DELETE FROM pending_cursors WHERE expires_at <= ?', now);
+      this.sql.exec('DELETE FROM pending_activity WHERE expires_at <= ?', now);
       const expired = this.sql.exec<{ work_id: string }>('SELECT w.work_id FROM identity_reservations i JOIN work w ON w.work_id = i.work_id AND w.fence = i.fence WHERE w.expires_at <= ?', now).toArray();
       for (const work of expired) this.sql.exec('UPDATE plans SET valid = 0 WHERE work_id = ?', work.work_id);
       // Reservation rows retain their monotonically increasing fence. Deleting
@@ -164,11 +196,28 @@ export class AccountRepository {
   }
   saveWorkflow(state: WorkflowState, expectedRevision: number): void {
     this.storage.transactionSync(() => {
-      this.checkLease(state.lease);
-      const prior = this.getWorkflow(state.lease.workId);
-      if ((prior?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1) throw Error('STATE_VERSION_CONFLICT');
-      this.sql.exec('INSERT INTO events VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', 'workflow:' + state.lease.workId, 'workflow', JSON.stringify(state), Date.now() + EVIDENCE_RETENTION_MS);
+      this.writeWorkflow(state, expectedRevision);
+      if (state.discoveryId && state.discoveryPlanId) {
+        const event = this.getPendingActivity(state.discoveryId);
+        const plan = this.getServicePlan(state.discoveryPlanId);
+        if (!event || event.planId && event.planId !== state.discoveryPlanId || !plan || plan.plan.workId !== state.lease.workId || !state.analysis)
+          throw Error('PENDING_ACTIVITY_CONFLICT');
+        this.sql.exec('UPDATE pending_activity SET plan_id = ? WHERE event_id = ?', state.discoveryPlanId, state.discoveryId);
+      }
     });
+  }
+  private writeWorkflow(state: WorkflowState, expectedRevision: number): void {
+    this.checkLease(state.lease);
+    const prior = this.getWorkflow(state.lease.workId);
+    if ((prior?.revision ?? 0) !== expectedRevision || state.revision !== expectedRevision + 1) throw Error('STATE_VERSION_CONFLICT');
+    this.sql.exec('INSERT INTO events VALUES (?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', 'workflow:' + state.lease.workId, 'workflow', JSON.stringify(state), Date.now() + EVIDENCE_RETENTION_MS);
+    if (!prior) this.recordAudit('work_created', state.lease.workId, state.lease.fence, state.lease.owner);
+    else if (state.step !== prior.step) this.recordAudit('preparation_progress', state.lease.workId, state.step, state.lease.owner);
+    if (state.preparationDeferral && JSON.stringify(state.preparationDeferral) !== JSON.stringify(prior?.preparationDeferral)) {
+      const d = state.preparationDeferral;
+      this.recordAudit(`preparation_deferred_${d.reason}`, state.lease.workId, d.attempts, state.lease.owner);
+      if (d.blocked) this.recordAudit('preparation_blocked', state.lease.workId, d.attempts, state.lease.owner);
+    }
   }
   getServicePlan(planId: string): { plan: SyncPlan; workflow: WorkflowState } | undefined {
     const row = this.sql.exec<{ work_id: string; data: string | null; evidence_expires_at: number; valid: number }>('SELECT work_id, data, evidence_expires_at, valid FROM plans WHERE plan_id = ?', planId).toArray()[0];
@@ -267,11 +316,15 @@ export class AccountRepository {
     const policy = this.getExecutionPolicy();
     const pendingReviews = this.listReviews({ limit: 100 }, owner).reviews.length;
     const pendingOperations = this.sql.exec<{ data: string }>('SELECT data FROM execution_operations').toArray().map(r => JSON.parse(r.data) as import('../operations').ExecutionOperation).filter(o => o.input.authorization.actor.userId === owner.userId && o.input.authorization.actor.clientId === owner.clientId && ['queued', 'running', 'uncertain'].includes(o.status.state)).length;
-    const workflows = this.sql.exec<{ data: string }>("SELECT data FROM events WHERE event_id LIKE 'workflow:%' AND data IS NOT NULL AND evidence_expires_at > ?", Date.now()).toArray().map(r => JSON.parse(r.data) as WorkflowState).filter(w => w.lease.owner.userId === owner.userId && w.lease.owner.clientId === owner.clientId);
-    const awaitingAgent = workflows.filter(w => !w.direct && !w.analysis).length;
-    const incompleteCoverage = workflows.filter(w => w.work && !w.work.coverage.complete).length;
+    const workflows = this.sql.exec<{ data: string }>("SELECT e.data FROM events e JOIN work w ON e.event_id = 'workflow:' || w.work_id JOIN identity_reservations i ON i.work_id = w.work_id AND i.fence = w.fence WHERE e.data IS NOT NULL AND e.evidence_expires_at > ?", Date.now()).toArray().map(r => JSON.parse(r.data) as WorkflowState).filter(w => w.lease.owner.userId === owner.userId && w.lease.owner.clientId === owner.clientId);
+    const active = workflows.filter(w => Date.parse(w.lease.expiresAt) > Date.now());
+    const awaitingAgent = active.filter(w => !w.direct && !!w.work && !w.analysis).length;
+    const preparing = active.filter(w => !w.direct && !w.work && !w.preparationDeferral?.blocked).length;
+    const blockedWork = active.filter(w => !w.direct && !!w.preparationDeferral?.blocked).length;
+    const expiredWork = workflows.filter(w => !w.direct && !w.analysis && Date.parse(w.lease.expiresAt) <= Date.now()).length;
+    const incompleteCoverage = active.filter(w => w.work && !w.work.coverage.complete).length;
     const pendingHints = this.sql.exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE conversation_id IS NOT NULL').one().count;
-    return { mode: policy?.mode ?? 'disabled' as const, policyVersion: policy?.version ?? 1, pendingReviews, pendingOperations, state: !policy || policy.mode === 'disabled' ? 'paused' as const : pendingReviews || incompleteCoverage || pendingHints ? 'degraded' as const : 'ready' as const, awaitingAgent, incompleteCoverage, pendingHints };
+    return { mode: policy?.mode ?? 'disabled' as const, policyVersion: policy?.version ?? 1, pendingReviews, pendingOperations, state: !policy || policy.mode === 'disabled' ? 'paused' as const : pendingReviews || incompleteCoverage || pendingHints || blockedWork || expiredWork ? 'degraded' as const : 'ready' as const, awaitingAgent, preparing, blockedWork, expiredWork, incompleteCoverage, pendingHints };
   }
   private work(id: string): WorkRow | undefined { return this.sql.exec<WorkRow>('SELECT * FROM work WHERE work_id = ?', id).toArray()[0]; }
   private liveWork(id: string): WorkRow {
@@ -285,6 +338,35 @@ export class AccountRepository {
     const row = this.liveWork(lease.workId);
     if (canonical(JSON.parse(row.lease)) !== canonical(lease)) throw Error('LEASE_FENCED');
     return row;
+  }
+  beginPreparation(lease: WorkLease): string {
+    return this.storage.transactionSync(() => {
+      this.checkLease(lease);
+      const now = Date.now();
+      const existing = this.sql.exec<{ expires_at: number }>('SELECT expires_at FROM preparation_locks WHERE work_id = ?', lease.workId).toArray()[0];
+      if (existing && existing.expires_at > now) throw new SafeError('UPSTREAM_CONFLICT', 'Preparation already running; retry after the current call finishes.', true, 409, undefined, 2);
+      const holder = crypto.randomUUID();
+      this.sql.exec('INSERT INTO preparation_locks VALUES (?, ?, ?) ON CONFLICT(work_id) DO UPDATE SET holder=excluded.holder, expires_at=excluded.expires_at', lease.workId, holder, Math.min(now + 60_000, Date.parse(lease.expiresAt)));
+      this.recordAudit('preparation_lock_acquired', lease.workId, lease.fence, lease.owner);
+      return holder;
+    });
+  }
+  renewPreparation(lease: WorkLease, holder: string): void {
+    this.storage.transactionSync(() => {
+      this.checkLease(lease);
+      const now = Date.now();
+      const lock = this.sql.exec<{ holder: string; expires_at: number }>('SELECT holder, expires_at FROM preparation_locks WHERE work_id = ?', lease.workId).toArray()[0];
+      if (!lock || lock.holder !== holder || lock.expires_at <= now) throw new SafeError('UPSTREAM_CONFLICT', 'Preparation lock expired; retry with the same work.', true, 409, undefined, 2);
+      this.sql.exec('UPDATE preparation_locks SET expires_at = ? WHERE work_id = ? AND holder = ?', Math.min(now + 60_000, Date.parse(lease.expiresAt)), lease.workId, holder);
+    });
+  }
+  endPreparation(lease: WorkLease, holder: string): void {
+    this.storage.transactionSync(() => {
+      const existing = this.sql.exec<{ holder: string }>('SELECT holder FROM preparation_locks WHERE work_id = ?', lease.workId).toArray()[0];
+      if (existing?.holder !== holder) return;
+      this.sql.exec('DELETE FROM preparation_locks WHERE work_id = ? AND holder = ?', lease.workId, holder);
+      this.recordAudit('preparation_lock_released', lease.workId, lease.fence, lease.owner);
+    });
   }
   private checkBasis(basis: PlanBasis, allowExpired = false): SnapshotManifest {
     if (allowExpired) {
@@ -353,20 +435,26 @@ export class AccountRepository {
       }
       this.sql.exec('INSERT INTO work VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(work_id) DO UPDATE SET lease = excluded.lease, expires_at = excluded.expires_at, fence = excluded.fence', lease.workId, input.requestId, fingerprint, targetKey, JSON.stringify(lease), now + 600_000, lease.fence);
       this.sql.exec('INSERT INTO identity_reservations VALUES (?, ?, ?) ON CONFLICT(target_key) DO UPDATE SET work_id = excluded.work_id, fence = excluded.fence', targetKey, lease.workId, lease.fence);
+      this.recordAudit('lease_acquired', lease.workId, lease.fence, lease.owner);
       return lease;
     });
   }
-  async installSnapshot(rawLease: WorkLease, rawManifest: SnapshotManifest): Promise<void> {
+  getSnapshotVersion(workId: string): number {
+    return this.sql.exec<{ version: number }>('SELECT version FROM snapshot_manifest WHERE work_id = ?', workId).toArray()[0]?.version ?? 0;
+  }
+  async installSnapshot(rawLease: WorkLease, rawManifest: SnapshotManifest, workflow?: WorkflowState): Promise<void> {
     const lease = workLeaseSchema.parse(rawLease); const manifest = snapshotManifestSchema.parse(rawManifest);
-    if (manifest.workId !== lease.workId) throw Error('LEASE_FENCED');
+    if (manifest.workId !== lease.workId || workflow && canonical(workflow.lease) !== canonical(lease)) throw Error('LEASE_FENCED');
     const fingerprint = await digest(manifest);
     this.storage.transactionSync(() => {
       this.checkLease(lease);
       const previous = this.sql.exec<{ version: number; digest: string }>('SELECT version, digest FROM snapshot_manifest WHERE work_id = ?', lease.workId).toArray()[0];
-      if (previous?.version === manifest.snapshotVersion && previous.digest === fingerprint) return;
+      if (!workflow && previous?.version === manifest.snapshotVersion && previous.digest === fingerprint) return;
       if (manifest.snapshotVersion !== (previous?.version ?? 0) + 1) throw Error('VERSION_CONFLICT');
+      if (workflow) this.writeWorkflow(workflow, workflow.revision - 1);
       this.invalidate(lease.workId);
       this.sql.exec('INSERT INTO snapshot_manifest VALUES (?, ?, ?, ?, ?) ON CONFLICT(work_id) DO UPDATE SET version = excluded.version, digest = excluded.digest, data = excluded.data, evidence_expires_at = excluded.evidence_expires_at', lease.workId, manifest.snapshotVersion, fingerprint, JSON.stringify(manifest), Date.now() + EVIDENCE_RETENTION_MS);
+      this.recordAudit('snapshot_persisted', lease.workId, manifest.snapshotVersion, lease.owner);
     });
   }
   async savePlan(raw: SyncPlan, rawBasis: PlanBasis): Promise<void> {
@@ -461,6 +549,17 @@ export class AccountRepository {
       return bundle;
     });
   }
+  getContextConversationIds(customerId: string, limit: number): number[] {
+    const row = this.sql.exec<{ refs: string | null }>(
+      "SELECT json_extract(data, '$.evidenceRefs') AS refs FROM contexts WHERE customer_id = ? AND valid = 1 AND evidence_expires_at > ?",
+      customerId, Date.now(),
+    ).toArray()[0];
+    const refs: unknown = row?.refs ? JSON.parse(row.refs) : [];
+    if (!Array.isArray(refs)) return [];
+    const ids = refs.flatMap(ref => ref?.kind === 'message' && typeof ref.id === 'string' && /^[1-9][0-9]*:[1-9][0-9]*$/.test(ref.id)
+      ? [Number(ref.id.split(':')[0])] : []);
+    return [...new Set(ids)].filter(id => Number.isSafeInteger(id)).slice(0, limit);
+  }
   getContext(customerId: string): CustomerContext {
     const row = this.sql.exec<{ data: string | null; evidence_expires_at: number }>('SELECT data, evidence_expires_at FROM contexts WHERE customer_id = ? AND valid = 1', customerId).toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('CONTEXT_UNAVAILABLE');
@@ -482,11 +581,15 @@ export class AccountRepository {
         if (!row || row.customer_id !== projection.customerId || canonical(JSON.parse(row.receipt)) !== canonical(receipt)) throw Error('CONTEXT_RECEIPT_UNVERIFIED');
       }
       const factId = 'customer-context:' + projection.customerId;
-      const envelope = JSON.stringify({ projection, basis });
       const previous = this.sql.exec<{ data: string | null; valid: number; version: number }>('SELECT data, valid, version FROM facts WHERE fact_id = ?', factId).toArray()[0];
       // Only an unpublished projection owns the pending slot. A rendered version
       // may be superseded by reconciled work from another conversation.
-      if (previous?.data && previous.valid && previous.version > (current?.version ?? 0) && contextValue(JSON.parse(previous.data)) !== contextValue(JSON.parse(envelope))) throw new SafeError('CONTEXT_STALE', 'A context projection is awaiting refresh.', false, 409);
+      if (previous?.data && previous.valid && previous.version > (current?.version ?? 0)) {
+        const stored = JSON.parse(previous.data) as { projection: ContextProjection; basis: PlanBasis };
+        if (contextValue(stored.basis) === contextValue(basis) &&
+            contextValue({ ...stored.projection, verifiedAt: projection.verifiedAt }) === contextValue(projection)) return;
+        throw new SafeError('CONTEXT_STALE', 'A context projection is awaiting refresh.', false, 409);
+      }
       // Retain canonical facts from the last published version even when this
       // conversation does not repeat them. Only the stored structured envelope
       // can carry historical sources; new facts above require this manifest.

@@ -14,7 +14,7 @@ export async function readDuplicateCandidates(crm: Pick<AgendorCrmClient,'search
     for(let count=0;count<10;count++) {
       let result;
       try {result=await crm.searchPeople({...filter,page,perPage:100});}
-      catch(error) {if(error instanceof SafeError && error.retryable)throw error;return {...base,status:'query_failed'};}
+      catch(error) {if(error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED'))throw error;return {...base,status:'query_failed'};}
       if(result.pageInfo.page!==page || result.items.length>100) return {...base,status:'query_failed'};
       const fingerprint=JSON.stringify(result.items.map(v=>object(v).id));
       if(result.items.length && fingerprints.has(fingerprint)) return {...base,status:'query_failed'};
