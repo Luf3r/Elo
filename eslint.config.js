@@ -257,4 +257,29 @@ export default tseslint.config(
       'preserve-caught-error': 'warn',
     },
   },
+  {
+    files: ['src/automation/state/**/*.ts'],
+    rules: {
+      'max-lines': ['error', { max: 400 }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(?:^|/)identity(?:/|$)',
+              message: 'Camada automation/state não deve importar domain/identity.',
+            },
+            {
+              regex: '(?:^|/)demands(?:/|$)',
+              message: 'Camada automation/state não deve importar domain/demands.',
+            },
+            {
+              regex: '(?:^|/)context/render(?:/|$)',
+              message: 'Camada automation/state não deve importar context/render.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

@@ -1,5 +1,6 @@
 import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
-import type { AccountRepository } from './state/repository';
+import { contextEvidenceRefs, renderCustomerContext } from './context/render';
+import type { AccountRepository, ContextRenderer } from './state/repository';
 import type { AutomationQueuePayload } from './queue';
 import type { ExecutionOperation } from './operations';
 export const WATCHDOG_INTERVAL_MS = 300_000;
@@ -9,14 +10,22 @@ export interface MaintenanceReport {
   failedDeliveries: number;
   expiredReservations: number;
 }
+const defaultContextRenderer: ContextRenderer = (projection) => ({
+  markdown: renderCustomerContext(projection),
+  evidenceRefs: contextEvidenceRefs(projection),
+});
 /** Maintenance only expires evidence and republishes references. It never
  * interprets messages, starts an agent or grants a fresh CRM authorization. */
 export async function maintainAccount(
   now: number,
-  deps: { repository: AccountRepository; queue: { send(body: AutomationQueuePayload): Promise<unknown> } },
+  deps: {
+    repository: AccountRepository;
+    queue: { send(body: AutomationQueuePayload): Promise<unknown> };
+    renderContext?: ContextRenderer;
+  },
 ): Promise<MaintenanceReport> {
   if (!Number.isSafeInteger(now) || now < 0) throw Error('INVALID_MAINTENANCE_TIME');
-  const state = deps.repository.prepareMaintenance(now);
+  const state = deps.repository.prepareMaintenance(now, deps.renderContext ?? defaultContextRenderer);
   const report: MaintenanceReport = {
     expiredEvidence: state.expiredEvidence,
     expiredReservations: state.expiredReservations,

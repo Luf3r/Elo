@@ -5,6 +5,8 @@ import { readOAuthConfig } from './oauth/config';
 import { COMMIT, VERSION } from './version';
 import { handleAutomationQueue } from './automation/queue';
 import { acceptChatHint } from './automation/ingress';
+import { automationDomainHooks } from './automation/resolution';
+import { AutomationAccount as BaseAutomationAccount } from './automation/state/account';
 import { accountState } from './automation/state/budget';
 
 export default {
@@ -56,4 +58,8 @@ export default {
   },
 };
 
-export { AutomationAccount } from './automation/state/account';
+export class AutomationAccount extends BaseAutomationAccount {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env, automationDomainHooks);
+  }
+}

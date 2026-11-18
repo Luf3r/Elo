@@ -11,16 +11,32 @@ import type {
   ContextProjection,
 } from '../types';
 import { migrate } from './migrations';
-import { AccountRepository } from './repository';
+import {
+  AccountRepository,
+  type ContextEvidenceExtractor,
+  type ContextRenderer,
+  type ResolveWorkHooks,
+} from './repository';
 import type { OperationsStore, OperationInput } from '../operations';
 import { takeBudget } from './budget';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot } from '../types';
 import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
 import type { AutomationPolicy } from '../types';
 import { maintainAccount } from '../maintenance';
+
+export interface AutomationDomainHooks {
+  resolveWork: ResolveWorkHooks;
+  extractContextEvidenceRefs: ContextEvidenceExtractor;
+  renderContext: ContextRenderer;
+}
+
 export class AutomationAccount extends DurableObject<Env> {
   private readonly repository: AccountRepository;
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(
+    ctx: DurableObjectState,
+    env: Env,
+    private readonly domainHooks?: AutomationDomainHooks,
+  ) {
     super(ctx, env);
     this.repository = new AccountRepository(ctx.storage);
     void ctx.blockConcurrencyWhile(async () => {
@@ -28,6 +44,10 @@ export class AutomationAccount extends DurableObject<Env> {
       if ((await ctx.storage.getAlarm()) === null)
         await ctx.storage.setAlarm(this.repository.nextMaintenance(Date.now()));
     });
+  }
+  private requireDomainHooks(): AutomationDomainHooks {
+    if (!this.domainHooks) throw Error('AUTOMATION_DOMAIN_HOOKS_NOT_CONFIGURED');
+    return this.domainHooks;
   }
   async beginPreparation(lease: WorkLease) {
     return this.repository.beginPreparation(lease);
@@ -51,7 +71,7 @@ export class AutomationAccount extends DurableObject<Env> {
     return this.repository.completeDirectOperation(id);
   }
   async publishOperationContext(id: string) {
-    return this.repository.publishOperationContext(id);
+    return this.repository.publishOperationContext(id, this.requireDomainHooks().renderContext);
   }
   async recordChatHint(key: string, digest: string, id: number, now: number) {
     return this.repository.recordChatHint(key, digest, id, now);
@@ -171,10 +191,14 @@ export class AutomationAccount extends DurableObject<Env> {
     return this.repository.getContext(customerId);
   }
   async saveContextProjection(projection: ContextProjection, basis: PlanBasis) {
-    return this.repository.saveContextProjection(projection, basis);
+    return this.repository.saveContextProjection(
+      projection,
+      basis,
+      this.requireDomainHooks().extractContextEvidenceRefs,
+    );
   }
   async refreshCustomerContext(customerId: string, expectedVersion: number) {
-    return this.repository.refreshCustomerContext(customerId, expectedVersion);
+    return this.repository.refreshCustomerContext(customerId, expectedVersion, this.requireDomainHooks().renderContext);
   }
   async getCustomerDemand(customerId: string, demandId: string) {
     return this.repository.getCustomerDemand(customerId, demandId);
@@ -191,7 +215,7 @@ export class AutomationAccount extends DurableObject<Env> {
     catalog: CatalogSnapshot,
     basis: PlanBasis,
   ) {
-    return this.repository.resolveWork(analysis, candidates, catalog, basis);
+    return this.repository.resolveWork(analysis, candidates, catalog, basis, this.requireDomainHooks().resolveWork);
   }
   async reserveCommand(input: CommandReservation) {
     return this.repository.reserveCommand(input);
@@ -211,7 +235,11 @@ export class AutomationAccount extends DurableObject<Env> {
     // exhaust the platform's finite alarm retries and strand durable work.
     await this.ctx.storage.setAlarm(now + 300_000);
     try {
-      return await maintainAccount(now, { repository: this.repository, queue: this.env.AUTOMATION_QUEUE });
+      return await maintainAccount(now, {
+        repository: this.repository,
+        queue: this.env.AUTOMATION_QUEUE,
+        renderContext: this.domainHooks?.renderContext,
+      });
     } finally {
       await this.ctx.storage.setAlarm(this.repository.nextMaintenance(Date.now()));
     }
