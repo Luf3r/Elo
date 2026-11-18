@@ -1,4 +1,4 @@
 # Commits puramente de formatação ignorados pelo `git blame --ignore-revs-file .git-blame-ignore-revs`.
 #
-# Após a integração desta tarefa (T02-format-lint), adicione aqui o hash SHA-1
-# completo (40 caracteres) do commit de formatação Prettier de src/, test/ e scripts/.
+# Formatação Prettier de src/, test/ e scripts/ (Fase 1):
+062b4d7630343c6f3f0c4befd6c1c268c7cae3d7
