@@ -5,7 +5,7 @@ import { createAgendorCrmClient } from '../src/agendor/crm/client';
 import { executeRead } from '../src/mcp/tools/read';
 import { testEnv } from './helpers';
 const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => vi.unstubAllGlobals());
 it('atomically permits four requests per rolling 10 seconds, separated by product', async () => {
   const stub = state();
   const tickets = await Promise.all(Array.from({ length: 5 }, () => stub.takeBudget('crm', 0)));
@@ -68,26 +68,16 @@ it('shares Chat credit across detail, messages, attachment listing and download 
 });
 it('waits for shared credit before downloading an attachment after metadata consumed the last slot', async () => {
   vi.useFakeTimers();
-  const originalSetTimeout = globalThis.setTimeout;
-  let retryScheduledResolve!: () => void;
-  const retryScheduled = new Promise<void>(resolve => { retryScheduledResolve = resolve; });
-  let tenSecondTimers = 0;
-  vi.spyOn(globalThis, 'setTimeout').mockImplementation(((handler: Parameters<typeof setTimeout>[0], timeout?: number, ...args: unknown[]) => {
-    if (timeout === 10_000 && ++tenSecondTimers === 2) retryScheduledResolve();
-    return originalSetTimeout(handler, timeout, ...args);
-  }) as typeof setTimeout);
   const { createAgendorChatClient } = await import('../src/agendor/chat/client');
   const bindings = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
-  const request = vi.fn(async (request: Request) => request.url.endsWith('/attachments') ? Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] }) : new Response('file', { headers: { 'content-type': 'text/plain' } }));
+  const request = vi.fn(async (request:Request) => request.url.endsWith('/attachments') ? Response.json({ payload: [{ id: 400, data_url: 'https://chat.agendor.com.br/files/synthetic' }] }) : new Response('file',{headers:{'content-type':'text/plain'}}));
   const client = createAgendorChatClient(bindings, { request });
   const stub = bindings.AUTOMATION_STATE.getByName('elotenant');
   for (let i = 0; i < 3; i++) await stub.takeBudget('chat', Date.now());
-  const download = client.readAttachment({ conversationId: 200, attachmentId: 400 });
-  await retryScheduled;
-  expect(request).toHaveBeenCalledTimes(1);
+  const download=client.readAttachment({conversationId:200,attachmentId:400});
+  await vi.waitFor(()=>expect(request).toHaveBeenCalledTimes(1));
   await vi.advanceTimersByTimeAsync(10_001);
-  expect(await download).toMatchObject({ status: 'available' });
-  expect(request).toHaveBeenCalledTimes(2);
+  expect(await download).toMatchObject({status:'available'});expect(request).toHaveBeenCalledTimes(2);
   vi.useRealTimers();
 });
 it('routes the production factory to the same server-owned account key', async () => {

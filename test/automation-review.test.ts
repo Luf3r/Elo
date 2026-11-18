@@ -44,7 +44,7 @@ it('consumes a customer review in the next fresh snapshot and plan instead of re
   expect(next.work).toMatchObject({ reviewDecision: { reviewId: review.reviewId, version: 2, decision: { kind: 'selectCustomer', ref: { kind: 'organization', id: 11 } } } });
   const fresh = await f.service.submit(f.submission(next.work));
   expect(fresh.planId).not.toBe(original.planId); expect(fresh.state).toBe('noop'); expect(fresh.reviewIds).toEqual([]);
-  const audit = await f.service.getAudit({ limit: 100 });
+  const audit = await f.service.getAudit({});
   expect(audit.entries).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'review_consumed', targetId: review.reviewId, version: 3 })]));
   const another = await f.service.prepare({ requestId: 'different-order', target: { kind: 'conversation', conversationId: 102 }, mode: 'preview' });
   if (another.state !== 'ready') throw Error('next preparation failed');
@@ -81,5 +81,5 @@ it('binds approval to its reviewed plan and does not bypass unresolved canonical
   await expect(f.service.submit(f.submission(next.work, changed))).rejects.toThrow('REVIEW_ANALYSIS_CHANGED');
   const fresh = await f.service.submit(f.submission(next.work));
   expect(fresh.planId).not.toBe(original.planId); expect(fresh.state).toBe('review'); expect(fresh.orderedCommands).toEqual([]);
-  expect((await f.service.getAudit({ limit: 100 })).entries).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'review_consumed', targetId: review.reviewId })]));
+  expect((await f.service.getAudit({})).entries).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'review_consumed', targetId: review.reviewId })]));
 });

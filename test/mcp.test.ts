@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { rpc, callTool } from './mcp-helper';
 import packageJson from '../package.json';
-import { COMMIT } from '../src/version';
 
 describe('Streamable HTTP MCP', () => {
   it('rejects unauthenticated protocol calls', async () => {
@@ -37,7 +36,7 @@ describe('Streamable HTTP MCP', () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const { data } = await callTool('server_status');
     expect(data.result.isError).not.toBe(true);
-    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ status: 'ok', service: 'elo-agendor-mcp', version: packageJson.version, commit: COMMIT, client: expect.any(String) });
+    expect(JSON.parse(data.result.content[0].text)).toMatchObject({ status: 'ok', service: 'elo-agendor-mcp', version: packageJson.version, client: expect.any(String) });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('keeps overlapping requests isolated', async () => {
