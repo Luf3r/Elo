@@ -23,13 +23,20 @@ describe('routing and health', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/json');
     const text = await response.text();
-    expect(JSON.parse(text)).toEqual({ status: 'ok', service: 'elo-agendor-mcp', version: packageJson.version, commit: COMMIT });
+    expect(JSON.parse(text)).toEqual({
+      status: 'ok',
+      service: 'elo-agendor-mcp',
+      version: packageJson.version,
+      commit: COMMIT,
+    });
     expect(COMMIT).toBe('unknown');
     expect(text).not.toContain('unit-crm-token');
     expect(text).not.toContain('unit-mcp-token');
     expect(fetch).not.toHaveBeenCalled();
   });
-  it.each(['/unknown', '/mcp/extra', '/'])('rejects unknown path %s', async path => {
-    expect((await worker.fetch(new Request(`https://example.com${path}`, { method: 'POST' }), testEnv(), context())).status).toBe(404);
+  it.each(['/unknown', '/mcp/extra', '/'])('rejects unknown path %s', async (path) => {
+    expect(
+      (await worker.fetch(new Request(`https://example.com${path}`, { method: 'POST' }), testEnv(), context())).status,
+    ).toBe(404);
   });
 });

@@ -19,7 +19,9 @@ export interface CrmMutationDependencies {
 }
 const paths = { organization: 'organizations', person: 'people', deal: 'deals', task: 'tasks' } as const;
 function object(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 /** Project only requested keys; unrelated upstream permissions, URLs, headers
  * and nested contact fields never become returned evidence. */
@@ -33,14 +35,28 @@ function project(requested: Record<string, unknown>, returned: Record<string, un
       const valueObject = object(value);
       if (valueObject) result[key] = project(sampleObject, valueObject);
     } else if (Array.isArray(sample)) {
-      if (Array.isArray(value) && value.length <= 100 && value.every(item => typeof item === 'string' || typeof item === 'number' && Number.isFinite(item))) result[key] = value;
-    } else if (value === null || typeof value === typeof sample && (typeof value !== 'number' || Number.isFinite(value))) result[key] = value;
+      if (
+        Array.isArray(value) &&
+        value.length <= 100 &&
+        value.every((item) => typeof item === 'string' || (typeof item === 'number' && Number.isFinite(item)))
+      )
+        result[key] = value;
+    } else if (
+      value === null ||
+      (typeof value === typeof sample && (typeof value !== 'number' || Number.isFinite(value)))
+    )
+      result[key] = value;
   }
   return result;
 }
 function writePayload(record: Record<string, unknown>): Record<string, unknown> {
   if (!Array.isArray(record.customFields)) return record;
-  return { ...record, customFields: Object.fromEntries(record.customFields.map((field: { id: string | number; value: unknown }) => [String(field.id), field.value])) };
+  return {
+    ...record,
+    customFields: Object.fromEntries(
+      record.customFields.map((field: { id: string | number; value: unknown }) => [String(field.id), field.value]),
+    ),
+  };
 }
 
 /** Internal single-dispatch adapter. The executor reserves a durable commandKey
@@ -49,18 +65,34 @@ function writePayload(record: Record<string, unknown>): Record<string, unknown> 
 export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutationClient {
   const schemas = createMutationSchemas(deps.catalog);
   const budget = deps.budgetGate ?? createBudgetGate(deps.env, 'crm');
-  async function send(kind: CrmMutationRef['kind'], method: 'POST' | 'PUT', route: string, record: Record<string, unknown>, expectedId?: number): Promise<MutationOutcome> {
+  async function send(
+    kind: CrmMutationRef['kind'],
+    method: 'POST' | 'PUT',
+    route: string,
+    record: Record<string, unknown>,
+    expectedId?: number,
+  ): Promise<MutationOutcome> {
     // Existing collections have no verified replacement/merge contract. Create
     // may initialize custom fields/assignees; product pricing remains unverified.
-    if (record.products_entities !== undefined || method === 'PUT' && (record.customFields !== undefined || record.assigned_users !== undefined)) {
+    if (
+      record.products_entities !== undefined ||
+      (method === 'PUT' && (record.customFields !== undefined || record.assigned_users !== undefined))
+    ) {
       return { state: 'rejected', code: 'COLLECTION_WRITE_UNVERIFIED' };
     }
     throwIfCancelled(deps.signal);
-    if (!isConfiguredSecret(deps.env.AGENDOR_CRM_TOKEN)) throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
+    if (!isConfiguredSecret(deps.env.AGENDOR_CRM_TOKEN))
+      throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const payload = writePayload(record);
     const request = new Request(`https://api.agendor.com.br/v3${route}`, {
-      method, signal: deps.signal, redirect: 'manual',
-      headers: { Authorization: `Token ${deps.env.AGENDOR_CRM_TOKEN}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+      method,
+      signal: deps.signal,
+      redirect: 'manual',
+      headers: {
+        Authorization: `Token ${deps.env.AGENDOR_CRM_TOKEN}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(payload),
     });
     await budget();
@@ -68,39 +100,66 @@ export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutat
     let dispatched = false;
     let response: unknown;
     try {
-      response = await fetchJson<unknown>(request, { timeoutMs: deps.timeoutMs, request: request => {
-        dispatched = true;
-        return (deps.request ?? fetch)(request);
-      } });
+      response = await fetchJson<unknown>(request, {
+        timeoutMs: deps.timeoutMs,
+        request: (request) => {
+          dispatched = true;
+          return (deps.request ?? fetch)(request);
+        },
+      });
     } catch (error) {
       if (!dispatched) throw error;
       if (deps.signal?.aborted) return { state: 'uncertain', reason: 'UPSTREAM_CANCELLED' };
       const safe = safeError(error);
       if (safe.status !== undefined && safe.status >= 400 && safe.status < 500 && safe.status !== 408) {
-        return { state: 'rejected', code: safe.code, ...(safe.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: safe.retryAfterSeconds }) };
+        return {
+          state: 'rejected',
+          code: safe.code,
+          ...(safe.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: safe.retryAfterSeconds }),
+        };
       }
       return { state: 'uncertain', reason: safe.code };
     }
     const envelope = object(response);
     const returned = object(kind === 'task' && method === 'PUT' ? envelope?.task_entity : envelope?.data);
     const id = crmIdSchema.safeParse(returned?.id);
-    if (!returned || !id.success || expectedId !== undefined && id.data !== expectedId) return { state: 'uncertain', reason: 'UPSTREAM_INVALID_RESPONSE' };
+    if (!returned || !id.success || (expectedId !== undefined && id.data !== expectedId))
+      return { state: 'uncertain', reason: 'UPSTREAM_INVALID_RESPONSE' };
     return { state: 'confirmed', ref: { kind, id: id.data }, returnedFields: project(payload, returned) };
   }
   async function enrich(kind: CrmMutationRef['kind'], id: number, patch: unknown, schema: z.ZodType) {
     const validId = parseInput(crmIdSchema, id);
-    return send(kind, 'PUT', `/${paths[kind]}/${validId}`, parseInput(schema, patch) as Record<string, unknown>, validId);
+    return send(
+      kind,
+      'PUT',
+      `/${paths[kind]}/${validId}`,
+      parseInput(schema, patch) as Record<string, unknown>,
+      validId,
+    );
   }
   return {
     async changeStage(id, patch) {
       const validId = parseInput(crmIdSchema, id);
-      return send('deal', 'PUT', `/deals/${validId}/stage`, { ...parseInput(schemas.changeStage, patch), checkRequiredFields: true }, validId);
+      return send(
+        'deal',
+        'PUT',
+        `/deals/${validId}/stage`,
+        { ...parseInput(schemas.changeStage, patch), checkRequiredFields: true },
+        validId,
+      );
     },
-    async createOrganization(record) { return send('organization', 'POST', '/organizations', parseInput(schemas.createOrganization, record)); },
-    async createPerson(record) { return send('person', 'POST', '/people', parseInput(schemas.createPerson, record)); },
+    async createOrganization(record) {
+      return send('organization', 'POST', '/organizations', parseInput(schemas.createOrganization, record));
+    },
+    async createPerson(record) {
+      return send('person', 'POST', '/people', parseInput(schemas.createPerson, record));
+    },
     async createDeal(parent, record) {
       const valid = parseInput(schemas.createDeal, { parent, record });
-      return send('deal', 'POST', `/${paths[valid.parent.kind]}/${valid.parent.id}/deals`, { ...valid.record, checkRequiredFields: true });
+      return send('deal', 'POST', `/${paths[valid.parent.kind]}/${valid.parent.id}/deals`, {
+        ...valid.record,
+        checkRequiredFields: true,
+      });
     },
     async createTask(parent, record) {
       const valid = parseInput(schemas.createTask, { parent, record });

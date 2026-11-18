@@ -15,13 +15,18 @@ describe('bounded CRM update client', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
-    await expect(client.updateDeal(42, { title: 'Renewal', value: 1200 })).resolves.toEqual({ id: 42, updatedFields: ['title', 'value'] });
+    await expect(client.updateDeal(42, { title: 'Renewal', value: 1200 })).resolves.toEqual({
+      id: 42,
+      updatedFields: ['title', 'value'],
+    });
   });
 
   it('rejects arbitrary deal properties before making a request', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
-    await expect(client.updateDeal(42, { title: 'Renewal', ownerUser: 1 } as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client.updateDeal(42, { title: 'Renewal', ownerUser: 1 } as never)).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -41,7 +46,10 @@ describe('bounded CRM update client', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
-    await expect(client.updateDealStage(42, { dealStage: 3 })).resolves.toEqual({ id: 42, updatedFields: ['dealStage'] });
+    await expect(client.updateDealStage(42, { dealStage: 3 })).resolves.toEqual({
+      id: 42,
+      updatedFields: ['dealStage'],
+    });
   });
 
   it('passes a validated funnel ID when moving to a non-default funnel', async () => {
@@ -51,15 +59,23 @@ describe('bounded CRM update client', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
-    await expect(client.updateDealStage(42, { dealStage: 3, funnel: 9 })).resolves.toEqual({ id: 42, updatedFields: ['dealStage', 'funnel'] });
+    await expect(client.updateDealStage(42, { dealStage: 3, funnel: 9 })).resolves.toEqual({
+      id: 42,
+      updatedFields: ['dealStage', 'funnel'],
+    });
   });
 
   it('updates people and organizations through their fixed routes', async () => {
     const paths: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (request: Request) => {
-      paths.push(new URL(request.url).pathname);
-      return Response.json({ data: { id: Number(new URL(request.url).pathname.split('/').at(-1)), name: 'Updated' } });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        paths.push(new URL(request.url).pathname);
+        return Response.json({
+          data: { id: Number(new URL(request.url).pathname.split('/').at(-1)), name: 'Updated' },
+        });
+      }),
+    );
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
     await expect(client.updatePerson(7, { role: 'Buyer' })).resolves.toMatchObject({ id: 7 });
     await expect(client.updateOrganization(8, { website: 'https://example.com' })).resolves.toMatchObject({ id: 8 });

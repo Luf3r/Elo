@@ -4,7 +4,13 @@ import { RESOURCE } from '../src/oauth/config';
 
 function context(scopes: string[]) {
   return {
-    auth: { clientId: 'client-1', userId: 'owner-1', audience: RESOURCE, expiresAt: Math.floor(Date.now() / 1000) + 60, scope: scopes },
+    auth: {
+      clientId: 'client-1',
+      userId: 'owner-1',
+      audience: RESOURCE,
+      expiresAt: Math.floor(Date.now() / 1000) + 60,
+      scope: scopes,
+    },
     props: { userId: 'owner-1', email: 'owner@elo.example' },
   } as unknown as ExecutionContext;
 }
@@ -14,7 +20,11 @@ describe('per-tool OAuth scopes', () => {
     const auth = authenticateClient(context(['chat:read']));
     expect(auth.scopes).toEqual(['chat:read']);
     expect(() => requireScope(auth, 'crm:read')).toThrow('Insufficient scope.');
-    try { requireScope(auth, 'crm:read'); } catch (error) { expect(error).toMatchObject({ requiredScope: 'crm:read', status: 403 }); }
+    try {
+      requireScope(auth, 'crm:read');
+    } catch (error) {
+      expect(error).toMatchObject({ requiredScope: 'crm:read', status: 403 });
+    }
     expect(() => requireScope(auth, 'chat:read')).not.toThrow();
   });
 
@@ -37,10 +47,12 @@ describe('OAuth authorization expiry', () => {
     const request = context(['crm:read']);
     expect(authenticateClient(request)).toMatchObject({ expiresAt: 1_793_016_060_000 });
   });
-  it.each([NaN, Infinity, -1, 0, 1_793_016_000])('rejects invalid or expired OAuth expiry %s', expiresAt => {
+  it.each([NaN, Infinity, -1, 0, 1_793_016_000])('rejects invalid or expired OAuth expiry %s', (expiresAt) => {
     vi.spyOn(Date, 'now').mockReturnValue(1_793_016_000_000);
     const request = context(['crm:read']);
-    Object.assign(request, { auth: { clientId: 'client-1', userId: 'owner-1', audience: RESOURCE, scope: ['crm:read'], expiresAt } });
+    Object.assign(request, {
+      auth: { clientId: 'client-1', userId: 'owner-1', audience: RESOURCE, scope: ['crm:read'], expiresAt },
+    });
     expect(() => authenticateClient(request)).toThrow('Unauthorized.');
   });
   it('preserves callers whose verified context has no expiry', () => {

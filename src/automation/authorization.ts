@@ -2,7 +2,15 @@ import { requireCapabilities, type AuthContext } from '../auth';
 import { SafeError } from '../errors';
 import { automationPolicySchema } from './policy-types';
 import { authorizedPlanSchema, syncPlanSchema, workLeaseSchema } from './schemas';
-import type { AnalysisInput, AuthorizedPlan, AutomationPolicy, Capability, MutationCommand, SyncPlan, WorkLease } from './types';
+import type {
+  AnalysisInput,
+  AuthorizedPlan,
+  AutomationPolicy,
+  Capability,
+  MutationCommand,
+  SyncPlan,
+  WorkLease,
+} from './types';
 
 export const automationOperationCapabilities = {
   discover: ['automation:process', 'chat:read', 'crm:read'],
@@ -27,13 +35,25 @@ export function requireAutomationOperation(auth: AuthContext, operation: Automat
 /** Enabling CRM mutations in policy requires the corresponding caller grants. */
 export function requirePolicyCapabilities(auth: AuthContext, policy: AutomationPolicy): void {
   requireAutomationOperation(auth, 'updatePolicy');
-  requireCapabilities(auth, policy.capabilities.filter(c => c === 'crm:create' || c === 'crm:enrich' || c === 'crm:write'));
+  requireCapabilities(
+    auth,
+    policy.capabilities.filter((c) => c === 'crm:create' || c === 'crm:enrich' || c === 'crm:write'),
+  );
 }
 
 const commandCapability = {
-  legacy_update_organization: 'crm:write', legacy_update_person: 'crm:write', legacy_update_deal: 'crm:write', legacy_update_stage: 'crm:write',
-  create_organization: 'crm:create', create_person: 'crm:create', create_deal: 'crm:create', create_task: 'crm:create',
-  enrich_organization: 'crm:enrich', enrich_person: 'crm:enrich', enrich_deal: 'crm:enrich', update_task: 'crm:enrich',
+  legacy_update_organization: 'crm:write',
+  legacy_update_person: 'crm:write',
+  legacy_update_deal: 'crm:write',
+  legacy_update_stage: 'crm:write',
+  create_organization: 'crm:create',
+  create_person: 'crm:create',
+  create_deal: 'crm:create',
+  create_task: 'crm:create',
+  enrich_organization: 'crm:enrich',
+  enrich_person: 'crm:enrich',
+  enrich_deal: 'crm:enrich',
+  update_task: 'crm:enrich',
   change_stage: 'crm:write',
 } as const satisfies Record<MutationCommand['kind'], Capability>;
 
@@ -49,7 +69,13 @@ export function authorizePlan(auth: AuthContext, plan: SyncPlan, policy: Automat
   const authorizationTime = Date.now();
   requireAutomationOperation(auth, 'apply');
   const expiry = auth.expiresAt;
-  if (!auth.userId || !auth.clientId || expiry === undefined || !Number.isFinite(expiry) || expiry <= authorizationTime) {
+  if (
+    !auth.userId ||
+    !auth.clientId ||
+    expiry === undefined ||
+    !Number.isFinite(expiry) ||
+    expiry <= authorizationTime
+  ) {
     deny('A current, expiring authorization is required.');
   }
   const parsedPlan = syncPlanSchema.safeParse(plan);
@@ -57,11 +83,19 @@ export function authorizePlan(auth: AuthContext, plan: SyncPlan, policy: Automat
   if (!parsedPlan.success || !parsedPolicy.success) deny('Invalid plan or policy.');
   const snapshot = parsedPlan.data;
   const currentPolicy = parsedPolicy.data;
-  if (currentPolicy.mode !== 'apply' || snapshot.policyVersion !== currentPolicy.version || snapshot.state === 'review') {
+  if (
+    currentPolicy.mode !== 'apply' ||
+    snapshot.policyVersion !== currentPolicy.version ||
+    snapshot.state === 'review'
+  ) {
     deny('Plan is not authorized by the current policy.');
   }
-  if (!currentPolicy.nativeCreatorDisabled && snapshot.orderedCommands.some(command => command.kind === 'create_person')) deny('Native creator mode must be disabled before person creation is authorized.');
-  const commandCapabilities = snapshot.orderedCommands.map(command => {
+  if (
+    !currentPolicy.nativeCreatorDisabled &&
+    snapshot.orderedCommands.some((command) => command.kind === 'create_person')
+  )
+    deny('Native creator mode must be disabled before person creation is authorized.');
+  const commandCapabilities = snapshot.orderedCommands.map((command) => {
     // Ignore claims made by requiredCapabilities; derive from the closed command kind.
     const capability = commandCapability[command.kind];
     requireCapabilities(auth, [capability]);
@@ -85,8 +119,13 @@ export function authorizeSubmission(auth: AuthContext, input: AnalysisInput, lea
   const parsed = workLeaseSchema.safeParse(lease);
   if (!parsed.success || !auth.userId || !auth.clientId) deny('Invalid work authorization.');
   const work = parsed.data;
-  if (auth.userId !== work.owner.userId || auth.clientId !== work.owner.clientId || input.workId !== work.workId ||
-      input.leaseToken !== work.leaseToken || Date.parse(work.expiresAt) <= Date.now()) {
+  if (
+    auth.userId !== work.owner.userId ||
+    auth.clientId !== work.owner.clientId ||
+    input.workId !== work.workId ||
+    input.leaseToken !== work.leaseToken ||
+    Date.parse(work.expiresAt) <= Date.now()
+  ) {
     deny('Work authorization is stale or belongs to another caller.');
   }
 }

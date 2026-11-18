@@ -11,7 +11,7 @@ it('does not spend upstream quota or fetch for an already cancelled tool call', 
   const env = testEnv();
   const fetch = vi.fn(async () => Response.json({ data: [] }));
   vi.stubGlobal('fetch', fetch);
-  const result = await executeRead(env, auth, client => client.searchPeople({}), controller.signal);
+  const result = await executeRead(env, auth, (client) => client.searchPeople({}), controller.signal);
   expect(result.isError).toBe(true);
   expect(budgetMock(env)).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
@@ -19,22 +19,40 @@ it('does not spend upstream quota or fetch for an already cancelled tool call', 
 it('does not start a GET if cancellation occurs while awaiting the limiter', async () => {
   const controller = new AbortController();
   const env = testEnv();
-  budgetMock(env).mockImplementation(async () => { controller.abort(); return { allowed: true, reservationId: 'cancelled' }; });
+  budgetMock(env).mockImplementation(async () => {
+    controller.abort();
+    return { allowed: true, reservationId: 'cancelled' };
+  });
   const fetch = vi.fn(async () => Response.json({ data: [] }));
   vi.stubGlobal('fetch', fetch);
-  const result = await executeRead(env, auth, client => client.searchPeople({}), controller.signal);
+  const result = await executeRead(env, auth, (client) => client.searchPeople({}), controller.signal);
   expect(result.isError).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
 it('combines transport cancellation with tool cancellation through the CRM adapter', async () => {
   const controller = new AbortController();
   const observed = vi.fn();
-  vi.stubGlobal('fetch', vi.fn((r: Request) => new Promise((_resolve, reject) => {
-    r.signal.addEventListener('abort', () => { observed(); reject(r.signal.reason); });
-    controller.abort();
-  })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (r: Request) =>
+        new Promise((_resolve, reject) => {
+          r.signal.addEventListener('abort', () => {
+            observed();
+            reject(r.signal.reason);
+          });
+          controller.abort();
+        }),
+    ),
+  );
 
-  const result = await executeRead(testEnv(), auth, client => client.searchPeople({}), new AbortController().signal, controller.signal);
+  const result = await executeRead(
+    testEnv(),
+    auth,
+    (client) => client.searchPeople({}),
+    new AbortController().signal,
+    controller.signal,
+  );
   expect(result.isError).toBe(true);
   expect(observed).toHaveBeenCalledOnce();
   expect(JSON.parse(result.content[0]!.text).error.retryable).toBe(false);

@@ -6,25 +6,63 @@ import * as catalog from '../src/agendor/crm/catalog';
 import { callTool } from './mcp-helper';
 
 const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' }, { budgetGate: allowBudget });
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 function upstream(body: unknown = { data: [], links: { next: null } }) {
   const requests: Request[] = [];
-  vi.stubGlobal('fetch', async (request: Request) => { requests.push(request); return Response.json(body); });
+  vi.stubGlobal('fetch', async (request: Request) => {
+    requests.push(request);
+    return Response.json(body);
+  });
   return requests;
 }
 const date = '2026-10-01T00:00:00Z';
 describe('CRM extended read contracts', () => {
   it('maps people identity, custom fields and date filters without dropping false', async () => {
     const requests = upstream();
-    await client().searchPeople({ phone: '556700000000', cpf: '000', organizationId: 7, withCustomFields: false, updatedAtGt: date, updatedAtLt: date });
-    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({ page: '1', per_page: '20', phone: '556700000000', cpf: '000', organization: '7', withCustomFields: 'false', updatedAtGt: date, updatedAtLt: date });
+    await client().searchPeople({
+      phone: '556700000000',
+      cpf: '000',
+      organizationId: 7,
+      withCustomFields: false,
+      updatedAtGt: date,
+      updatedAtLt: date,
+    });
+    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({
+      page: '1',
+      per_page: '20',
+      phone: '556700000000',
+      cpf: '000',
+      organization: '7',
+      withCustomFields: 'false',
+      updatedAtGt: date,
+      updatedAtLt: date,
+    });
   });
   it('maps organization identity filters and exactName to nameExact', async () => {
     const requests = upstream();
-    await client().searchOrganizations({ cnpj: '000', phone: '556700000000', email: 'a@empresa.test', exactName: 'Example', withCustomFields: true, createdAtGt: date });
-    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({ page: '1', per_page: '20', cnpj: '000', phone: '556700000000', email: 'a@empresa.test', nameExact: 'Example', withCustomFields: 'true', createdAtGt: date });
+    await client().searchOrganizations({
+      cnpj: '000',
+      phone: '556700000000',
+      email: 'a@empresa.test',
+      exactName: 'Example',
+      withCustomFields: true,
+      createdAtGt: date,
+    });
+    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({
+      page: '1',
+      per_page: '20',
+      cnpj: '000',
+      phone: '556700000000',
+      email: 'a@empresa.test',
+      nameExact: 'Example',
+      withCustomFields: 'true',
+      createdAtGt: date,
+    });
   });
-  it.each(['vendas@', 'financeiro'])('accepts organization email prefix %s through client and MCP', async email => {
+  it.each(['vendas@', 'financeiro'])('accepts organization email prefix %s through client and MCP', async (email) => {
     const requests = upstream();
     await client().searchOrganizations({ email });
     expect(new URL(requests[0]!.url).searchParams.get('email')).toBe(email);
@@ -32,24 +70,51 @@ describe('CRM extended read contracts', () => {
     expect(result.data.result.isError).not.toBe(true);
     expect(new URL(requests[1]!.url).searchParams.get('email')).toBe(email);
   });
-  it.each(['', '   ', 'x'.repeat(301)])('rejects empty or excessive organization email prefixes before fetch', async email => {
-    const requests = upstream();
-    await expect(client().searchOrganizations({ email })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
-    expect(requests).toHaveLength(0);
-  });
+  it.each(['', '   ', 'x'.repeat(301)])(
+    'rejects empty or excessive organization email prefixes before fetch',
+    async (email) => {
+      const requests = upstream();
+      await expect(client().searchOrganizations({ email })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+      expect(requests).toHaveLength(0);
+    },
+  );
   it('keeps deal stage ID distinct from sequence and uses documented array encoding', async () => {
     const requests = upstream();
-    await client().searchDeals({ titleSearch: 'filter', funnelIds: [12, 14], stageId: 902, stageSequence: 3, withCustomFields: true, startAtGt: date, endAtLt: date });
-    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({ page: '1', per_page: '20', titleSearch: 'filter', funnels: '12,14', dealStage: '902', dealStageOrder: '3', withCustomFields: 'true', startAtGt: date, endAtLt: date });
-    await expect(client().searchDeals({ query: 'prefix', titleSearch: 'full text' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await client().searchDeals({
+      titleSearch: 'filter',
+      funnelIds: [12, 14],
+      stageId: 902,
+      stageSequence: 3,
+      withCustomFields: true,
+      startAtGt: date,
+      endAtLt: date,
+    });
+    expect(Object.fromEntries(new URL(requests[0]!.url).searchParams)).toEqual({
+      page: '1',
+      per_page: '20',
+      titleSearch: 'filter',
+      funnels: '12,14',
+      dealStage: '902',
+      dealStageOrder: '3',
+      withCustomFields: 'true',
+      startAtGt: date,
+      endAtLt: date,
+    });
+    await expect(client().searchDeals({ query: 'prefix', titleSearch: 'full text' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
     expect(requests).toHaveLength(1);
   });
   it('rejects malformed read arguments before upstream access', async () => {
     const requests = upstream();
     await expect(client().getPerson(0)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().getTask(1.5)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
-    await expect(client().searchPeople({ withCustomFields: 'true' } as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
-    await expect(client().searchOrganizations({ updatedAtGt: 'yesterday' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().searchPeople({ withCustomFields: 'true' } as never)).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    await expect(client().searchOrganizations({ updatedAtGt: 'yesterday' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
     await expect(client().searchDeals({ funnelIds: [0] })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     expect(requests).toHaveLength(0);
   });
@@ -66,7 +131,12 @@ describe('bounded CRM catalog', () => {
   it('rejects route-like sections and missing section requirements before fetching', async () => {
     const requests = upstream();
     expect(() => schemas.parseConfiguration({ section: '../../deals' })).toThrow();
-    for (const input of [{ section: 'customFields' }, { section: 'cities' }, { section: 'stages' }, { section: 'funnels', state: 'MT' }]) {
+    for (const input of [
+      { section: 'customFields' },
+      { section: 'cities' },
+      { section: 'stages' },
+      { section: 'funnels', state: 'MT' },
+    ]) {
       await expect(client().getConfiguration(input as never)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     }
     expect(requests).toHaveLength(0);
@@ -92,36 +162,62 @@ describe('bounded CRM catalog', () => {
   });
   it('rejects malformed catalog records and mismatched funnel scope safely', async () => {
     upstream({ data: [{ id: 902, name: 'Synthetic stage', sequence: 3, funnel: { id: 99 } }] });
-    await expect(client().getConfiguration({ section: 'stages', funnelId: 12 })).rejects.toMatchObject({ code: 'UPSTREAM_INVALID_RESPONSE' });
+    await expect(client().getConfiguration({ section: 'stages', funnelId: 12 })).rejects.toMatchObject({
+      code: 'UPSTREAM_INVALID_RESPONSE',
+    });
     upstream({ data: [{ id: 'unexpected', name: 'Synthetic product' }] });
-    await expect(client().getConfiguration({ section: 'products' })).rejects.toMatchObject({ code: 'UPSTREAM_INVALID_RESPONSE' });
+    await expect(client().getConfiguration({ section: 'products' })).rejects.toMatchObject({
+      code: 'UPSTREAM_INVALID_RESPONSE',
+    });
   });
   it('preserves continuation without following upstream URLs', async () => {
-    const requests = upstream({ data: [{ id: 3, name: 'Synthetic' }], links: { next: 'https://api.agendor.com.br/v3/products?page=3' } });
+    const requests = upstream({
+      data: [{ id: 3, name: 'Synthetic' }],
+      links: { next: 'https://api.agendor.com.br/v3/products?page=3' },
+    });
     const result = await client().getConfiguration({ section: 'products', page: 2, perPage: 1 });
     expect(result.pageInfo).toEqual({ page: 2, perPage: 1, hasNext: true, nextPage: 3 });
     expect(result.coverage).toMatchObject({ status: 'partial', pages: [2] });
     expect(requests).toHaveLength(1);
   });
   it('retains stage IDs, sequence and custom field options independently', async () => {
-    upstream({ data: [{ id: 902, name: 'Synthetic stage', sequence: 3, funnel: { id: 12, name: 'Synthetic funnel' } }] });
+    upstream({
+      data: [{ id: 902, name: 'Synthetic stage', sequence: 3, funnel: { id: 12, name: 'Synthetic funnel' } }],
+    });
     const stages = await client().getConfiguration({ section: 'stages', funnelId: 12 });
-    upstream({ data: [{ id: 31, name: 'Synthetic field', type: 'select', options: [{ id: 11, name: 'Synthetic option' }] }] });
+    upstream({
+      data: [{ id: 31, name: 'Synthetic field', type: 'select', options: [{ id: 11, name: 'Synthetic option' }] }],
+    });
     const fields = await client().getConfiguration({ section: 'customFields', entityType: 'deals' });
     const snapshot = catalog.createCatalogSnapshot({ accountId: 'synthetic-account', pages: [stages, fields] });
-    expect(snapshot.stages.find(s => s.id === 902)?.sequence).toBe(3);
-    expect(snapshot.customFields[0]).toMatchObject({ entityType: 'deals', options: [{ id: 11, name: 'Synthetic option' }] });
+    expect(snapshot.stages.find((s) => s.id === 902)?.sequence).toBe(3);
+    expect(snapshot.customFields[0]).toMatchObject({
+      entityType: 'deals',
+      options: [{ id: 11, name: 'Synthetic option' }],
+    });
     expect(snapshot.version).toBeTruthy();
   });
   it('compares normalized email equality after upstream prefix searches', () => {
-    const prefixResults = [{ id: 1, contact: { email: ' A@EMPRESA.TEST ' } }, { id: 2, contact: { email: 'a@empresa.test.br' } }, { id: 3, contact: null }];
+    const prefixResults = [
+      { id: 1, contact: { email: ' A@EMPRESA.TEST ' } },
+      { id: 2, contact: { email: 'a@empresa.test.br' } },
+      { id: 3, contact: null },
+    ];
     expect(catalog.findExactEmail(prefixResults, 'a@empresa.test')).toEqual([prefixResults[0]]);
   });
   it('resolves only a unique exact name with complete coverage', () => {
-    const items = [{ id: 1, name: ' Product ' }, { id: 2, name: 'Product Plus' }];
+    const items = [
+      { id: 1, name: ' Product ' },
+      { id: 2, name: 'Product Plus' },
+    ];
     expect(catalog.resolveUniqueCatalogName(items, 'product', { status: 'complete', pages: [1] })).toBe(1);
     expect(catalog.resolveUniqueCatalogName(items, 'product', { status: 'partial', pages: [1] })).toBeUndefined();
-    expect(catalog.resolveUniqueCatalogName([...items, { id: 3, name: 'PRODUCT' }], 'product', { status: 'complete', pages: [1] })).toBeUndefined();
+    expect(
+      catalog.resolveUniqueCatalogName([...items, { id: 3, name: 'PRODUCT' }], 'product', {
+        status: 'complete',
+        pages: [1],
+      }),
+    ).toBeUndefined();
   });
   it('isolates cached snapshots by account and expires at fifteen minutes', () => {
     vi.useFakeTimers();

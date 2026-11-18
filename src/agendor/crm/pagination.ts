@@ -12,8 +12,20 @@ export function normalizePage<T>(upstream: unknown, currentPage: number, perPage
       const url = new URL(next);
       const raw = url.searchParams.get('page') ?? '';
       const page = Number(raw);
-      if (url.origin === 'https://api.agendor.com.br' && url.pathname.startsWith('/v3/') && /^\d+$/.test(raw) && Number.isSafeInteger(page) && page > currentPage) nextPage = page;
-    } catch { /* Preserve hasNext without guessing a page or following a URL. */ }
+      if (
+        url.origin === 'https://api.agendor.com.br' &&
+        url.pathname.startsWith('/v3/') &&
+        /^\d+$/.test(raw) &&
+        Number.isSafeInteger(page) &&
+        page > currentPage
+      )
+        nextPage = page;
+    } catch {
+      /* Preserve hasNext without guessing a page or following a URL. */
+    }
   }
-  return { items: (result.data.data ?? result.data.items ?? []) as T[], pageInfo: { page: currentPage, perPage, hasNext: Boolean(next), nextPage } };
+  return {
+    items: (result.data.data ?? result.data.items ?? []) as T[],
+    pageInfo: { page: currentPage, perPage, hasNext: Boolean(next), nextPage },
+  };
 }

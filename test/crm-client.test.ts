@@ -26,7 +26,15 @@ describe('CRM request contract', () => {
     const fetch = mockFetch();
     await client().searchDeals({ query: 'Água & Cia', organizationId: 2, personId: 3, ownerId: 4, status: '1' });
     const u = new URL((fetch.mock.calls[0]![0] as Request).url);
-    expect(Object.fromEntries(u.searchParams)).toEqual({ page: '1', per_page: '20', title: 'Água & Cia', organization: '2', person: '3', userOwner: '4', dealStatus: '1' });
+    expect(Object.fromEntries(u.searchParams)).toEqual({
+      page: '1',
+      per_page: '20',
+      title: 'Água & Cia',
+      organization: '2',
+      person: '3',
+      userOwner: '4',
+      dealStatus: '1',
+    });
   });
   it('maps organization query and omits undefined filters', async () => {
     const fetch = mockFetch();
@@ -34,7 +42,11 @@ describe('CRM request contract', () => {
     expect(new URL((fetch.mock.calls[0]![0] as Request).url).searchParams.get('name')).toBe('Elo');
     expect((fetch.mock.calls[0]![0] as Request).url).not.toContain('undefined');
   });
-  it.each([['dealId', 'deals'], ['personId', 'people'], ['organizationId', 'organizations']])('maps tasks %s to documented scoped route', async (field, type) => {
+  it.each([
+    ['dealId', 'deals'],
+    ['personId', 'people'],
+    ['organizationId', 'organizations'],
+  ])('maps tasks %s to documented scoped route', async (field, type) => {
     const fetch = mockFetch();
     await client().listTasks({ [field]: 12, updatedDateGt: recentDate });
     const u = new URL((fetch.mock.calls[0]![0] as Request).url);
@@ -52,8 +64,12 @@ describe('CRM request contract', () => {
     await expect(client().listTasks({})).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().listTasks({ organizationId: 1 })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(client().listTasks({ updatedDateGt: 'yesterday' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
-    await expect(client().listTasks({ updatedDateGt: '2000-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
-    await expect(client().listTasks({ updatedDateGt: '2099-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    await expect(client().listTasks({ updatedDateGt: '2000-01-01T00:00:00Z' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    await expect(client().listTasks({ updatedDateGt: '2099-01-01T00:00:00Z' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
     expect(fetch).not.toHaveBeenCalled();
   });
   it('unwraps detail envelopes and tolerates nullable fields', async () => {
@@ -71,7 +87,10 @@ describe('CRM request contract', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
   it('safely maps upstream errors through the shared helper', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('private', { status: 429 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('private', { status: 429 })),
+    );
     await expect(client().searchPeople({})).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
   });
   it('rejects a malformed detail response', async () => {

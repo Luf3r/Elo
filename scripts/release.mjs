@@ -7,14 +7,17 @@ import { pathToFileURL } from 'node:url';
  * matching `vX.Y.Z` tag on `HEAD`) and format the `wrangler deploy` command.
  * Never executes a deployment.
  */
-export function prepareRelease(deps = {
-  readPackageJson: () => JSON.parse(readFileSync('package.json', 'utf8')),
-  runGit: args => spawnSync('git', args, { encoding: 'utf8' }),
-  runCheck: () => spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  }),
-}) {
+export function prepareRelease(
+  deps = {
+    readPackageJson: () => JSON.parse(readFileSync('package.json', 'utf8')),
+    runGit: (args) => spawnSync('git', args, { encoding: 'utf8' }),
+    runCheck: () =>
+      spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+      }),
+  },
+) {
   const pkg = deps.readPackageJson();
   const version = pkg.version;
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
@@ -47,9 +50,8 @@ export function prepareRelease(deps = {
     throw new Error(`npm run check failed with status ${check.status ?? 1}.`);
   }
 
-  const defineArg = process.platform === 'win32'
-    ? `'__BUILD_COMMIT__:\\"${commit}\\"'`
-    : `'__BUILD_COMMIT__:"${commit}"'`;
+  const defineArg =
+    process.platform === 'win32' ? `'__BUILD_COMMIT__:\\"${commit}\\"'` : `'__BUILD_COMMIT__:"${commit}"'`;
   const deployCommand = `npx wrangler deploy --define ${defineArg} --tag ${tag} --message "Release ${tag} (${commit})"`;
   return { version, tag, commit, deployCommand };
 }

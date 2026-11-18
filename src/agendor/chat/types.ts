@@ -2,12 +2,17 @@ export interface Coverage {
   complete: boolean;
   missingReasons: string[];
   pagesRead: number;
-  paginationProbe?: { pagesScanned:number; nextPage:number|null; emptyPage?:number; stoppedBy:'page_limit'|'page_repeated'|'read_deferred'|'read_error'|'explicit_end' };
+  paginationProbe?: {
+    pagesScanned: number;
+    nextPage: number | null;
+    emptyPage?: number;
+    stoppedBy: 'page_limit' | 'page_repeated' | 'read_deferred' | 'read_error' | 'explicit_end';
+  };
   history?: { startReached: boolean; endReached: boolean; messagesRead: number; pagesRead: number; complete: boolean };
   messagePagination?: 'verified';
-  messageHistory?: 'complete'|'partial';
-  conversationDiscovery?: 'complete'|'partial';
-  attachmentListing?: 'complete'|'partial';
+  messageHistory?: 'complete' | 'partial';
+  conversationDiscovery?: 'complete' | 'partial';
+  attachmentListing?: 'complete' | 'partial';
   editedMessageContent?: { status: 'unavailable'; reason: 'upstream_whatsapp_api_limitation' };
   conversationsRead?: number;
   attachmentCount?: number;
@@ -41,7 +46,10 @@ export interface AttachmentMetadata {
   messageId?: number;
 }
 /** Only an adapter with verified pagination semantics may produce this cursor. */
-export interface ConversationContinuation { conversationId: number; after: number }
+export interface ConversationContinuation {
+  conversationId: number;
+  after: number;
+}
 export interface ConversationReadInput {
   conversationId: number;
   after?: number;
@@ -53,7 +61,11 @@ export interface MessagePage {
   coverage: Coverage;
   continuation?: ConversationContinuation;
 }
-export interface AttachmentPage { attachments: AttachmentMetadata[]; coverage: Coverage; pageInfo?: {page:number;nextPage:number|null;hasNext:boolean|null;endReached:boolean;complete:boolean} }
+export interface AttachmentPage {
+  attachments: AttachmentMetadata[];
+  coverage: Coverage;
+  pageInfo?: { page: number; nextPage: number | null; hasNext: boolean | null; endReached: boolean; complete: boolean };
+}
 export interface ConversationSnapshot {
   conversationId: number;
   inboxId?: number;
@@ -63,10 +75,24 @@ export interface ConversationSnapshot {
   messages: ChatMessage[];
   attachments: AttachmentMetadata[];
   coverage: Coverage;
-  attachmentListing?: {complete:boolean;pagesRead:number;nextPage:number|null;endReached:boolean;missingReasons:string[];source?:'attachment_endpoint'|'message_history'|'combined';messagePagesRead?:number};
+  attachmentListing?: {
+    complete: boolean;
+    pagesRead: number;
+    nextPage: number | null;
+    endReached: boolean;
+    missingReasons: string[];
+    source?: 'attachment_endpoint' | 'message_history' | 'combined';
+    messagePagesRead?: number;
+  };
   continuation?: ConversationContinuation;
 }
-export interface AttachmentInput { conversationId: number; attachmentId: number; offset?: number; expectedSha256?: string; listingPage?: number }
+export interface AttachmentInput {
+  conversationId: number;
+  attachmentId: number;
+  offset?: number;
+  expectedSha256?: string;
+  listingPage?: number;
+}
 export type AttachmentResult = {
   conversationId: number;
   attachmentId: number;

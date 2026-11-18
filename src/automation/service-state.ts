@@ -1,4 +1,14 @@
-import type { CatalogPage, CatalogSnapshot, CustomerCandidates, PreparedWork, WorkLease, PlanBasis, AgentAnalysis, MutationCommand, SourceRef } from './types';
+import type {
+  CatalogPage,
+  CatalogSnapshot,
+  CustomerCandidates,
+  PreparedWork,
+  WorkLease,
+  PlanBasis,
+  AgentAnalysis,
+  MutationCommand,
+  SourceRef,
+} from './types';
 import type { ConversationSnapshot } from '../agendor/chat/types';
 import type { z } from 'zod';
 import type { listReviewsInputSchema, reviewResolutionInputSchema, preflightInputSchema } from './schemas';
@@ -20,16 +30,31 @@ export interface WorkflowState {
   conversations: ConversationSnapshot[];
   pages: CatalogPage[];
   candidates: CustomerCandidates;
-  candidateReadCache?: Record<string,string>;
-  verificationReads?: Record<string,ConversationSnapshot>;
-  verificationPass?: {key:string; inboxes:number[]};
+  candidateReadCache?: Record<string, string>;
+  verificationReads?: Record<string, ConversationSnapshot>;
+  verificationPass?: { key: string; inboxes: number[] };
   catalog?: CatalogSnapshot;
   work?: PreparedWork;
   basis?: PlanBasis;
   analysis?: AgentAnalysis;
   snapshotVersion?: number;
-  pendingReview?: { reviewId: string; version: number; sourceSnapshotVersion: number; sourceRefs: SourceRef[]; analysis: AgentAnalysis; policyVersion: number; decision: NonNullable<WorkflowReview['decision']>; clientKey?: string };
-  hydration?: { offset: number; records: NonNullable<PreparedWork['snapshot']['records']>; deals: NonNullable<PreparedWork['snapshot']['deals']>; sources: SourceRef[]; missingReasons: string[] };
+  pendingReview?: {
+    reviewId: string;
+    version: number;
+    sourceSnapshotVersion: number;
+    sourceRefs: SourceRef[];
+    analysis: AgentAnalysis;
+    policyVersion: number;
+    decision: NonNullable<WorkflowReview['decision']>;
+    clientKey?: string;
+  };
+  hydration?: {
+    offset: number;
+    records: NonNullable<PreparedWork['snapshot']['records']>;
+    deals: NonNullable<PreparedWork['snapshot']['deals']>;
+    sources: SourceRef[];
+    missingReasons: string[];
+  };
   direct?: { digest: string; capability: 'crm:create' | 'crm:enrich' | 'crm:write'; command: MutationCommand };
 }
 export interface WorkflowReview {

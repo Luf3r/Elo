@@ -2,7 +2,15 @@ import type { z } from 'zod';
 import type * as schemas from './schemas';
 // Shared read contracts remain owned by their adapters.
 export type { CatalogSnapshot, CatalogPage, ConfigurationInput } from '../agendor/crm/types';
-export type { Coverage, ChatContact, ChatMessage, ConversationSnapshot, ConversationReadInput, AttachmentInput, AttachmentResult } from '../agendor/chat/types';
+export type {
+  Coverage,
+  ChatContact,
+  ChatMessage,
+  ConversationSnapshot,
+  ConversationReadInput,
+  AttachmentInput,
+  AttachmentResult,
+} from '../agendor/chat/types';
 export type { AutomationPolicy, PolicyPatch, Capability } from './policy-types';
 export type { AnalysisValidationContext } from './schemas';
 export type EntityRef = z.infer<typeof schemas.entityRefSchema>;

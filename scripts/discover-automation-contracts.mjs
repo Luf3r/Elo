@@ -11,7 +11,9 @@ const CATALOG = ['funnels', 'deal_stages', 'users', 'products', 'lead_origins', 
 const ENTITIES = ['organizations', 'people', 'deals', 'products'];
 
 function numericId(value) {
-  return (typeof value === 'string' || typeof value === 'number') && /^[1-9]\d{0,19}$/.test(String(value)) ? String(value) : undefined;
+  return (typeof value === 'string' || typeof value === 'number') && /^[1-9]\d{0,19}$/.test(String(value))
+    ? String(value)
+    : undefined;
 }
 function payload(body) {
   const candidate = body?.data?.payload ?? body?.payload ?? body?.data;
@@ -23,10 +25,15 @@ function observation(label, body) {
 }
 async function readBounded(response, signal) {
   const length = Number(response.headers.get('content-length'));
-  if (length > MAX_BYTES) { await response.body?.cancel(); throw new Error('bounded'); }
+  if (length > MAX_BYTES) {
+    await response.body?.cancel();
+    throw new Error('bounded');
+  }
   if (!response.body) throw new Error('empty');
   const reader = response.body.getReader();
-  const cancel = () => { void reader.cancel().catch(() => {}); };
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
   signal.addEventListener('abort', cancel, { once: true });
   if (signal.aborted) cancel();
   const chunks = [];
@@ -36,14 +43,23 @@ async function readBounded(response, signal) {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES) { await reader.cancel(); throw new Error('bounded'); }
+      if (size > MAX_BYTES) {
+        await reader.cancel();
+        throw new Error('bounded');
+      }
       chunks.push(value);
     }
-  } finally { signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
   if (signal.aborted) throw new Error('timeout');
   const bytes = new Uint8Array(size);
   let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
 }
 
@@ -53,13 +69,17 @@ async function readBounded(response, signal) {
  * @returns {Promise<import('../test/fixtures/automation-contracts.ts').ContractCapabilities>}
  */
 export async function discoverAutomationContracts({ request, emit, timeoutMs = TIMEOUT_MS }) {
-  if (typeof request !== 'function' || typeof emit !== 'function') throw new Error('Injected request and emit are required.');
+  if (typeof request !== 'function' || typeof emit !== 'function')
+    throw new Error('Injected request and emit are required.');
   const duration = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.min(timeoutMs, TIMEOUT_MS) : TIMEOUT_MS;
-  const capability = reference => ({ status: 'unverified', references: [reference], evidence: [] });
+  const capability = (reference) => ({ status: 'unverified', references: [reference], evidence: [] });
   const report = {
-    chatMessageAfter: capability(POSTMAN), chatHistory: capability(POSTMAN),
-    conversationDiscovery: capability(POSTMAN), contacts: capability(POSTMAN),
-    attachments: capability(POSTMAN), customFields: capability(OPENAPI),
+    chatMessageAfter: capability(POSTMAN),
+    chatHistory: capability(POSTMAN),
+    conversationDiscovery: capability(POSTMAN),
+    contacts: capability(POSTMAN),
+    attachments: capability(POSTMAN),
+    customFields: capability(OPENAPI),
     collectionWriteSemantics: capability(OPENAPI),
   };
   let calls = 0;
@@ -67,21 +87,36 @@ export async function discoverAutomationContracts({ request, emit, timeoutMs = T
     if (++calls > 20 || ![CHAT, CRM].includes(origin)) throw new Error('Discovery limit.');
     const controller = new AbortController();
     const outgoing = new Request(origin + route, {
-      method: 'GET', redirect: 'manual', signal: controller.signal, headers: { Accept: 'application/json' },
+      method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
     });
     let response;
     let timer;
     const deadline = new Promise((_, reject) => {
       // Retain Request until the deadline; a transport may keep only its dependent signal.
-      timer = setTimeout(() => { if (!outgoing.signal.aborted) controller.abort(); reject(new Error('timeout')); }, duration);
+      timer = setTimeout(() => {
+        if (!outgoing.signal.aborted) controller.abort();
+        reject(new Error('timeout'));
+      }, duration);
     });
     try {
-      const body = await Promise.race([deadline, (async () => {
-        response = await request(outgoing);
-        if (!response.ok || response.redirected) { await response.body?.cancel(); throw new Error('http'); }
-        if (controller.signal.aborted) { await response.body?.cancel(); throw new Error('timeout'); }
-        return readBounded(response, controller.signal);
-      })()]);
+      const body = await Promise.race([
+        deadline,
+        (async () => {
+          response = await request(outgoing);
+          if (!response.ok || response.redirected) {
+            await response.body?.cancel();
+            throw new Error('http');
+          }
+          if (controller.signal.aborted) {
+            await response.body?.cancel();
+            throw new Error('timeout');
+          }
+          return readBounded(response, controller.signal);
+        })(),
+      ]);
       target.evidence.push(observation(label, body));
       return body;
     } catch {
@@ -90,7 +125,8 @@ export async function discoverAutomationContracts({ request, emit, timeoutMs = T
       return undefined;
     } finally {
       clearTimeout(timer);
-      if (controller.signal.aborted && response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+      if (controller.signal.aborted && response?.body && !response.body.locked)
+        await response.body.cancel().catch(() => {});
     }
   }
   const profile = await get(CHAT, '/profile', report.conversationDiscovery, 'profile');
@@ -98,16 +134,29 @@ export async function discoverAutomationContracts({ request, emit, timeoutMs = T
   if (account) {
     const base = `/accounts/${account}`;
     const conversations = await get(CHAT, `${base}/conversations`, report.conversationDiscovery, 'conversations');
-    const conversation = payload(conversations)?.map(item => numericId(item?.id)).find(Boolean);
+    const conversation = payload(conversations)
+      ?.map((item) => numericId(item?.id))
+      .find(Boolean);
     const contacts = await get(CHAT, `${base}/contacts`, report.contacts, 'contacts');
     if (payload(contacts)) report.contacts.status = 'verified';
-    const contact = payload(contacts)?.map(item => numericId(item?.id)).find(Boolean);
-    if (contact) await get(CHAT, `${base}/contacts/${contact}/conversations`, report.conversationDiscovery, 'contact conversations');
+    const contact = payload(contacts)
+      ?.map((item) => numericId(item?.id))
+      .find(Boolean);
+    if (contact)
+      await get(
+        CHAT,
+        `${base}/contacts/${contact}/conversations`,
+        report.conversationDiscovery,
+        'contact conversations',
+      );
     if (conversation) {
       const route = `${base}/conversations/${conversation}`;
       const messages = await get(CHAT, `${route}/messages`, report.chatHistory, 'messages');
-      const message = payload(messages)?.map(item => numericId(item?.id)).find(Boolean);
-      if (message) await get(CHAT, `${route}/messages?after=${message}`, report.chatMessageAfter, 'messages with after');
+      const message = payload(messages)
+        ?.map((item) => numericId(item?.id))
+        .find(Boolean);
+      if (message)
+        await get(CHAT, `${route}/messages?after=${message}`, report.chatMessageAfter, 'messages with after');
       const attachments = await get(CHAT, `${route}/attachments`, report.attachments, 'attachments');
       if (payload(attachments)) report.attachments.status = 'verified';
     }
@@ -122,21 +171,29 @@ export async function discoverAutomationContracts({ request, emit, timeoutMs = T
   report.chatMessageAfter.evidence.push('Parameter documented; ordering and continuation semantics unverified.');
   report.chatHistory.evidence.push('Default page only; complete history unverified.');
   report.conversationDiscovery.evidence.push('Default pages only; exhaustive discovery unverified.');
-  report.collectionWriteSemantics.evidence.push('No writes performed; replacement, merge and deletion semantics unverified.');
+  report.collectionWriteSemantics.evidence.push(
+    'No writes performed; replacement, merge and deletion semantics unverified.',
+  );
   emit(JSON.stringify(report));
   return report;
 }
 
 async function main() {
-  if (process.argv.length !== 3 || process.argv[2] !== '--live') throw new Error('Use only --live to explicitly opt in to GET discovery.');
+  if (process.argv.length !== 3 || process.argv[2] !== '--live')
+    throw new Error('Use only --live to explicitly opt in to GET discovery.');
   // Task 6 must supply the same durable account/credential budget used by MCP and automation.
   // A process-local delay or native datacenter limiter cannot satisfy shared accounting.
   // Fail before credential access or fetch; the injected synthetic observer remains usable.
   throw new Error(LIVE_DISCOVERY_BLOCKED);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch(error => {
-    console.error(error instanceof Error && (error.message.startsWith('Use only --live') || error.message === LIVE_DISCOVERY_BLOCKED) ? error.message : 'Automation contract discovery failed.');
+  main().catch((error) => {
+    console.error(
+      error instanceof Error &&
+        (error.message.startsWith('Use only --live') || error.message === LIVE_DISCOVERY_BLOCKED)
+        ? error.message
+        : 'Automation contract discovery failed.',
+    );
     process.exitCode = 1;
   });
 }

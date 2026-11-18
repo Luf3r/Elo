@@ -6,10 +6,21 @@ import { jsonToolResult } from '../result';
 import { COMMIT, VERSION } from '../../version';
 
 export function registerStatus(server: McpServer, auth: AuthContext): void {
-  server.registerTool('server_status', {
-    description: 'Read-only service health and authenticated client identity. Does not contact Agendor.',
-    inputSchema: z.strictObject({}),
-    _meta: publicToolSecurity,
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async () => jsonToolResult({ status: 'ok', service: 'elo-agendor-mcp', version: VERSION, commit: COMMIT, client: auth.clientId }));
+  server.registerTool(
+    'server_status',
+    {
+      description: 'Read-only service health and authenticated client identity. Does not contact Agendor.',
+      inputSchema: z.strictObject({}),
+      _meta: publicToolSecurity,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async () =>
+      jsonToolResult({
+        status: 'ok',
+        service: 'elo-agendor-mcp',
+        version: VERSION,
+        commit: COMMIT,
+        client: auth.clientId,
+      }),
+  );
 }

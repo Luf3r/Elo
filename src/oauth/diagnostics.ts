@@ -1,6 +1,11 @@
 const AUTHORIZATION_ERROR_CODES = new Set([
-  'invalid_request', 'unauthorized_client', 'access_denied', 'unsupported_response_type',
-  'invalid_scope', 'server_error', 'temporarily_unavailable',
+  'invalid_request',
+  'unauthorized_client',
+  'access_denied',
+  'unsupported_response_type',
+  'invalid_scope',
+  'server_error',
+  'temporarily_unavailable',
 ]);
 
 type OAuthPhase = 'authorization_request' | 'consent_description' | 'consent_creation';
@@ -26,8 +31,15 @@ export function oauthFailureDiagnostic(phase: OAuthPhase, error: unknown): Recor
     const status = /^Failed to fetch client metadata: HTTP ([1-5][0-9]{2})$/.exec(text)?.[1];
     const failure = /Client metadata fetch timed out after [0-9]+ms$/.test(text)
       ? 'timeout'
-      : status ? 'upstream_http_error' : 'metadata_resolution_failed';
-    return { phase: 'client_metadata_resolution', errorType, failure, ...(status ? { upstreamStatus: Number(status) } : {}) };
+      : status
+        ? 'upstream_http_error'
+        : 'metadata_resolution_failed';
+    return {
+      phase: 'client_metadata_resolution',
+      errorType,
+      failure,
+      ...(status ? { upstreamStatus: Number(status) } : {}),
+    };
   }
 
   return { phase, errorType };

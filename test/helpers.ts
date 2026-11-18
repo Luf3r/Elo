@@ -12,7 +12,7 @@ function invokeInDurableObject<T>(
   method: string | symbol,
   args: unknown[],
 ): Promise<T> {
-  return runInDurableObject(stub, instance => {
+  return runInDurableObject(stub, (instance) => {
     const fn = Reflect.get(instance, method) as (...callArgs: unknown[]) => T | Promise<T>;
     return fn.apply(instance, args);
   });
@@ -42,17 +42,25 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
   });
   const bindings: Env = {
     AUTOMATION_QUEUE: (runtimeEnv as Env).AUTOMATION_QUEUE,
-    AUTOMATION_STATE: new Proxy(namespace, { get(target, prop) { if (prop === 'getByName') return () => stub; const value = Reflect.get(target, prop); return typeof value === 'function' ? value.bind(target) : value; } }),
+    AUTOMATION_STATE: new Proxy(namespace, {
+      get(target, prop) {
+        if (prop === 'getByName') return () => stub;
+        const value = Reflect.get(target, prop);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }),
     AGENDOR_CRM_TOKEN: 'unit-crm-token',
     AGENDOR_CHAT_ACCOUNT_ID: '',
     MCP_TEST_TOKEN: 'unit-mcp-token',
-    OAUTH_KV: (runtimeEnv as {OAUTH_KV:KVNamespace}).OAUTH_KV,
-    OAUTH_RATE_LIMITER: {limit:vi.fn(async()=>({success:true}))},
-    ACCESS_CLIENT_ID:'unit-client', ACCESS_CLIENT_SECRET:'unit-secret',
-    ACCESS_ISSUER:'https://elo-unit.cloudflareaccess.com',
-    ACCESS_AUTHORIZATION_URL:'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/authorization',
-    ACCESS_TOKEN_URL:'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/token',
-    ACCESS_JWKS_URL:'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/jwks',
+    OAUTH_KV: (runtimeEnv as { OAUTH_KV: KVNamespace }).OAUTH_KV,
+    OAUTH_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    ACCESS_CLIENT_ID: 'unit-client',
+    ACCESS_CLIENT_SECRET: 'unit-secret',
+    ACCESS_ISSUER: 'https://elo-unit.cloudflareaccess.com',
+    ACCESS_AUTHORIZATION_URL:
+      'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/authorization',
+    ACCESS_TOKEN_URL: 'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/token',
+    ACCESS_JWKS_URL: 'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/jwks',
     MCP_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     ...overrides,
   };
@@ -60,9 +68,22 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
   return bindings;
 }
 
-export function budgetMock(env: Env) { const mock = budgetMocks.get(env.AUTOMATION_STATE); if (!mock) throw Error('Use testEnv'); return mock; }
+export function budgetMock(env: Env) {
+  const mock = budgetMocks.get(env.AUTOMATION_STATE);
+  if (!mock) throw Error('Use testEnv');
+  return mock;
+}
 export const allowBudget = async () => {};
-export const expandedCrmToolNames = ['crm_create_organization', 'crm_create_person', 'crm_create_deal', 'crm_create_task', 'crm_enrich_organization', 'crm_enrich_person', 'crm_enrich_deal', 'crm_update_task'];
+export const expandedCrmToolNames = [
+  'crm_create_organization',
+  'crm_create_person',
+  'crm_create_deal',
+  'crm_create_task',
+  'crm_enrich_organization',
+  'crm_enrich_person',
+  'crm_enrich_deal',
+  'crm_update_task',
+];
 
 /**
  * Catch expected Durable Object domain errors inside `runInDurableObject` so
@@ -74,7 +95,7 @@ export async function durableFailure(
   operation: (instance: AutomationAccount) => Promise<unknown>,
   expectedMessage = '',
 ): Promise<{ message: string; code?: string; retryable?: boolean }> {
-  const result = await runInDurableObject(stub, async instance => {
+  const result = await runInDurableObject(stub, async (instance) => {
     try {
       await operation(instance);
       return { failed: false as const, message: '' };

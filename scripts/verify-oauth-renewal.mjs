@@ -22,9 +22,15 @@ const metadata = await discovery.json();
 assert(metadata.grant_types_supported.includes('refresh_token'));
 assert(metadata.scopes_supported.includes('offline_access'));
 
-const response = await request('/token', { method: 'POST', body: new URLSearchParams({
-  grant_type: 'refresh_token', client_id: session.clientId, refresh_token: session.refreshToken, resource,
-}) });
+const response = await request('/token', {
+  method: 'POST',
+  body: new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: session.clientId,
+    refresh_token: session.refreshToken,
+    resource,
+  }),
+});
 assert.equal(response.status, 200, 'Existing authorized verification session must refresh.');
 const token = await response.json();
 assert.equal(typeof token.access_token, 'string');
@@ -34,14 +40,27 @@ assert.equal(token.resource, resource);
 assert.equal(token.token_type.toLowerCase(), 'bearer');
 assert(Number.isFinite(token.expires_in) && token.expires_in > 0);
 // Save the rotated credential immediately, including when a subsequent verification fails.
-writeFileSync(sessionPath, JSON.stringify({ ...session, accessToken: token.access_token,
-  refreshToken: token.refresh_token, expiresAt: Date.now() + token.expires_in * 1000 }), { mode: 0o600 });
+writeFileSync(
+  sessionPath,
+  JSON.stringify({
+    ...session,
+    accessToken: token.access_token,
+    refreshToken: token.refresh_token,
+    expiresAt: Date.now() + token.expires_in * 1000,
+  }),
+  { mode: 0o600 },
+);
 assert.equal(token.expires_in, 24 * 60 * 60);
 
-const tools = await request('/mcp', { method: 'POST', headers: {
-  Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json',
-  Accept: 'application/json, text/event-stream',
-}, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) });
+const tools = await request('/mcp', {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${token.access_token}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+  },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+});
 assert.equal(tools.status, 200, 'Refreshed access token must reach MCP.');
 await tools.body?.cancel();
 const rejected = await request('/mcp', { headers: { Authorization: 'Bearer invalid-verification-token' } });
@@ -64,6 +83,15 @@ const html = await consent.text();
 assert(html.includes('offline_access') && html.includes('35 dias') && html.includes('24 horas'));
 assert(html.includes('Permissões: crm:read, offline_access.'));
 
-console.log(JSON.stringify({ health: 'PASS', refresh: 'PASS', accessLifetimeHours: 24,
-  rotation: 'PASS', refreshedMcpAccess: 'PASS', invalidTokenRejected: 'PASS',
-  consentForClientOmittingOfflineAccess: 'PASS', grantLifetimeDays: 35 }));
+console.log(
+  JSON.stringify({
+    health: 'PASS',
+    refresh: 'PASS',
+    accessLifetimeHours: 24,
+    rotation: 'PASS',
+    refreshedMcpAccess: 'PASS',
+    invalidTokenRejected: 'PASS',
+    consentForClientOmittingOfflineAccess: 'PASS',
+    grantLifetimeDays: 35,
+  }),
+);
