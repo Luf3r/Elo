@@ -166,15 +166,13 @@ export class AccountRepository {
         )
         .toArray();
     }
-    const entries = rows
-      .slice(0, input.limit)
-      .map((r) => ({
-        auditId: r.audit_id,
-        occurredAt: r.occurred_at,
-        action: r.action,
-        targetId: r.target_id,
-        version: r.version,
-      }));
+    const entries = rows.slice(0, input.limit).map((r) => ({
+      auditId: r.audit_id,
+      occurredAt: r.occurred_at,
+      action: r.action,
+      targetId: r.target_id,
+      version: r.version,
+    }));
     return { entries, ...(rows.length > input.limit ? { cursor: entries.at(-1)!.auditId } : {}) };
   }
   recordChatHint(
