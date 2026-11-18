@@ -42,7 +42,24 @@ export class AccountRepository {
   }
   listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100) throw Error('INVALID_AUDIT_INPUT');
-    const rows = this.sql.exec<{ audit_id: string; occurred_at: number; action: string; target_id: string; version: number }>('SELECT audit_id, occurred_at, action, target_id, version FROM operational_audit WHERE user_id = ? AND client_id = ? AND audit_id > ? ORDER BY audit_id LIMIT ?', owner.userId, owner.clientId, input.cursor ?? '', input.limit + 1).toArray();
+    type AuditRow = { audit_id: string; occurred_at: number; action: string; target_id: string; version: number };
+    let rows: AuditRow[];
+    if (input.cursor) {
+      const anchor = this.sql.exec<{ occurred_at: number }>(
+        'SELECT occurred_at FROM operational_audit WHERE user_id = ? AND client_id = ? AND audit_id = ?',
+        owner.userId, owner.clientId, input.cursor,
+      ).toArray()[0];
+      if (!anchor) return { entries: [] };
+      rows = this.sql.exec<AuditRow>(
+        'SELECT audit_id, occurred_at, action, target_id, version FROM operational_audit WHERE user_id = ? AND client_id = ? AND (occurred_at < ? OR (occurred_at = ? AND audit_id < ?)) ORDER BY occurred_at DESC, audit_id DESC LIMIT ?',
+        owner.userId, owner.clientId, anchor.occurred_at, anchor.occurred_at, input.cursor, input.limit + 1,
+      ).toArray();
+    } else {
+      rows = this.sql.exec<AuditRow>(
+        'SELECT audit_id, occurred_at, action, target_id, version FROM operational_audit WHERE user_id = ? AND client_id = ? ORDER BY occurred_at DESC, audit_id DESC LIMIT ?',
+        owner.userId, owner.clientId, input.limit + 1,
+      ).toArray();
+    }
     const entries = rows.slice(0, input.limit).map(r => ({ auditId: r.audit_id, occurredAt: r.occurred_at, action: r.action, targetId: r.target_id, version: r.version }));
     return { entries, ...(rows.length > input.limit ? { cursor: entries.at(-1)!.auditId } : {}) };
   }

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createAutomationService } from '../src/automation/service';
-import { budgetMock, testEnv } from './helpers';
+import { budgetMock, durableFailure, testEnv } from './helpers';
 import { runInDurableObject } from 'cloudflare:test';
 import { accountState } from '../src/automation/state/budget';
 import * as chat from '../src/agendor/chat/client';
@@ -61,13 +61,13 @@ it('recovers an expired processing lock and fences the previous holder', async (
   const actor = { userId: 'owner', clientId: 'client', scopes: ['automation:process'], expiresAt: Date.now() + 600_000 };
   const lease = await repo.reserveWork({ requestId: 'lock-expiry', target: { kind: 'conversation', conversationId: 101 }, mode: 'preview', actor, payloadDigest: 'synthetic' });
   const previous = await repo.beginPreparation(lease);
-  const firstError = await runInDurableObject(env.AUTOMATION_STATE.get(repo.id), async instance => { try { await instance.beginPreparation(lease); return null; } catch (error) { return { code: (error as {code: string}).code, retryable: (error as {retryable: boolean}).retryable }; } });
-  expect(firstError).toEqual({ code: 'UPSTREAM_CONFLICT', retryable: true });
+  const firstError = await durableFailure(env.AUTOMATION_STATE.get(repo.id), instance => instance.beginPreparation(lease));
+  expect({ code: firstError.code, retryable: firstError.retryable }).toEqual({ code: 'UPSTREAM_CONFLICT', retryable: true });
   await runInDurableObject(env.AUTOMATION_STATE.get(repo.id), (_instance, ctx) => ctx.storage.sql.exec('UPDATE preparation_locks SET expires_at = 0 WHERE work_id = ?', lease.workId));
   const next = await repo.beginPreparation(lease);
   expect(next).not.toBe(previous);
-  const staleError = await runInDurableObject(env.AUTOMATION_STATE.get(repo.id), async instance => { try { await instance.renewPreparation(lease, previous); return null; } catch (error) { return { code: (error as {code: string}).code }; } });
-  expect(staleError).toEqual({ code: 'UPSTREAM_CONFLICT' });
+  const staleError = await durableFailure(env.AUTOMATION_STATE.get(repo.id), instance => instance.renewPreparation(lease, previous));
+  expect({ code: staleError.code }).toEqual({ code: 'UPSTREAM_CONFLICT' });
   await repo.endPreparation(lease, previous);
   await repo.renewPreparation(lease, next);
   await repo.endPreparation(lease, next);

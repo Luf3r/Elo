@@ -7,6 +7,7 @@ import { enqueueOperation, handleAutomationQueue } from '../src/automation/queue
 import { executionFixture } from './fixtures/execution';
 import type { Env } from '../src/env';
 import { defaultAutomationPolicy } from '../src/automation/service';
+import { durableFailure } from './helpers';
 
 it('expires exactly one historical evidence row while preserving a confirmed deduplication key', async () => {
   const f = await executionFixture(); await runPlan(f.authorization, f.deps);
@@ -70,17 +71,14 @@ it('publishes a pending customer projection after queued confirmation, once only
 it('records review resolution with CAS and rejects approval of a foreign plan', async () => {
   const f = await executionFixture(); const owner = f.deps.basis.lease.owner;
   await f.stub.putReview({ reviewId: 'review-1', workId: f.deps.basis.lease.workId, customerId: 'customer-1', version: 1, owner, state: 'open', reasons: ['AMBIGUOUS'] });
-  const invalid = await runInDurableObject(f.stub, async instance => {
-    try { await instance.resolveReview({ reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'approvePlan', planId: 'foreign', planVersion: 1 } }, owner); return ''; }
-    catch (error) { return (error as Error).message; }
-  });
-  expect(invalid).toBe('PLAN_STALE');
+  const invalid = await durableFailure(f.stub, instance => instance.resolveReview({ reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'approvePlan', planId: 'foreign', planVersion: 1 } }, owner));
+  expect(invalid.message).toBe('PLAN_STALE');
   await f.stub.resolveReview({ reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'reject', reason: 'Synthetic rejection' } }, owner);
   const audit = await f.stub.listAudit({ limit: 20 }, owner);
   expect(audit.entries).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'review_resolved', targetId: 'review-1', version: 2 })]));
   expect(JSON.stringify(audit)).not.toContain('Synthetic rejection');
-  const second = await runInDurableObject(f.stub, async instance => { try { await instance.resolveReview({ reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'reject', reason: 'again' } }, owner); return ''; } catch (error) { return (error as Error).message; } });
-  expect(second).toBe('REVIEW_VERSION_CONFLICT');
+  const second = await durableFailure(f.stub, instance => instance.resolveReview({ reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'reject', reason: 'again' } }, owner));
+  expect(second.message).toBe('REVIEW_VERSION_CONFLICT');
 });
 
 it('pauses queued sends on policy revocation and retains command history', async () => {

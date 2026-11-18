@@ -182,7 +182,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
       expect(plan.state).toBe('ready');
       expect(plan.orderedCommands.map(c => c.kind)).toEqual([`create_${entity}`, 'create_deal', 'change_stage', 'create_task']);
       expect(plan.orderedCommands.find(c => c.kind === 'create_deal')).not.toHaveProperty('payload.value');
-      await expect(f.tool('automation_apply_plan', { planId: plan.planId, planVersion: plan.version, requestId: 'forbidden-preview' })).rejects.toThrow('INVALID_INPUT');
+      await expect(f.tool('automation_apply_plan', { planId: plan.planId, planVersion: plan.version, requestId: 'forbidden-preview' })).rejects.toThrow('MCP_UNAUTHORIZED');
       expect(f.write).not.toHaveBeenCalled(); expect(f.network).not.toHaveBeenCalled();
     } finally { await f.client.close(); }
   });
