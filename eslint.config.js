@@ -7,7 +7,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['docs/**', 'dist/**', '.wrangler/**', 'package-lock.json', '.agent-runs/**'],
+    ignores: ['docs/**', 'dist/**', '.wrangler/**', 'package-lock.json', '.agent-runs/**', '.tooling/**', '.superpowers/**'],
   },
   js.configs.recommended,
   {
