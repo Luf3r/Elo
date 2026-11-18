@@ -6,6 +6,7 @@ import type { Env } from '../src/env';
 import type { CommandReservation, PlanBasis, WorkLease, SyncPlan, ReserveWorkInput, SnapshotManifest } from '../src/automation/types';
 import { validCommand, validPlan } from './fixtures/automation';
 import type { WorkflowState } from '../src/automation/service-state';
+import { durableFailure as failure } from './helpers';
 
 const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
 const input = (requestId = 'request-1'): ReserveWorkInput => ({ requestId, target: { kind: 'conversation', conversationId: 101 }, mode: 'apply', actor: { userId: 'operator-1', clientId: 'client-1', scopes: ['automation:process'] }, payloadDigest: 'digest-1' });
@@ -27,16 +28,6 @@ async function setup() {
 }
 async function expire(stub: ReturnType<typeof state>) {
   await runInDurableObject(stub, (_instance, ctx) => { ctx.storage.sql.exec('UPDATE work SET expires_at = 0'); });
-}
-
-// Catch expected domain errors inside the instance: plugin 1.4.6 reports rejected
-// RPC promises twice as unhandled, even when the caller awaits .rejects.
-async function failure(stub: ReturnType<typeof state>, operation: (instance: AutomationAccount) => Promise<unknown>, message = '') {
-  const result = await runInDurableObject(stub, async instance => {
-    try { await operation(instance); return { failed: false, message: '' }; }
-    catch (error) { return { failed: true, message: error instanceof Error ? error.message : String(error) }; }
-  });
-  expect(result.failed).toBe(true); expect(result.message).toContain(message);
 }
 describe('durable account coordination', () => {
   it('serializes simultaneous intent reservations and never grants a second command dispatch', async () => {
@@ -226,4 +217,25 @@ it('keeps workflow and manifest atomic when a worker loses its revision race', a
   await evictDurableObject(stub);
   expect(await stub.getSnapshotVersion(lease.workId)).toBe(1);
   expect(JSON.parse((await stub.getWorkflow(lease.workId))!)).toEqual(workflow);
+});
+
+it('orders audit entries chronologically (newest first, tie-broken by audit_id) across cursor pages', async () => {
+  const stub = state();
+  const owner = input().actor;
+  await runInDurableObject(stub, (_instance, ctx) => {
+    ctx.storage.sql.exec(
+      'INSERT INTO operational_audit VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)',
+      'audit-a', 1000, owner.userId, owner.clientId, 'policy_updated', 't1', 1,
+      'audit-c', 2000, owner.userId, owner.clientId, 'work_created', 't2', 1,
+      'audit-b', 2000, owner.userId, owner.clientId, 'lease_acquired', 't3', 1,
+      'audit-d', 3000, owner.userId, owner.clientId, 'review_consumed', 't4', 1,
+    );
+  });
+  const firstPage = await stub.listAudit({ limit: 2 }, owner);
+  expect(firstPage.entries.map(e => e.auditId)).toEqual(['audit-d', 'audit-c']);
+  expect(firstPage.cursor).toBe('audit-c');
+  const secondPage = await stub.listAudit({ cursor: firstPage.cursor, limit: 2 }, owner);
+  expect(secondPage.entries.map(e => e.auditId)).toEqual(['audit-b', 'audit-a']);
+  expect(secondPage.cursor).toBeUndefined();
+  expect(await stub.listAudit({ cursor: 'unknown-cursor', limit: 2 }, owner)).toEqual({ entries: [] });
 });

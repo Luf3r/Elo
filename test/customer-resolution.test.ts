@@ -5,6 +5,7 @@ import { catalogFixture, validAnalysisInput } from './fixtures/automation';
 import { env, runInDurableObject, evictDurableObject } from 'cloudflare:test';
 import type { Env } from '../src/env';
 import type { PlanBasis } from '../src/automation/types';
+import { durableFailure } from './helpers';
 
 const source = validAnalysisInput.analysis.facts[0]!.sources[0]!;
 const candidate = (id: number, patch: Partial<CustomerCandidate> = {}): CustomerCandidate => ({ ref: { kind: 'organization', id }, name: 'Synthetic Organization', organizationIds: [], sourceRefs: [{ kind: 'crm', id: `organization:${id}`, revision: 'r1' }], ...patch });
@@ -142,12 +143,11 @@ describe('durable resolution reservation', () => {
   it('rejects changed retries, stale basis and evidence absent from the server snapshot', async () => {
     const stub = state(); const basis = await setup(stub);
     await stub.resolveWork(newInput(), candidates([]), catalogFixture, basis);
-    const failure = async (operation: (instance: import('../src/automation/state/account').AutomationAccount) => Promise<unknown>) => runInDurableObject(stub, async instance => { try { await operation(instance); return 'accepted'; } catch (e) { return (e as Error).message; } });
-    expect(await failure(instance => instance.resolveWork({ ...newInput(), demands: [] }, candidates([]), catalogFixture, basis))).toContain('IDEMPOTENCY_CONFLICT');
-    expect(await failure(instance => instance.resolveWork(newInput(), candidates([]), catalogFixture, { ...basis, snapshotVersion: 2 }))).toContain('STATE_VERSION_CONFLICT');
+    expect((await durableFailure(stub, instance => instance.resolveWork({ ...newInput(), demands: [] }, candidates([]), catalogFixture, basis))).message).toContain('IDEMPOTENCY_CONFLICT');
+    expect((await durableFailure(stub, instance => instance.resolveWork(newInput(), candidates([]), catalogFixture, { ...basis, snapshotVersion: 2 }))).message).toContain('STATE_VERSION_CONFLICT');
     const other = await setup(stub, 103, 'third-customer');
     const forged = newInput(); forged.facts[0]!.sources = [{ ...source, revision: 'forged' }];
-    expect(await failure(instance => instance.resolveWork(forged, candidates([]), catalogFixture, other))).toContain('ANALYSIS_INVALID');
+    expect((await durableFailure(stub, instance => instance.resolveWork(forged, candidates([]), catalogFixture, other))).message).toContain('ANALYSIS_INVALID');
   });
   it('holds pending creation across conversations even for the same backend customer', async () => {
     const stub = state(); const basis = await setup(stub);

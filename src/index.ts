@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { oauthProvider } from './oauth/provider';
 import { readOAuthConfig } from './oauth/config';
-import { VERSION } from './version';
+import { COMMIT, VERSION } from './version';
 import { handleAutomationQueue } from './automation/queue';
 import { acceptChatHint } from './automation/ingress';
 import { accountState } from './automation/state/budget';
@@ -11,7 +11,7 @@ export default {
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> { await handleAutomationQueue(batch, env); },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (new URL(request.url).pathname === '/health' && request.method === 'GET') {
-      return Response.json({ status: 'ok', service: 'elo-agendor-mcp', version: VERSION });
+      return Response.json({ status: 'ok', service: 'elo-agendor-mcp', version: VERSION, commit: COMMIT });
     }
     const path=new URL(request.url).pathname;
     if (path === '/automation/chat-events') return acceptChatHint(request, env);

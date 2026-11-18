@@ -5,6 +5,7 @@ import type { ContextProjection, PlanBasis, SourceRef } from '../src/automation/
 import * as renderer from '../src/automation/context/render';
 import { CustomerContextService } from '../src/automation/context/service';
 import { validCommand, validPlan } from './fixtures/automation';
+import { durableFailure } from './helpers';
 
 const source: SourceRef = { kind: 'message', id: '101:201', revision: 'revision-1' };
 const replacementSource: SourceRef = { kind: 'crm', id: 'organization:11', revision: 'revision-2' };
@@ -30,11 +31,8 @@ async function conversationBasis(stub: ReturnType<typeof state>, contextVersion:
   return { lease, customerId: 'opaque-customer-1', snapshotVersion: 1, contextVersion, catalogVersion: 'catalog-1' };
 }
 async function rejectCode(stub: ReturnType<typeof state>, action: (instance: import('../src/automation/state/account').AutomationAccount) => Promise<unknown>, code: string) {
-  const failure = await runInDurableObject(stub, async instance => {
-    try { await action(instance); return null; }
-    catch (error) { return { code: (error as { code?: string }).code, message: (error as Error).message }; }
-  });
-  expect(failure?.code ?? failure?.message).toBe(code);
+  const failure = await durableFailure(stub, action);
+  expect(failure.code ?? failure.message).toBe(code);
 }
 
 describe('deterministic customer context', () => {

@@ -5,6 +5,7 @@ import { reconcileCommand } from '../src/automation/reconciliation';
 import type { MutationCommand } from '../src/automation/types';
 import { validCommand } from './fixtures/automation';
 import { executionFixture } from './fixtures/execution';
+import { durableFailure } from './helpers';
 
 describe('recoverable plan execution', () => {
   it('reserves before dispatch, reads back the receipt, and replays without another POST', async () => {
@@ -25,11 +26,11 @@ describe('recoverable plan execution', () => {
     const results = await Promise.all([runPlan(f.authorization, f.deps), runPlan(f.authorization, f.deps)]);
     expect(results.some(r => r.state === 'applied')).toBe(true);
     expect(f.write).toHaveBeenCalledTimes(1);
-    const conflict = await runInDurableObject(f.stub, async instance => {
-      try { await runPlan({ ...f.authorization, plan: { ...f.authorization.plan, planId: 'other-plan' } }, { ...f.deps, repository: instance }); return ''; }
-      catch (error) { return error instanceof Error ? error.message : ''; }
-    });
-    expect(conflict).toContain('IDEMPOTENCY_CONFLICT');
+    await durableFailure(
+      f.stub,
+      instance => runPlan({ ...f.authorization, plan: { ...f.authorization.plan, planId: 'other-plan' } }, { ...f.deps, repository: instance }),
+      'IDEMPOTENCY_CONFLICT',
+    );
   });
   it('keeps timeout uncertainty across eviction and only reconciles with GET', async () => {
     const f = await executionFixture();
