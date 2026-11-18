@@ -1,0 +1,3 @@
+# Keep LF in every checkout, including Windows with core.autocrlf=true:
+# generated files such as docs/tools.md are compared byte for byte in tests.
+* text=auto eol=lf
