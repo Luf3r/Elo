@@ -22,5 +22,6 @@ export default defineConfig({
       },
     } : {}),
   })],
-  test: { exclude: [...configDefaults.exclude, 'test/**/*.test.mjs'], testTimeout: 15_000, restoreMocks: true },
+  // .agent-runs/ holds Contracanto worktrees (full repository copies); never collect their tests.
+  test: { exclude: [...configDefaults.exclude, '.agent-runs/**', 'test/**/*.test.mjs'], testTimeout: 15_000, restoreMocks: true },
 });
