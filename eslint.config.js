@@ -125,6 +125,99 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['src/agendor/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(?:^|/)automation(?:/|$)',
+              message: 'Camada agendor não deve importar src/automation (use src/agendor/ports.ts).',
+            },
+            {
+              regex: '(?:^|/)domain(?:/|$)',
+              message: 'Camada agendor não deve importar src/domain.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/domain/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(?:^|/)automation/state(?:/|$)',
+              message: 'Camada domain não deve importar src/automation/state.',
+            },
+            {
+              regex: '(?:^|/)agendor/[^/]+/client(?:/|$)',
+              message: 'Camada domain não deve importar src/agendor/*/client.',
+            },
+            {
+              regex: '(?:^|/)env$',
+              message: 'Camada domain não deve importar o tipo Env.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/app/config/tenant.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'Literal[value=4101], Literal[value="4101"], Literal[value=4102], Literal[value="4102"], TemplateElement[value.raw=/^(?:4101|4102)$/]',
+          message: 'Use ALLOWED_INBOX_IDS from src/app/config/tenant.ts instead of hardcoding inbox IDs.',
+        },
+        {
+          selector: 'Literal[value=7001], Literal[value="7001"], TemplateElement[value.raw="7001"]',
+          message: 'Use EXPECTED_CHAT_ACCOUNT_ID from src/app/config/tenant.ts instead of hardcoding the Chat account ID.',
+        },
+        {
+          selector: 'Literal[value="elo-agendor-mcp"], TemplateElement[value.raw="elo-agendor-mcp"]',
+          message: 'Use TENANT_SERVICE_NAME from src/app/config/tenant.ts instead of hardcoding the service name.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    // schemas.ts, domain/planner.ts and domain/stages.ts use 'elotenant' as a domain actor/approach enum literal, not the tenant account key.
+    ignores: ['src/app/config/tenant.ts', 'src/automation/schemas.ts', 'src/domain/planner.ts', 'src/domain/stages.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'Literal[value=4101], Literal[value="4101"], Literal[value=4102], Literal[value="4102"], TemplateElement[value.raw=/^(?:4101|4102)$/]',
+          message: 'Use ALLOWED_INBOX_IDS from src/app/config/tenant.ts instead of hardcoding inbox IDs.',
+        },
+        {
+          selector: 'Literal[value=7001], Literal[value="7001"], TemplateElement[value.raw="7001"]',
+          message: 'Use EXPECTED_CHAT_ACCOUNT_ID from src/app/config/tenant.ts instead of hardcoding the Chat account ID.',
+        },
+        {
+          selector: 'Literal[value="elo-agendor-mcp"], TemplateElement[value.raw="elo-agendor-mcp"]',
+          message: 'Use TENANT_SERVICE_NAME from src/app/config/tenant.ts instead of hardcoding the service name.',
+        },
+        {
+          selector: 'Literal[value="elotenant"], TemplateElement[value.raw="elotenant"]',
+          message: 'Use TENANT_ACCOUNT_KEY from src/app/config/tenant.ts instead of hardcoding "elotenant".',
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
   {
     plugins: {

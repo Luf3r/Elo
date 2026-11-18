@@ -1,6 +1,7 @@
-import { SafeError } from '../errors';
+import { SafeError } from '../shared/errors';
+import { ALLOWED_INBOX_IDS } from '../app/config/tenant';
 /** Expansion is a deliberate code/policy change, never derived from upstream data. */
-export const allowedInboxIds: readonly number[] = Object.freeze([4101, 4102]);
+export const allowedInboxIds: readonly number[] = ALLOWED_INBOX_IDS;
 export function isInboxAllowed(inboxId: number | undefined, policy?: { allowedInboxIds: readonly number[] }): boolean {
   return (
     inboxId !== undefined &&

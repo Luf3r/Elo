@@ -1,6 +1,6 @@
 import type { AgendorCrmClient } from '../agendor/crm/types';
-import type { CustomerCandidate, CustomerCandidates, Fact } from './types';
-import { SafeError } from '../errors';
+import type { CustomerCandidate, CustomerCandidates, Fact } from '../automation/types';
+import { SafeError } from '../shared/errors';
 const normalizedName = (v: string) => v.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 const object = (v: unknown): Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

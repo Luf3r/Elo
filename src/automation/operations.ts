@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
+import { canonical } from '../shared/canonical';
 import { authorizedPlanSchema, planBasisSchema, operationStatusSchema } from './schemas';
 import type {
   CommandReservation,
@@ -10,7 +12,7 @@ import type {
 
 export const operationInputSchema = z.strictObject({
   requestId: z.string().min(1).max(200),
-  accountKey: z.literal('elotenant'),
+  accountKey: z.literal(TENANT_ACCOUNT_KEY),
   authorization: authorizedPlanSchema,
   basis: planBasisSchema,
   catalogJson: z.string().min(2).max(1_048_576),
@@ -35,20 +37,7 @@ export interface ExecutionCommand {
   fence: number;
   reservationVersion: number;
 }
-export function canonical(value: unknown): string {
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  if (value && typeof value === 'object')
-    return (
-      '{' +
-      Object.entries(value)
-        .filter(([, v]) => v !== undefined)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => JSON.stringify(k) + ':' + canonical(v))
-        .join(',') +
-      '}'
-    );
-  return JSON.stringify(value);
-}
+export { canonical };
 export async function payloadDigest(value: unknown): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value))))]
     .map((v) => v.toString(16).padStart(2, '0'))

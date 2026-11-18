@@ -7,23 +7,26 @@
 ```text
 src/
 ├── index.ts                 # Entrada do Worker (fetch, queue, scheduled) e rate limit OAuth
+├── app/config/tenant.ts     # Constantes centralizadas de tenant (conta 'elotenant', inboxes 4101/4102, Chat account '7001', serviço)
+├── shared/                  # Utilitários transversais (errors, http, cancellation, rate-limit, canonical)
 ├── oauth/                   # OAuth 2.1 (@cloudflare/workers-oauth-provider) + Access OIDC JWKS
-├── auth.ts / rate-limit.ts  # Contexto OAuth verificado, escopos e rate limit MCP
+├── auth.ts                  # Contexto OAuth verificado e escopos
 ├── mcp/                     # Fábrica createServer por requisição, segurança de tools e limite 512 KiB
 ├── agendor/
+│   ├── ports.ts             # Interfaces obrigatórias BudgetGate e InboxGuard injetadas nos clientes
 │   ├── crm/                 # Cliente HTTP tipado do Agendor CRM V3, catálogo e mutações
 │   └── chat/                # Cliente HTTP somente leitura do Agendor Chat V1, paginação e anexos
+├── domain/                  # Regras puras (identity, demands, planner, fields, stages, policy-types, authorization, inbox-policy, reviews)
 └── automation/
+    ├── clients.ts           # Factory concreta que injeta budget gate do DO e allowlist nos clientes Agendor
     ├── service.ts           # Orquestração preflight, prepare, submit, apply, reviews, context
     ├── discovery.ts         # Descoberta incremental de conversas pendentes (T01)
-    ├── identity.ts / demands.ts / planner.ts / stages.ts / fields.ts
-    ├── authorization.ts     # Regras de autorização de submissão e plano (TTL máx. 5 min)
     ├── executor.ts / queue.ts / reconciliation.ts / maintenance.ts
     ├── ingress.ts           # Endpoint opcional /automation/chat-events (desabilitado por padrão)
     └── state/               # Durable Object AutomationAccount, migrations SQLite, repository e budget
 ```
 
-> Nota: A separação de dependências entre `domain/`, `agendor/`, `automation/` e `mcp/` está mapeada em [plano-refatoracao.md](plano-refatoracao.md) e monitorada por regras de lint (`import-x/no-restricted-paths`). Hoje os adaptadores `agendor/{chat,crm}` ainda consomem `automation/state/budget` e `automation/inbox-policy` (C5), o que será desacoplado via ports na Fase 3.
+> Nota: Os adaptadores em `agendor/` recebem `BudgetGate` e `InboxGuard` obrigatoriamente via `agendor/ports.ts` e são proibidos por regras `error` de ESLint (`no-restricted-imports`) de importar `automation/` ou `domain/`. A camada `domain/` é proibida por `error` de importar `automation/state/`, `agendor/*/client` ou o tipo `Env`. As demais fronteiras com `types`/`schemas` ainda em `automation/` permanecem monitoradas como aviso (`import-x/no-restricted-paths`) até a conclusão da Fase 3 em [plano-refatoracao.md](plano-refatoracao.md).
 
 ## Fluxo principal de automação
 

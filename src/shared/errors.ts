@@ -28,6 +28,19 @@ export class SafeError extends Error {
   }
 }
 
+export class BudgetDeferredError extends SafeError {
+  constructor(retryAt?: number) {
+    super(
+      'UPSTREAM_RATE_LIMITED',
+      'Shared request budget reached. Retry later.',
+      true,
+      429,
+      undefined,
+      retryAt === undefined ? undefined : Math.max(1, Math.ceil((retryAt - Date.now()) / 1000)),
+    );
+  }
+}
+
 export function safeError(error: unknown): SafeError {
   return error instanceof SafeError
     ? error

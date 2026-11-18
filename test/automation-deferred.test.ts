@@ -3,8 +3,8 @@ import { createAutomationService } from '../src/automation/service';
 import { budgetMock, durableFailure, testEnv } from './helpers';
 import { runInDurableObject } from 'cloudflare:test';
 import { accountState } from '../src/automation/state/budget';
-import * as chat from '../src/agendor/chat/client';
-import { SafeError } from '../src/errors';
+import * as chat from '../src/automation/clients';
+import { SafeError } from '../src/shared/errors';
 
 afterEach(() => {
   vi.restoreAllMocks();

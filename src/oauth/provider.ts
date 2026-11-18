@@ -2,8 +2,8 @@ import { OAuthProvider, OAuthError, type OAuthProviderOptions } from '@cloudflar
 import { createMcpHandler } from 'agents/mcp/server';
 import type { Env } from '../env';
 import { authenticateClient } from '../auth';
-import { enforceRateLimit } from '../rate-limit';
-import { errorData, safeError } from '../errors';
+import { enforceRateLimit } from '../shared/rate-limit';
+import { errorData, safeError } from '../shared/errors';
 import { createServer } from '../mcp/server';
 import { ORIGIN, RESOURCE, OWNER_EMAIL, SUPPORTED_SCOPES } from './config';
 import { loginHandler } from './handler';

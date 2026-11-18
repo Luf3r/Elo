@@ -71,7 +71,7 @@ export class AutomationAccount extends DurableObject<Env> {
   async listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
     return this.repository.listAudit(input, owner);
   }
-  async recordPreparationFailure(id: string, owner: WorkLease['owner'], code: import('../../errors').ErrorCode) {
+  async recordPreparationFailure(id: string, owner: WorkLease['owner'], code: import('../../shared/errors').ErrorCode) {
     return this.repository.recordAudit(`preparation_failed_${code}`, id, 0, owner);
   }
   async recordReprocess(id: string, owner: WorkLease['owner']) {

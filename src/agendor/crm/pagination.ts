@@ -1,6 +1,6 @@
 import type { PagedResult } from './types';
 import { listEnvelope } from './schemas';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 
 export function normalizePage<T>(upstream: unknown, currentPage: number, perPage: number): PagedResult<T> {
   const result = listEnvelope.safeParse(upstream);

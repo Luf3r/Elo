@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { Env } from '../env';
 import { requireCapabilities, type AuthContext } from '../auth';
-import { SafeError } from '../errors';
-import { throwIfCancelled } from '../cancellation';
-import { createAgendorCrmClient } from '../agendor/crm/client';
-import { createCrmMutationClient } from '../agendor/crm/mutations';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
+import { SafeError } from '../shared/errors';
+import { throwIfCancelled } from '../shared/cancellation';
+import { createAgendorCrmClient, createCrmMutationClient } from './clients';
 import { createCatalogSnapshot } from '../agendor/crm/catalog';
 import * as mutation from '../agendor/crm/mutation-schemas';
 import {
@@ -108,7 +108,7 @@ export async function executeDirectCommand(
     if (existing.status.state === 'queued')
       await enqueueOperation(existing.operationId, {
         repository: repo,
-        accountKey: 'elotenant',
+        accountKey: TENANT_ACCOUNT_KEY,
         queue: env.AUTOMATION_QUEUE,
       });
     return existing.status;
@@ -134,7 +134,7 @@ export async function executeDirectCommand(
     payloadDigest: digest,
   });
   const crm = createAgendorCrmClient(env, { signal });
-  let catalog: CatalogSnapshot = createCatalogSnapshot({ accountId: 'elotenant', pages: [] });
+  let catalog: CatalogSnapshot = createCatalogSnapshot({ accountId: TENANT_ACCOUNT_KEY, pages: [] });
   // Basic direct/legacy patches need no catalog traversal. Dynamic field and
   // owner/assignee/product references require their exact catalog sections.
   const pages = [];
@@ -148,7 +148,7 @@ export async function executeDirectCommand(
   if (record.ownerUser !== undefined || record.assigned_users !== undefined)
     pages.push(await crm.getConfiguration({ section: 'users' }));
   if (record.products_entities !== undefined) pages.push(await crm.getConfiguration({ section: 'products' }));
-  if (pages.length) catalog = createCatalogSnapshot({ accountId: 'elotenant', pages });
+  if (pages.length) catalog = createCatalogSnapshot({ accountId: TENANT_ACCOUNT_KEY, pages });
   const source = { kind: 'operator' as const, id: caller.userId, revision: digest };
   const command: MutationCommand = mutationCommandSchema.parse({
     kind: kind[name],
@@ -220,7 +220,7 @@ export async function executeDirectCommand(
     repository: repo,
     basis,
     requestId: input.requestId,
-    accountKey: 'elotenant',
+    accountKey: TENANT_ACCOUNT_KEY,
     catalog,
     reads: crm,
     legacy: crm,
@@ -242,7 +242,7 @@ export async function executeDirectCommand(
   if (result.state === 'queued')
     await enqueueOperation(result.operationId, {
       repository: repo,
-      accountKey: 'elotenant',
+      accountKey: TENANT_ACCOUNT_KEY,
       queue: env.AUTOMATION_QUEUE,
     });
   return result;

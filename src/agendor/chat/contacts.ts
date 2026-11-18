@@ -1,5 +1,5 @@
 import { conversationReadInput } from './schemas';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 import type {
   AttachmentPage,
   ChatContact,

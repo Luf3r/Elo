@@ -1,6 +1,6 @@
 import { allowBudget } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAgendorCrmClient } from '../src/agendor/crm/client';
+import { createAgendorCrmClient } from '../src/automation/clients';
 import * as schemas from '../src/agendor/crm/schemas';
 import * as catalog from '../src/agendor/crm/catalog';
 import { callTool } from './mcp-helper';

@@ -1,6 +1,6 @@
 import { allowBudget } from './helpers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAgendorCrmClient } from '../src/agendor/crm/client';
+import { createAgendorCrmClient } from '../src/automation/clients';
 
 afterEach(() => vi.unstubAllGlobals());
 const client = () => createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'unit-crm-token' }, { budgetGate: allowBudget });

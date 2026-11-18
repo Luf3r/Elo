@@ -1,5 +1,5 @@
-import { SafeError } from '../../errors';
-import { throwIfCancelled } from '../../cancellation';
+import { SafeError } from '../../shared/errors';
+import { throwIfCancelled } from '../../shared/cancellation';
 import type { AttachmentInput, AttachmentResult } from './types';
 
 // Add a CDN only after recording its exact host from an authorized observation.

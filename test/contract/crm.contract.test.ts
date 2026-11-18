@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
-import { createAgendorCrmClient } from '../../src/agendor/crm/client';
+import { createAgendorCrmClient } from '../../src/automation/clients';
 import { isConfiguredSecret } from '../../src/auth';
 
 const bindings = env as unknown as { AGENDOR_CRM_TOKEN?: string; RUN_AGENDOR_CONTRACT_TESTS?: string };

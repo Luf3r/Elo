@@ -3,7 +3,7 @@ import {
   type ConversationReaderDependencies,
   type ReadProgress,
 } from '../agendor/chat/contacts';
-import { SafeError } from '../errors';
+import { SafeError } from '../shared/errors';
 /** A bounded read batch is not SOURCE_CHANGED. Continue locally when credit is
  * available; persist and defer only when the actual transport/budget cannot proceed. */
 export async function readVerificationSnapshot(

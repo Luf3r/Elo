@@ -1,6 +1,6 @@
 import { allowBudget } from './helpers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAgendorChatClient } from '../src/agendor/chat/client';
+import { createAgendorChatClient } from '../src/automation/clients';
 beforeEach(() =>
   vi.stubGlobal('fetch', () => {
     throw new Error('Network blocked by synthetic fixture');

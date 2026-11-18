@@ -1,11 +1,10 @@
-import { isInboxAllowed } from '../../automation/inbox-policy';
 import { collectionPageInfo, readConversationBatch } from './pagination';
-import { createBudgetGate, type BudgetGate } from '../../automation/state/budget';
+import type { BudgetGate, InboxGuard } from '../ports';
 import type { Env } from '../../env';
-import { SafeError } from '../../errors';
-import type { ErrorCode } from '../../errors';
+import { SafeError } from '../../shared/errors';
+import type { ErrorCode } from '../../shared/errors';
 import { isConfiguredSecret } from '../../auth';
-import { throwIfCancelled } from '../../cancellation';
+import { throwIfCancelled } from '../../shared/cancellation';
 import {
   chatConversationIdInput,
   conversationDetailSchema,
@@ -38,20 +37,21 @@ const CHAT_API_ORIGIN = 'https://chat.agendor.com.br/api/v1';
 const CHAT_TIMEOUT_MS = 10_000;
 const CHAT_MAX_RESPONSE_BYTES = 1_048_576;
 export interface ChatClientOptions {
-  budgetGate?: BudgetGate;
+  budgetGate: BudgetGate;
+  inboxGuard: InboxGuard;
   signal?: AbortSignal;
   request?: (request: Request) => Promise<Response>;
   maxAttachmentBytes?: number;
   waitForBudget?: boolean;
 }
 export function createAgendorChatClient(
-  env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'> & Partial<Pick<Env, 'AUTOMATION_STATE'>>,
-  options: ChatClientOptions = {},
+  env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>,
+  options: ChatClientOptions,
 ) {
   if (!isConfiguredSecret(env.AGENDOR_CHAT_TOKEN) || !/^\d{1,20}$/.test(env.AGENDOR_CHAT_ACCOUNT_ID ?? '')) {
     throw new SafeError('CHAT_API_NOT_CONFIGURED', 'Chat service is not configured.', false, 503);
   }
-  const budgetGate = options.budgetGate ?? createBudgetGate(env, 'chat');
+  const { budgetGate, inboxGuard } = options;
   async function reserve(wait: boolean, signal?: AbortSignal) {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -195,7 +195,7 @@ export function createAgendorChatClient(
       return rows.map((row) => row.id).sort((a, b) => a - b);
     },
     async listScopedActivity(inboxId: number, page: number) {
-      if (!isInboxAllowed(inboxId))
+      if (!inboxGuard.isAllowed(inboxId))
         throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not authorized.', false, 403);
       chatConversationPageInput.parse({ page });
       const path = `/accounts/${account}/conversations`;
@@ -268,7 +268,9 @@ export function createAgendorChatClient(
           return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? [[key, value]] : [];
         }),
       );
-      const conversations = result.data.payload.map(summarizeConversation).filter((c) => isInboxAllowed(c.inboxId));
+      const conversations = result.data.payload
+        .map(summarizeConversation)
+        .filter((c) => inboxGuard.isAllowed(c.inboxId));
       const pageInfo = collectionPageInfo(result, filters.page ?? 1, `/accounts/${account}/conversations`);
       const coverage: Coverage = {
         complete: pageInfo.complete,
@@ -364,7 +366,7 @@ export function createAgendorChatClient(
       const path = `/accounts/${account}/contacts/${contactId}/conversations`;
       const raw = await get(path + (input.page !== undefined ? `?page=${page}` : ''));
       const values = parse(contactConversationsEnvelopeSchema, raw);
-      const conversations = values.map(summarizeConversation).filter((c) => isInboxAllowed(c.inboxId));
+      const conversations = values.map(summarizeConversation).filter((c) => inboxGuard.isAllowed(c.inboxId));
       const pageInfo = collectionPageInfo(raw, page, path);
       const coverage: Coverage = {
         complete: pageInfo.complete,

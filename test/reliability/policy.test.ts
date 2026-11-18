@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isInboxAllowed, assertInboxAllowed } from '../../src/automation/inbox-policy';
+import { isInboxAllowed, assertInboxAllowed } from '../../src/domain/inbox-policy';
 import { collectionPageInfo } from '../../src/agendor/chat/pagination';
 describe('inbox allowlist', () => {
   it('denies empty policy, missing inbox and boxes outside both allowlists', () => {

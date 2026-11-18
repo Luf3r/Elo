@@ -1,9 +1,9 @@
-import { createBudgetGate, type BudgetGate } from '../../automation/state/budget';
+import type { BudgetGate } from '../ports';
 import type { Env } from '../../env';
 import { z } from 'zod';
 import type { AgendorCrmClient } from './types';
-import { fetchJson } from '../../http';
-import { SafeError } from '../../errors';
+import { fetchJson } from '../../shared/http';
+import { SafeError } from '../../shared/errors';
 import { isConfiguredSecret } from '../../auth';
 import { normalizePage } from './pagination';
 import { normalizeCatalogPage } from './catalog';
@@ -24,13 +24,18 @@ import {
   updatePersonInput,
   updateOrganizationInput,
 } from './schemas';
-import { throwIfCancelled } from '../../cancellation';
+import { throwIfCancelled } from '../../shared/cancellation';
+
+export interface CrmClientOptions {
+  budgetGate: BudgetGate;
+  signal?: AbortSignal;
+}
 
 export function createAgendorCrmClient(
-  env: Pick<Env, 'AGENDOR_CRM_TOKEN'> & Partial<Pick<Env, 'AUTOMATION_STATE'>>,
-  options: { signal?: AbortSignal; budgetGate?: BudgetGate } = {},
+  env: Pick<Env, 'AGENDOR_CRM_TOKEN'>,
+  options: CrmClientOptions,
 ): AgendorCrmClient {
-  const budgetGate = options.budgetGate ?? createBudgetGate(env, 'crm');
+  const { budgetGate } = options;
   async function get(path: string, params: Record<string, string | number | boolean | undefined> = {}) {
     throwIfCancelled(options.signal);
     if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN))

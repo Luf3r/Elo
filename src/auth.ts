@@ -1,4 +1,4 @@
-import { SafeError } from './errors';
+import { SafeError } from './shared/errors';
 import type { OAuthResourceAuth } from '@cloudflare/workers-oauth-provider';
 import { OWNER_EMAIL, RESOURCE } from './oauth/config';
 export interface AuthContext {

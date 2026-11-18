@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildSyncPlan, planDemand } from '../src/automation/planner';
-import { buildFieldPatch, mergeManagedDescription } from '../src/automation/fields';
+import { buildSyncPlan, planDemand } from '../src/domain/planner';
+import { buildFieldPatch, mergeManagedDescription } from '../src/domain/fields';
 import { syncPlanSchema, createAnalysisInputSchema } from '../src/automation/schemas';
 import { createCatalogSnapshot } from '../src/agendor/crm/catalog';
 import type { AgentAnalysis, Fact, FieldPatchInput } from '../src/automation/types';

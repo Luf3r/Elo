@@ -3,7 +3,7 @@ import type { McpServer, StandardSchemaWithJSON } from '@modelcontextprotocol/se
 import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { createAutomationService } from '../../automation/service';
-import { automationOperationCapabilities, type AutomationOperation } from '../../automation/authorization';
+import { automationOperationCapabilities, type AutomationOperation } from '../../domain/authorization';
 import {
   preflightInputSchema,
   prepareInputSchema,
@@ -16,7 +16,7 @@ import {
   auditInputSchema,
 } from '../../automation/schemas';
 import { discoveryInputSchema, discoveryTool } from '../../automation/discovery';
-import { updatePolicyInputSchema } from '../../automation/policy-types';
+import { updatePolicyInputSchema } from '../../domain/policy-types';
 import { oauthToolSecurity } from '../security';
 import { errorToolResult, jsonToolResult } from '../result';
 import { readAnnotations, writeAnnotations } from './read';

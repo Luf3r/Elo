@@ -25,37 +25,24 @@ import {
   workLeaseSchema,
 } from '../schemas';
 import { contextEvidenceRefs, contextValue, renderCustomerContext } from '../context/render';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot, ResolutionBundle, SourceRef } from '../types';
 import { createAnalysisInputSchema, customerCandidatesSchema, resolutionBundleSchema } from '../schemas';
-import { resolveCustomer, uniqueSources, normalizedPhone } from '../identity';
-import { resolveDemands } from '../demands';
+import { resolveCustomer, uniqueSources, normalizedPhone } from '../../domain/identity';
+import { resolveDemands } from '../../domain/demands';
 import { OperationsStore } from '../operations';
 import type { OperationInput } from '../operations';
-import { automationPolicySchema } from '../policy-types';
+import { automationPolicySchema } from '../../domain/policy-types';
 import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
 import type { AutomationPolicy } from '../types';
 import { reviewResolutionInputSchema } from '../schemas';
 import { WATCHDOG_INTERVAL_MS } from '../maintenance';
 import type { ExecutionCommand, ExecutionOperation } from '../operations';
-import { applyReviewDecision } from '../reviews';
+import { applyReviewDecision } from '../../domain/reviews';
+import { canonical } from '../../shared/canonical';
 import { discoveryCursorMs, type DiscoveryCursor, type PendingActivity } from '../discovery';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  if (value !== null && typeof value === 'object')
-    return (
-      '{' +
-      Object.entries(value)
-        .filter(([, v]) => v !== undefined)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([k, v]) => JSON.stringify(k) + ':' + canonical(v))
-        .join(',') +
-      '}'
-    );
-  return JSON.stringify(value);
-}
 async function digest(value: unknown): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value)));
   return Array.from(new Uint8Array(bytes), (v) => v.toString(16).padStart(2, '0')).join('');

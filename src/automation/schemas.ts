@@ -24,7 +24,7 @@ import {
   updateTaskSchema,
   changeStageSchema,
 } from '../agendor/crm/mutation-schemas';
-import { automationPolicySchema, capabilitySchema, stageKeySchema } from './policy-types';
+import { automationPolicySchema, capabilitySchema, stageKeySchema } from '../domain/policy-types';
 export { entityRefSchema, taskParentSchema, stageKeySchema };
 const key = z
   .string()

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuthContext } from '../../auth';
 import { publicToolSecurity } from '../security';
 import { jsonToolResult } from '../result';
+import { TENANT_SERVICE_NAME } from '../../app/config/tenant';
 import { COMMIT, VERSION } from '../../version';
 
 export function registerStatus(server: McpServer, auth: AuthContext): void {
@@ -17,7 +18,7 @@ export function registerStatus(server: McpServer, auth: AuthContext): void {
     async () =>
       jsonToolResult({
         status: 'ok',
-        service: 'elo-agendor-mcp',
+        service: TENANT_SERVICE_NAME,
         version: VERSION,
         commit: COMMIT,
         client: auth.clientId,

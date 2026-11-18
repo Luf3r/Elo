@@ -1,5 +1,6 @@
 import type { Env } from '../env';
 import { z } from 'zod';
+import { EXPECTED_CHAT_ACCOUNT_ID } from '../app/config/tenant';
 import { accountState } from './state/budget';
 import { payloadDigest } from './operations';
 const hintSchema = z.strictObject({
@@ -11,7 +12,7 @@ const MAX_HINT_BYTES = 8192;
 /** Optional, deliberately enabled, unsigned review hint endpoint. No message
  * content is accepted and no upstream fact can be derived from this envelope. */
 export async function acceptChatHint(request: Request, env: Env): Promise<Response> {
-  if (env.AUTOMATION_CHAT_HINTS_ENABLED !== 'true' || !env.AGENDOR_CHAT_ACCOUNT_ID)
+  if (env.AUTOMATION_CHAT_HINTS_ENABLED !== 'true' || env.AGENDOR_CHAT_ACCOUNT_ID !== EXPECTED_CHAT_ACCOUNT_ID)
     return new Response(null, { status: 404 });
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } });
   if (request.headers.get('Content-Type')?.split(';')[0]?.trim() !== 'application/json')
@@ -39,7 +40,7 @@ export async function acceptChatHint(request: Request, env: Env): Promise<Respon
       offset += chunk.byteLength;
     }
     const parsed = hintSchema.safeParse(JSON.parse(new TextDecoder().decode(bytes)));
-    if (!parsed.success || parsed.data.accountId !== env.AGENDOR_CHAT_ACCOUNT_ID)
+    if (!parsed.success || parsed.data.accountId !== EXPECTED_CHAT_ACCOUNT_ID)
       return new Response(null, { status: 400 });
     const fingerprint = await payloadDigest(parsed.data);
     const key = await payloadDigest({ accountId: parsed.data.accountId, eventId: parsed.data.eventId });

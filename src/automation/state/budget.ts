@@ -1,25 +1,15 @@
+import type { BudgetGate } from '../../agendor/ports';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
 import type { Env } from '../../env';
-import { SafeError } from '../../errors';
+import { BudgetDeferredError, SafeError } from '../../shared/errors';
 import type { BudgetTicket } from '../types';
 
-export class BudgetDeferredError extends SafeError {
-  constructor(retryAt?: number) {
-    super(
-      'UPSTREAM_RATE_LIMITED',
-      'Shared request budget reached. Retry later.',
-      true,
-      429,
-      undefined,
-      retryAt === undefined ? undefined : Math.max(1, Math.ceil((retryAt - Date.now()) / 1000)),
-    );
-  }
-}
-export type BudgetGate = () => Promise<void>;
+export { BudgetDeferredError, type BudgetGate };
 /** Account routing is server-owned; no request argument can select another bucket. */
 export function accountState(env: Pick<Env, 'AUTOMATION_STATE'>) {
   if (!env.AUTOMATION_STATE)
     throw new SafeError('UPSTREAM_UNAVAILABLE', 'Shared request budget unavailable.', true, 503);
-  return env.AUTOMATION_STATE.getByName('elotenant');
+  return env.AUTOMATION_STATE.getByName(TENANT_ACCOUNT_KEY);
 }
 export function createBudgetGate(env: Partial<Pick<Env, 'AUTOMATION_STATE'>>, product: 'crm' | 'chat'): BudgetGate {
   return async () => {

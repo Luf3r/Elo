@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as demands from '../src/automation/demands';
+import * as demands from '../src/domain/demands';
 import type { AgentAnalysis, CustomerResolution, DemandRecord } from '../src/automation/types';
 import { validAnalysisInput } from './fixtures/automation';
 const source = validAnalysisInput.analysis.facts[0]!.sources[0]!;

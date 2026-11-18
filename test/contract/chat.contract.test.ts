@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
-import { createAgendorChatClient } from '../../src/agendor/chat/client';
+import { createAgendorChatClient } from '../../src/automation/clients';
 import { isConfiguredSecret } from '../../src/auth';
 
 const bindings = env as unknown as {

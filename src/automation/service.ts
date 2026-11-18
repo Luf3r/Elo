@@ -1,5 +1,5 @@
-import { readCanonicalConversation } from '../agendor/chat/canonical';
-import { allowedInboxIds, assertInboxAllowed, isInboxAllowed } from './inbox-policy';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
+import { allowedInboxIds, assertInboxAllowed, isInboxAllowed } from '../domain/inbox-policy';
 import { z } from 'zod';
 import {
   discoverPending,
@@ -14,20 +14,29 @@ import {
 } from './discovery';
 import type { Env } from '../env';
 import { requireCapabilities, type AuthContext } from '../auth';
-import { SafeError } from '../errors';
-import { throwIfCancelled } from '../cancellation';
-import { createAgendorChatClient, createConversationReader } from '../agendor/chat/client';
-import { createAgendorCrmClient } from '../agendor/crm/client';
+import { SafeError } from '../shared/errors';
+import { throwIfCancelled } from '../shared/cancellation';
+import {
+  createAgendorChatClient,
+  createAgendorCrmClient,
+  createConversationReader,
+  readCanonicalConversation,
+} from './clients';
 import { createCatalogSnapshot } from '../agendor/crm/catalog';
 import { parseInput } from '../agendor/crm/schemas';
 import { accountState } from './state/budget';
-import { readCustomerCandidates, readDuplicateCandidates, candidateLookupLinks, uniqueSources } from './identity';
+import {
+  readCustomerCandidates,
+  readDuplicateCandidates,
+  candidateLookupLinks,
+  uniqueSources,
+} from '../domain/identity';
 import {
   requireAutomationOperation,
   requirePolicyCapabilities,
   authorizeSubmission,
   authorizePlan,
-} from './authorization';
+} from '../domain/authorization';
 import {
   prepareInputSchema,
   preflightInputSchema,
@@ -42,8 +51,8 @@ import {
   reprocessInputSchema,
   auditInputSchema,
 } from './schemas';
-import { automationPolicySchema, updatePolicyInputSchema } from './policy-types';
-import { buildSyncPlan } from './planner';
+import { automationPolicySchema, updatePolicyInputSchema } from '../domain/policy-types';
+import { buildSyncPlan } from '../domain/planner';
 import { payloadDigest } from './operations';
 import { runPlan } from './executor';
 import { reconcileCommand } from './reconciliation';
@@ -518,7 +527,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         await persistWorkflow(repository(), state);
         catalogReads++;
       }
-      state.catalog = createCatalogSnapshot({ accountId: 'elotenant', pages: state.pages });
+      state.catalog = createCatalogSnapshot({ accountId: TENANT_ACCOUNT_KEY, pages: state.pages });
       await validateScope();
       const retained = await repository().getPreparationBasis(state.customerId);
       state.hydration ??= { offset: 0, records: [], deals: [], sources: [], missingReasons: [] };
@@ -870,20 +879,20 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     const authorization = authorizePlan(auth, plan, policy);
     const operation = await repository().prepareOperation({
       requestId: input.requestId,
-      accountKey: 'elotenant',
+      accountKey: TENANT_ACCOUNT_KEY,
       authorization,
       basis: workflow.basis,
       catalogJson: JSON.stringify(workflow.catalog),
     });
     const deps = await createQueueExecutionDeps(
-      { accountKey: 'elotenant', operationId: operation.operationId, version: operation.version },
+      { accountKey: TENANT_ACCOUNT_KEY, operationId: operation.operationId, version: operation.version },
       env,
     );
     const status = await runPlan(authorization, { ...deps, signal, defer: true });
     if (status.state === 'queued')
       await enqueueOperation(operation.operationId, {
         repository: repository(),
-        accountKey: 'elotenant',
+        accountKey: TENANT_ACCOUNT_KEY,
         queue: env.AUTOMATION_QUEUE,
       });
     return status;

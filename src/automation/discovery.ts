@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { Env } from '../env';
-import { SafeError } from '../errors';
-import { throwIfCancelled } from '../cancellation';
+import { SafeError } from '../shared/errors';
+import { throwIfCancelled } from '../shared/cancellation';
 import { positiveId } from '../agendor/chat/schemas';
-import { createAgendorChatClient } from '../agendor/chat/client';
+import { createAgendorChatClient } from './clients';
 import { accountState } from './state/budget';
-import { allowedInboxIds, isInboxAllowed } from './inbox-policy';
+import { allowedInboxIds, isInboxAllowed } from '../domain/inbox-policy';
 import { payloadDigest } from './operations';
 import type { AutomationPolicy, WorkLease } from './types';
 

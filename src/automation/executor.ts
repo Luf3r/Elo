@@ -3,7 +3,8 @@ import type { AuthorizedPlan, MutationCommand, OperationReceipt, OperationStatus
 import type { AsyncRepository, ExecutionCommand, ExecutionOperation } from './operations';
 import { authorizedPlanSchema } from './schemas';
 import { checkedReceipt, reconcileCommand, resolvedTarget, type ReconciliationReads } from './reconciliation';
-import { safeError } from '../errors';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
+import { safeError } from '../shared/errors';
 
 export interface ExecutionDeps {
   legacy?: Pick<
@@ -13,7 +14,7 @@ export interface ExecutionDeps {
   repository: AsyncRepository;
   basis: PlanBasis;
   requestId: string;
-  accountKey: 'elotenant';
+  accountKey: typeof TENANT_ACCOUNT_KEY;
   catalog: CatalogSnapshot;
   mutations: CrmMutationClient;
   reads: ReconciliationReads;

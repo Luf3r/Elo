@@ -1,15 +1,15 @@
 import { expect, vi } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { runInDurableObject } from 'cloudflare:test';
-import * as chat from '../src/agendor/chat/client';
-import * as crm from '../src/agendor/crm/client';
-import * as mutations from '../src/agendor/crm/mutations';
+import * as chat from '../src/automation/clients';
+import * as crm from '../src/automation/clients';
+import * as mutations from '../src/automation/clients';
 import worker from '../src/index';
 import { RESOURCE } from '../src/oauth/config';
 import { accountState, BudgetDeferredError } from '../src/automation/state/budget';
-import { buildSyncPlan } from '../src/automation/planner';
+import { buildSyncPlan } from '../src/domain/planner';
 import { handleAutomationQueue } from '../src/automation/queue';
-import { automationPolicySchema } from '../src/automation/policy-types';
+import { automationPolicySchema } from '../src/domain/policy-types';
 import { agentAnalysisSchema, preparedWorkSchema, resolutionBundleSchema } from '../src/automation/schemas';
 import type {
   AgentAnalysis,

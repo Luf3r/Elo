@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createCrmMutationClient } from '../src/agendor/crm/mutations';
+import { createCrmMutationClient } from '../src/automation/clients';
 import { catalogFixture } from './fixtures/automation';
 
 afterEach(() => vi.unstubAllGlobals());

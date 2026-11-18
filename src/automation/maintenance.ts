@@ -1,3 +1,4 @@
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import type { AccountRepository } from './state/repository';
 import type { AutomationQueuePayload } from './queue';
 import type { ExecutionOperation } from './operations';
@@ -35,5 +36,5 @@ export async function maintainAccount(
   return report;
 }
 function operationReference(operation: ExecutionOperation): AutomationQueuePayload {
-  return { accountKey: 'elotenant', operationId: operation.operationId, version: operation.version };
+  return { accountKey: TENANT_ACCOUNT_KEY, operationId: operation.operationId, version: operation.version };
 }

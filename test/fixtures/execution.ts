@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test';
 import { vi } from 'vitest';
-import { authorizePlan } from '../../src/automation/authorization';
+import { authorizePlan } from '../../src/domain/authorization';
 import type { ExecutionDeps } from '../../src/automation/executor';
 import type { MutationOutcome } from '../../src/agendor/crm/types';
 import type { Env } from '../../src/env';

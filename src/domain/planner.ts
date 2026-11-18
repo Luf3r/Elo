@@ -10,14 +10,14 @@ import type {
   MutationCommand,
   DealSnapshot,
   StageEvidence,
-} from './types';
+} from '../automation/types';
 import {
   createAnalysisInputSchema,
   preparedWorkSchema,
   resolutionBundleSchema,
   syncPlanSchema,
   factSchema,
-} from './schemas';
+} from '../automation/schemas';
 import { automationPolicySchema } from './policy-types';
 import {
   createDealRecordSchema,

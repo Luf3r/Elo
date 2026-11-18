@@ -1,6 +1,5 @@
-import { BudgetDeferredError } from './state/budget';
 export { readDuplicateCandidates } from './identity-duplicates';
-import { SafeError } from '../errors';
+import { BudgetDeferredError, SafeError } from '../shared/errors';
 import type {
   AgentAnalysis,
   CatalogSnapshot,
@@ -9,7 +8,7 @@ import type {
   CustomerResolution,
   EntityRef,
   SourceRef,
-} from './types';
+} from '../automation/types';
 import { createOrganizationSchema, createPersonSchema } from '../agendor/crm/mutation-schemas';
 import type { AgendorCrmClient, PagedResult } from '../agendor/crm/types';
 import type { ChatContact } from '../agendor/chat/types';

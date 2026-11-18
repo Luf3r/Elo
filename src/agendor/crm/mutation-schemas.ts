@@ -102,6 +102,8 @@ export const taskParentSchema = z.union([
   entityRefSchema,
   z.strictObject({ kind: z.literal('deal'), id: crmIdSchema }),
 ]);
+export type CrmEntityRef = z.infer<typeof entityRefSchema>;
+export type CrmTaskParent = z.infer<typeof taskParentSchema>;
 export const createOrganizationSchema = z.strictObject(companyFields);
 export const createPersonSchema = z.strictObject(personFields);
 export const createDealRecordSchema = z.strictObject(dealFields);

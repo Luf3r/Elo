@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchJson } from '../src/http';
-import { SafeError } from '../src/errors';
+import { fetchJson } from '../src/shared/http';
+import { SafeError } from '../src/shared/errors';
 
 afterEach(() => vi.unstubAllGlobals());
 const request = () => new Request('https://api.agendor.com.br/v3/people');

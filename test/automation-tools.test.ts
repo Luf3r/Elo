@@ -5,7 +5,7 @@ import { createAutomationService } from '../src/automation/service';
 import { budgetMock } from './helpers';
 import { plannerAnalysis } from './fixtures/planner';
 import { jsonToolResult } from '../src/mcp/result';
-import * as chat from '../src/agendor/chat/client';
+import * as chat from '../src/automation/clients';
 import { accountState } from '../src/automation/state/budget';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 

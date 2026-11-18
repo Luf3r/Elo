@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
-import * as crm from '../src/agendor/crm/client';
+import * as crm from '../src/automation/clients';
 import { accountState, BudgetDeferredError } from '../src/automation/state/budget';
 import { EVIDENCE_RETENTION_MS } from '../src/automation/state/repository';
 import type { OperationStatus, PreparedWork, SyncPlan } from '../src/automation/types';

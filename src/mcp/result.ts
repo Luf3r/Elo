@@ -1,4 +1,4 @@
-import { errorData, SafeError } from '../errors';
+import { errorData, SafeError } from '../shared/errors';
 export const MAX_TOOL_OUTPUT_BYTES = 524_288;
 
 export function jsonToolResult(value: unknown) {

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { readVerificationSnapshot } from '../../src/automation/verification-reader';
 import { createConversationReader } from '../../src/agendor/chat/contacts';
-import { SafeError } from '../../src/errors';
+import { SafeError } from '../../src/shared/errors';
 import type { ConversationSnapshot } from '../../src/agendor/chat/types';
 const coverage = { complete: true, missingReasons: [], pagesRead: 1 };
 const deps = {

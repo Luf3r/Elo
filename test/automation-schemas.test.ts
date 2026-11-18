@@ -16,7 +16,7 @@ import {
   createTaskSchema,
   enrichOrganizationSchema,
 } from '../src/agendor/crm/mutation-schemas';
-import { automationPolicySchema } from '../src/automation/policy-types';
+import { automationPolicySchema } from '../src/domain/policy-types';
 import { validAnalysisInput, validationContext, validCommand, validPlan, catalogFixture } from './fixtures/automation';
 import { plannerWork } from './fixtures/planner';
 

@@ -1,18 +1,18 @@
 import type { z } from 'zod';
 import type { Env } from '../../env';
 import { isConfiguredSecret } from '../../auth';
-import { throwIfCancelled } from '../../cancellation';
-import { SafeError, safeError } from '../../errors';
-import { fetchJson } from '../../http';
-import { createBudgetGate, type BudgetGate } from '../../automation/state/budget';
+import { throwIfCancelled } from '../../shared/cancellation';
+import { SafeError, safeError } from '../../shared/errors';
+import { fetchJson } from '../../shared/http';
+import type { BudgetGate } from '../ports';
 import type { CatalogSnapshot, CrmMutationClient, CrmMutationRef, MutationOutcome } from './types';
 import { createMutationSchemas, crmIdSchema } from './mutation-schemas';
 import { parseInput } from './schemas';
 
 export interface CrmMutationDependencies {
-  env: Pick<Env, 'AGENDOR_CRM_TOKEN'> & Partial<Pick<Env, 'AUTOMATION_STATE'>>;
+  env: Pick<Env, 'AGENDOR_CRM_TOKEN'>;
   catalog: CatalogSnapshot;
-  budgetGate?: BudgetGate;
+  budgetGate: BudgetGate;
   signal?: AbortSignal;
   request?: (request: Request) => Promise<Response>;
   timeoutMs?: number;
@@ -64,7 +64,7 @@ function writePayload(record: Record<string, unknown>): Record<string, unknown> 
  * header; uncertainty never authorizes an automatic retry. */
 export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutationClient {
   const schemas = createMutationSchemas(deps.catalog);
-  const budget = deps.budgetGate ?? createBudgetGate(deps.env, 'crm');
+  const budget = deps.budgetGate;
   async function send(
     kind: CrmMutationRef['kind'],
     method: 'POST' | 'PUT',

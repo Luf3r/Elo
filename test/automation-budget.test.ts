@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { Env } from '../src/env';
-import { createAgendorCrmClient } from '../src/agendor/crm/client';
+import { createAgendorCrmClient } from '../src/automation/clients';
 import { executeRead } from '../src/mcp/tools/read';
 import { testEnv } from './helpers';
 const state = () => (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
@@ -75,7 +75,7 @@ it('does not refund a reservation when cancellation happens while awaiting the g
   expect(fetch).toHaveBeenCalledTimes(3);
 });
 it('shares Chat credit across detail, messages, attachment listing and download requests', async () => {
-  const { createAgendorChatClient } = await import('../src/agendor/chat/client');
+  const { createAgendorChatClient } = await import('../src/automation/clients');
   const bindings = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
   const client = createAgendorChatClient(bindings, {
     request: async (request) => {
@@ -109,7 +109,7 @@ it('waits for shared credit before downloading an attachment after metadata cons
     if (timeout === 10_000 && ++tenSecondTimers === 2) retryScheduledResolve();
     return originalSetTimeout(handler, timeout, ...args);
   }) as typeof setTimeout);
-  const { createAgendorChatClient } = await import('../src/agendor/chat/client');
+  const { createAgendorChatClient } = await import('../src/automation/clients');
   const bindings = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' });
   const request = vi.fn(async (request: Request) =>
     request.url.endsWith('/attachments')

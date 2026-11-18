@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import * as chat from '../src/agendor/chat/client';
-import * as crm from '../src/agendor/crm/client';
+import * as chat from '../src/automation/clients';
+import * as crm from '../src/automation/clients';
 import { createAutomationService } from '../src/automation/service';
 import { budgetMock, testEnv } from './helpers';
 import type { AgentAnalysis, PrepareInput } from '../src/automation/types';

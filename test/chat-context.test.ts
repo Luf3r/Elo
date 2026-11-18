@@ -1,6 +1,6 @@
 import { allowBudget } from './helpers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAgendorChatClient } from '../src/agendor/chat/client';
+import { createAgendorChatClient } from '../src/automation/clients';
 import * as context from '../src/agendor/chat/client';
 
 beforeEach(() =>

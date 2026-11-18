@@ -5,7 +5,7 @@ import {
   authorizeSubmission,
   requireAutomationOperation,
   requirePolicyCapabilities,
-} from '../src/automation/authorization';
+} from '../src/domain/authorization';
 import type { AutomationPolicy, Capability, MutationCommand, WorkLease } from '../src/automation/types';
 import { validAnalysisInput, validPlan } from './fixtures/automation';
 import { consentPage } from '../src/oauth/consent';

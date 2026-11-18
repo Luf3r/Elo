@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideStage } from '../src/automation/stages';
+import { decideStage } from '../src/domain/stages';
 import type { DealSnapshot, StageEvidence, StageKey } from '../src/automation/types';
 import { plannerCatalog, plannerPolicy, source } from './fixtures/planner';
 

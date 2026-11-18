@@ -1,7 +1,7 @@
 import { createMutationSchemas, customFieldMatchesCatalog } from '../agendor/crm/mutation-schemas';
-import { fieldPatchInputSchema } from './schemas';
+import { fieldPatchInputSchema } from '../automation/schemas';
 import { uniqueSources } from './identity';
-import type { CatalogSnapshot, Fact, FieldPatchDecision, FieldPatchInput } from './types';
+import type { CatalogSnapshot, Fact, FieldPatchDecision, FieldPatchInput } from '../automation/types';
 
 const START = '<!-- elotenant:auto:start -->';
 const END = '<!-- elotenant:auto:end -->';

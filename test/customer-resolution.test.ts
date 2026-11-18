@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import * as identity from '../src/automation/identity';
+import * as identity from '../src/domain/identity';
 import type { AgentAnalysis, CustomerCandidate, CustomerCandidates } from '../src/automation/types';
 import { catalogFixture, validAnalysisInput } from './fixtures/automation';
 import { env, runInDurableObject, evictDurableObject } from 'cloudflare:test';

@@ -1,9 +1,12 @@
-import { readCanonicalConversation } from '../../src/agendor/chat/canonical';
+import {
+  readCanonicalConversation,
+  createAgendorChatClient,
+  createConversationReader,
+} from '../../src/automation/clients';
 import { BudgetDeferredError } from '../../src/automation/state/budget';
 import { describe, expect, it } from 'vitest';
-import { createAgendorChatClient, createConversationReader } from '../../src/agendor/chat/client';
-import { readCustomerCandidates, readDuplicateCandidates, candidateLookupLinks } from '../../src/automation/identity';
-import { SafeError } from '../../src/errors';
+import { readCustomerCandidates, readDuplicateCandidates, candidateLookupLinks } from '../../src/domain/identity';
+import { SafeError } from '../../src/shared/errors';
 const env = { AGENDOR_CHAT_TOKEN: 'synthetic-token', AGENDOR_CHAT_ACCOUNT_ID: '100' };
 const coverage = { complete: true, missingReasons: [], pagesRead: 1 };
 const empty = async () => ({ items: [], pageInfo: { page: 1, perPage: 100, hasNext: false, nextPage: null } });

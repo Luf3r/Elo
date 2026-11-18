@@ -1,3 +1,4 @@
+import { TENANT_SERVICE_NAME } from './app/config/tenant';
 import type { Env } from './env';
 import { oauthProvider } from './oauth/provider';
 import { readOAuthConfig } from './oauth/config';
@@ -15,7 +16,7 @@ export default {
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (new URL(request.url).pathname === '/health' && request.method === 'GET') {
-      return Response.json({ status: 'ok', service: 'elo-agendor-mcp', version: VERSION, commit: COMMIT });
+      return Response.json({ status: 'ok', service: TENANT_SERVICE_NAME, version: VERSION, commit: COMMIT });
     }
     const path = new URL(request.url).pathname;
     if (path === '/automation/chat-events') return acceptChatHint(request, env);

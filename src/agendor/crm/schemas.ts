@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 import type { ConfigurationInput } from './types';
 
 export const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);

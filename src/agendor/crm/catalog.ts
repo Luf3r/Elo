@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 import { normalizePage } from './pagination';
 import { positiveId } from './schemas';
 import type { CatalogCoverage, CatalogNamedEntry, CatalogPage, CatalogSnapshot, ConfigurationInput } from './types';

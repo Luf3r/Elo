@@ -33,7 +33,7 @@ export function collectionPageInfo(raw: unknown, page: number, path: string) {
   }
 }
 import type { Coverage } from './types';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 type PageInfo = ReturnType<typeof collectionPageInfo>;
 /** Bounded automatic traversal. The caller can resume nextPage without replaying
  * successful pages when the shared budget or the MCP output bounds a batch. */

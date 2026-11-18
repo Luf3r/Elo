@@ -11,7 +11,7 @@ export type {
   AttachmentInput,
   AttachmentResult,
 } from '../agendor/chat/types';
-export type { AutomationPolicy, PolicyPatch, Capability } from './policy-types';
+export type { AutomationPolicy, PolicyPatch, Capability } from '../domain/policy-types';
 export type { AnalysisValidationContext } from './schemas';
 export type EntityRef = z.infer<typeof schemas.entityRefSchema>;
 export type TaskParent = z.infer<typeof schemas.taskParentSchema>;

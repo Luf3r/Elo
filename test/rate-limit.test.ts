@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { enforceRateLimit, enforceCrmRateLimit } from '../src/rate-limit';
+import { enforceRateLimit, enforceCrmRateLimit } from '../src/shared/rate-limit';
 import worker from '../src/index';
 import { context, testEnv, budgetMock } from './helpers';
 import { issueTestToken } from './oauth-token';

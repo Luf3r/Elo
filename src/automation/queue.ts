@@ -1,21 +1,24 @@
-import { SafeError } from '../errors';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
+import { SafeError } from '../shared/errors';
 import { readVerificationSnapshot } from './verification-reader';
-import { readCanonicalConversation } from '../agendor/chat/canonical';
-import { assertInboxAllowed } from './inbox-policy';
+import { assertInboxAllowed } from '../domain/inbox-policy';
 import { z } from 'zod';
 import type { Env } from '../env';
 import { accountState } from './state/budget';
 import { resumeOperation, type ExecutionDeps } from './executor';
-import { createCrmMutationClient } from '../agendor/crm/mutations';
-import { createAgendorCrmClient } from '../agendor/crm/client';
-import { createAgendorChatClient } from '../agendor/chat/client';
+import {
+  createAgendorChatClient,
+  createAgendorCrmClient,
+  createCrmMutationClient,
+  readCanonicalConversation,
+} from './clients';
 import { matchesFields, readRef, resolvedTarget } from './reconciliation';
 import type { CatalogSnapshot } from '../agendor/crm/types';
 import { canonical } from './operations';
 import type { WorkflowState } from './service-state';
 
 export const automationQueuePayloadSchema = z.strictObject({
-  accountKey: z.literal('elotenant'),
+  accountKey: z.literal(TENANT_ACCOUNT_KEY),
   operationId: z.string().min(1).max(200),
   version: z.number().int().positive(),
 });
@@ -50,7 +53,7 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
     repository,
     basis: operation.input.basis,
     requestId: operation.input.requestId,
-    accountKey: 'elotenant',
+    accountKey: TENANT_ACCOUNT_KEY,
     catalog,
     reads,
     legacy: reads,

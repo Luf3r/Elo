@@ -1,6 +1,6 @@
-import type { AgentAnalysis } from './types';
-import type { WorkflowState } from './service-state';
-import { canonical } from './operations';
+import type { AgentAnalysis } from '../automation/types';
+import type { WorkflowState } from '../automation/service-state';
+import { canonical } from '../shared/canonical';
 
 /** A reviewed analysis is a single request, not an account-wide identity rule.
  * The original submission must be replayed exactly; new commercial requests

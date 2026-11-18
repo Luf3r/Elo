@@ -2,11 +2,11 @@ import type { Env } from '../../env';
 import type { AuthContext } from '../../auth';
 import { requireScope } from '../../auth';
 import { jsonToolResult, errorToolResult } from '../result';
-import { throwIfCancelled } from '../../cancellation';
-import { createAgendorCrmClient } from '../../agendor/crm/client';
+import { throwIfCancelled } from '../../shared/cancellation';
+import { createAgendorCrmClient } from '../../automation/clients';
 import type { AgendorCrmClient } from '../../agendor/crm/types';
 import { executeDirectCommand, type DirectToolName } from '../../automation/direct';
-import { SafeError } from '../../errors';
+import { SafeError } from '../../shared/errors';
 
 export const readAnnotations = {
   readOnlyHint: true,

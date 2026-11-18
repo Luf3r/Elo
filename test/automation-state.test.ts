@@ -1,4 +1,4 @@
-import { authorizePlan } from '../src/automation/authorization';
+import { authorizePlan } from '../src/domain/authorization';
 import { env, runInDurableObject, evictDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import type { AutomationAccount } from '../src/automation/state/account';
