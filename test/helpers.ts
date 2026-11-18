@@ -51,7 +51,6 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     }),
     AGENDOR_CRM_TOKEN: 'unit-crm-token',
     AGENDOR_CHAT_ACCOUNT_ID: '',
-    MCP_TEST_TOKEN: 'unit-mcp-token',
     OAUTH_KV: (runtimeEnv as { OAUTH_KV: KVNamespace }).OAUTH_KV,
     OAUTH_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     ACCESS_CLIENT_ID: 'unit-client',

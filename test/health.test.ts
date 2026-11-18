@@ -12,7 +12,6 @@ describe('routing and health', () => {
     expect(runtime.AGENDOR_CRM_TOKEN).toBe('unit-crm-token');
     expect(runtime.AGENDOR_CHAT_TOKEN).toBe('');
     expect(runtime.AGENDOR_CHAT_ACCOUNT_ID).toBe('');
-    expect(runtime.MCP_TEST_TOKEN).toBe('unit-mcp-token');
     expect(runtime.ACCESS_CLIENT_ID).toBe('unit-client');
     expect(runtime.ACCESS_CLIENT_SECRET).toBe('unit-secret');
     expect(runtime.RUN_AGENDOR_CONTRACT_TESTS).toBe('0');
@@ -31,7 +30,7 @@ describe('routing and health', () => {
     });
     expect(COMMIT).toBe('unknown');
     expect(text).not.toContain('unit-crm-token');
-    expect(text).not.toContain('unit-mcp-token');
+    expect(text).not.toContain('unit-secret');
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each(['/unknown', '/mcp/extra', '/'])('rejects unknown path %s', async (path) => {

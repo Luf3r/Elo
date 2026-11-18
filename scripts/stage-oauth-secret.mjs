@@ -30,7 +30,7 @@ const child = spawnSync(
   },
 );
 let output = String(child.stdout ?? '') + String(child.stderr ?? '');
-for (const key of ['ACCESS_CLIENT_SECRET', 'AGENDOR_CRM_TOKEN', 'MCP_TEST_TOKEN'])
+for (const key of ['ACCESS_CLIENT_SECRET', 'AGENDOR_CRM_TOKEN'])
   if (process.env[key]) output = output.split(process.env[key]).join('[REDACTED]');
 process.stdout.write(output);
 process.exitCode = child.status ?? 1;

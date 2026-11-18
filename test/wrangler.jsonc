@@ -10,7 +10,6 @@
     "AGENDOR_CHAT_ACCOUNT_ID": "",
     "AGENDOR_CRM_TOKEN": "unit-crm-token",
     "AGENDOR_CHAT_TOKEN": "",
-    "MCP_TEST_TOKEN": "unit-mcp-token",
     "RUN_AGENDOR_CONTRACT_TESTS": "0",
     "ACCESS_CLIENT_ID": "unit-client",
     "ACCESS_CLIENT_SECRET": "unit-secret",

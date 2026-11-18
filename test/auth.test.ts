@@ -11,9 +11,9 @@ describe('OAuth authentication', () => {
     'Basic x',
     'Bearer ',
     'Bearer x',
-    'Bearer unit-mcp-token',
-    'Bearer unit-mcp-token trailing',
-    'Bearer\tunit-mcp-token',
+    'Bearer static-token',
+    'Bearer static-token trailing',
+    'Bearer\tstatic-token',
   ])('rejects %s', async (header) => {
     const r = await worker.fetch(
       new Request(RESOURCE, { headers: header ? { Authorization: header } : {} }),

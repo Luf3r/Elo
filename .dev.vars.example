@@ -10,4 +10,3 @@ ACCESS_CLIENT_SECRET="replace-me"
 # Application mode/capabilities/mappings/inbox allowlist/native creator state live in
 # the versioned Durable Object policy, not environment variables. Initial policy is disabled.
 # docs/rollout-pilot.json is a non-authorizing, empty-target rollout manifest.
-# MCP_TEST_TOKEN is retired and does not authenticate OAuth.

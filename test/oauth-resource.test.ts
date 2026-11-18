@@ -39,14 +39,16 @@ describe('OAuth resource integration', () => {
       ],
     });
   });
-  it('rejects old static tokens with a discovery challenge', async () => {
-    const r = await worker.fetch(
-      new Request(RESOURCE, { headers: { Authorization: 'Bearer unit-mcp-token' } }),
-      oauthEnv(),
-      context(),
-    );
-    expect(r.status).toBe(401);
-    expect(r.headers.get('www-authenticate')).toContain('resource_metadata=');
+  it('rejects static bearer tokens on /mcp with a discovery challenge', async () => {
+    for (const method of ['GET', 'POST']) {
+      const r = await worker.fetch(
+        new Request(RESOURCE, { method, headers: { Authorization: 'Bearer static-token' } }),
+        oauthEnv(),
+        context(),
+      );
+      expect(r.status).toBe(401);
+      expect(r.headers.get('www-authenticate')).toContain('resource_metadata=');
+    }
   });
   it('refuses token issuance for an unauthorized stored identity', async () => {
     await expect(issueTestToken(oauthEnv(), { userId: 'owner-sub', email: 'other@example.com' })).rejects.toThrow(
@@ -100,7 +102,7 @@ describe('OAuth resource integration', () => {
     async (key) => {
       const env = oauthEnv({ [key]: undefined });
       const r = await worker.fetch(
-        new Request(RESOURCE, { headers: { Authorization: 'Bearer unit-mcp-token' } }),
+        new Request(RESOURCE, { headers: { Authorization: 'Bearer static-token' } }),
         env,
         context(),
       );

@@ -16,7 +16,6 @@ export default defineConfig({
           AGENDOR_CRM_TOKEN: process.env.AGENDOR_CRM_TOKEN ?? '',
           AGENDOR_CHAT_TOKEN: process.env.AGENDOR_CHAT_TOKEN ?? '',
           AGENDOR_CHAT_ACCOUNT_ID: process.env.AGENDOR_CHAT_ACCOUNT_ID ?? '',
-          MCP_TEST_TOKEN: 'unit-mcp-token',
           RUN_AGENDOR_CONTRACT_TESTS: '1',
         },
       },

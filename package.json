@@ -22,7 +22,6 @@
     "deploy": "wrangler deploy",
     "inspector": "mcp-inspector",
     "verify:mcp": "node scripts/verify-mcp.mjs",
-    "setup:token": "node scripts/setup-local-token.mjs",
     "oauth:login": "node scripts/oauth-login.mjs",
     "verify:oauth": "node scripts/verify-oauth.mjs",
     "oauth:stage-secret": "node scripts/stage-oauth-secret.mjs",

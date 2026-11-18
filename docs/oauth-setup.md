@@ -61,7 +61,7 @@ Depois:
 npm run verify:mcp
 ```
 
-O Inspector usa o access token OAuth somente em memória. Verifica saúde, rejeição de credenciais inválidas, oito ferramentas e quatro consultas CRM reais; nenhum conteúdo dos registros é exibido. `MCP_OAUTH_ACCESS_TOKEN` local pode substituir a sessão para diagnóstico, mas não há fallback para `MCP_TEST_TOKEN`. O verificador rejeita outro host remoto para não transmitir a credencial fora deste Worker.
+O Inspector usa o access token OAuth somente em memória. Verifica saúde, rejeição de credenciais inválidas, oito ferramentas e quatro consultas CRM reais; nenhum conteúdo dos registros é exibido. `MCP_OAUTH_ACCESS_TOKEN` local pode substituir a sessão para diagnóstico, sem fallback para token fixo. O verificador rejeita outro host remoto para não transmitir a credencial fora deste Worker.
 
 ## Expiração, revogação e rollback
 
