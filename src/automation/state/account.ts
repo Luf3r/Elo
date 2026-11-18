@@ -23,7 +23,7 @@ export class AutomationAccount extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.repository = new AccountRepository(ctx.storage);
-    ctx.blockConcurrencyWhile(async () => {
+    void ctx.blockConcurrencyWhile(async () => {
       migrate(ctx.storage);
       if ((await ctx.storage.getAlarm()) === null)
         await ctx.storage.setAlarm(this.repository.nextMaintenance(Date.now()));
