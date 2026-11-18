@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { migrate, migrations, runMigrations, type Migration } from '../src/automation/state/migrations';
 import type { WorkLease } from '../src/automation/types';
 import type { Env } from '../src/env';
+import { buildWorkLease } from './fixtures/builders';
 
 type SchemaRow = {
   type: string;
@@ -40,15 +41,12 @@ function readAppliedVersions(sql: SqlStorage): number[] {
 }
 
 function makeLease(workId: string, target: WorkLease['target']): WorkLease {
-  return {
+  return buildWorkLease({
     workId,
     leaseToken: `token-${workId}`,
-    owner: { userId: 'operator-1', clientId: 'client-1' },
-    fence: 1,
     expiresAt: '2030-01-01T00:00:00.000Z',
-    mode: 'preview',
     target,
-  };
+  });
 }
 
 function seedFixtureData(sql: SqlStorage, version: number, futureExpiry: number) {
