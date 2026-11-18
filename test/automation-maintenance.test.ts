@@ -5,13 +5,6 @@ import { AccountRepository, EVIDENCE_RETENTION_MS } from '../src/automation/stat
 import { runPlan } from '../src/automation/execution/executor';
 import { enqueueOperation, handleAutomationQueue } from '../src/automation/execution/queue';
 import { executionFixture } from './fixtures/execution';
-import {
-  buildContextProjection,
-  buildInternalFact,
-  buildPlanBasis,
-  buildReserveWorkInput,
-  buildSnapshotManifest,
-} from './fixtures/builders';
 import type { Env } from '../src/env';
 import { defaultAutomationPolicy } from '../src/automation/service';
 import { durableFailure } from './helpers';
@@ -49,7 +42,6 @@ it('persists a recovery delivery before queue send and respects the direct 429 d
       },
     }),
   ).rejects.toThrow();
-
   const result = await runInDurableObject(f.stub, async (_instance, ctx) => {
     const sent: unknown[] = [];
     const repository = new AccountRepository(ctx.storage);
@@ -114,19 +106,29 @@ it('scrubs retained execution payloads but preserves request and command tombsto
 
 it('publishes a pending customer projection after queued confirmation, once only', async () => {
   const f = await executionFixture();
-  await f.stub.saveContextProjection(buildContextProjection({ verifiedAt: new Date().toISOString() }), f.deps.basis);
+  await f.stub.saveContextProjection(
+    {
+      customerId: 'customer-1',
+      version: 1,
+      verifiedAt: new Date().toISOString(),
+      facts: [],
+      contacts: [],
+      demands: [],
+      receipts: [],
+      pendingReasons: [],
+    },
+    f.deps.basis,
+  );
   const status = await runPlan(f.authorization, { ...f.deps, defer: true });
   const message = {
     body: { accountKey: 'elotenant', operationId: status.operationId, version: 1 },
     ack: vi.fn(),
     retry: vi.fn(),
   };
-
   await handleAutomationQueue({ messages: [message] }, env as Env, () => f.deps);
   const context = await f.stub.getContext('customer-1');
   expect(context.version).toBe(1);
   expect(context.markdown).toContain('company-create');
-
   await handleAutomationQueue({ messages: [message] }, env as Env, () => f.deps);
   expect((await f.stub.getContext('customer-1')).version).toBe(1);
 });
@@ -143,7 +145,6 @@ it('records review resolution with CAS and rejects approval of a foreign plan', 
     state: 'open',
     reasons: ['AMBIGUOUS'],
   });
-
   const invalid = await durableFailure(f.stub, (instance) =>
     instance.resolveReview(
       {
@@ -155,7 +156,6 @@ it('records review resolution with CAS and rejects approval of a foreign plan', 
     ),
   );
   expect(invalid.message).toBe('PLAN_STALE');
-
   await f.stub.resolveReview(
     { reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'reject', reason: 'Synthetic rejection' } },
     owner,
@@ -165,7 +165,6 @@ it('records review resolution with CAS and rejects approval of a foreign plan', 
     expect.arrayContaining([expect.objectContaining({ action: 'review_resolved', targetId: 'review-1', version: 2 })]),
   );
   expect(JSON.stringify(audit)).not.toContain('Synthetic rejection');
-
   const second = await durableFailure(f.stub, (instance) =>
     instance.resolveReview(
       { reviewId: 'review-1', expectedVersion: 1, decision: { kind: 'reject', reason: 'again' } },
@@ -179,7 +178,6 @@ it('pauses queued sends on policy revocation and retains command history', async
   const f = await executionFixture();
   const operation = await runPlan(f.authorization, { ...f.deps, defer: true });
   await f.stub.updatePolicy({ ...defaultAutomationPolicy, version: 2 }, 1, f.deps.basis.lease.owner);
-
   const report = await runInDurableObject(f.stub, async (_instance, ctx) => {
     const sent: unknown[] = [];
     const report = await maintainAccount(Date.now(), {
@@ -232,10 +230,8 @@ it('uses increasing backoff when 429 omits Retry-After, and keeps a referenced e
     ctx.storage.sql.exec('UPDATE execution_commands SET next_attempt_at = 0');
   });
   await runPlan(f.authorization, f.deps);
-
   const second = await f.stub.getExecutionCommand('company-create');
   expect(second!.nextAttemptAt - Date.now()).toBeGreaterThan(19_000);
-
   for (let i = 0; i < 5; i++) {
     await runInDurableObject(f.stub, (_instance, ctx) => {
       ctx.storage.sql.exec('UPDATE execution_commands SET next_attempt_at = 0');
@@ -252,34 +248,46 @@ it('uses increasing backoff when 429 omits Retry-After, and keeps a referenced e
 it('preserves already published customer facts when a later conversation contributes only a new demand', async () => {
   const f = await executionFixture();
   const basis = f.deps.basis;
-  const original = buildContextProjection({
+  const original = {
+    customerId: 'customer-1',
+    version: 1,
     verifiedAt: new Date().toISOString(),
-    facts: [buildInternalFact({ value: 'Persistent Customer', sources: f.authorization.plan.sourceRefs })],
-  });
+    facts: [
+      {
+        entity: 'organization' as const,
+        field: 'name',
+        value: 'Persistent Customer',
+        certainty: 'confirmed' as const,
+        sources: f.authorization.plan.sourceRefs,
+      },
+    ],
+    contacts: [],
+    demands: [],
+    receipts: [],
+    pendingReasons: [],
+  };
   await f.stub.saveContextProjection(original, basis);
   await f.stub.refreshCustomerContext('customer-1', 0);
-
-  const lease = await f.stub.reserveWork(
-    buildReserveWorkInput({
-      requestId: 'another-conversation',
-      target: { kind: 'conversation', conversationId: 102 },
-      mode: 'preview',
-      actor: f.authorization.actor,
-      payloadDigest: 'another-input',
-    }),
-  );
-  const next = buildPlanBasis(lease, { contextVersion: 1 });
-  await f.stub.installSnapshot(
-    lease,
-    buildSnapshotManifest({
-      workId: lease.workId,
-      contextVersion: 1,
-      readAt: new Date().toISOString(),
-      sources: [],
-    }),
-  );
+  const lease = await f.stub.reserveWork({
+    requestId: 'another-conversation',
+    target: { kind: 'conversation', conversationId: 102 },
+    mode: 'preview',
+    actor: f.authorization.actor,
+    payloadDigest: 'another-input',
+  });
+  const next = { ...basis, lease, contextVersion: 1 };
+  await f.stub.installSnapshot(lease, {
+    workId: lease.workId,
+    snapshotVersion: 1,
+    contextVersion: 1,
+    catalogVersion: 'catalog-1',
+    readAt: new Date().toISOString(),
+    sources: [],
+    messages: [],
+    records: [],
+    coverage: { complete: true, pagesRead: 1, missingReasons: [] },
+  });
   await f.stub.saveContextProjection({ ...original, version: 2, facts: [] }, next);
-
   const context = await f.stub.refreshCustomerContext('customer-1', 1);
   expect(context.markdown).toContain('Persistent Customer');
 });

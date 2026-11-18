@@ -4,14 +4,26 @@ import { testEnv } from './helpers';
 import { createAutomationService } from '../src/automation/service';
 import { budgetMock } from './helpers';
 import { plannerAnalysis } from './fixtures/planner';
-import { buildActor, buildAnalysisInput, buildCoverage } from './fixtures/builders';
 import { jsonToolResult } from '../src/mcp/result';
 import * as chat from '../src/automation/clients';
 import { accountState } from '../src/automation/state/budget';
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 
-const actor = buildActor({ userId: 'owner-sub', clientId: 'workflow-client' });
-
+const actor = {
+  userId: 'owner-sub',
+  clientId: 'workflow-client',
+  scopes: [
+    'automation:process',
+    'automation:read',
+    'automation:manage',
+    'crm:read',
+    'chat:read',
+    'crm:create',
+    'crm:enrich',
+    'crm:write',
+  ],
+  expiresAt: Date.now() + 600_000,
+};
 function upstream() {
   return vi.fn(async (request: Request) => {
     const url = new URL(request.url);
@@ -57,7 +69,6 @@ const automationNames = [
   'update_policy',
   'reprocess',
 ].map((n) => `automation_${n}`);
-
 describe('agent workflow MCP boundary', () => {
   it('publishes exactly 44 tools when both products are configured', async () => {
     const { data } = await rpc('tools/list', {}, configured());
@@ -72,7 +83,6 @@ describe('agent workflow MCP boundary', () => {
       );
     }
   });
-
   it('requires the full process scope set before any upstream request', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
@@ -88,7 +98,6 @@ describe('agent workflow MCP boundary', () => {
     }
     expect(fetch).not.toHaveBeenCalled();
   });
-
   it('reads empty status and reviews without creating work or calling upstream', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
@@ -105,7 +114,6 @@ describe('agent workflow MCP boundary', () => {
     expect(JSON.parse(reviews.data.result.content[0].text)).toMatchObject({ reviews: [] });
     expect(fetch).not.toHaveBeenCalled();
   });
-
   it('persists the preview work, analysis and plan across eviction', async () => {
     const env = configured();
     budgetMock(env).mockResolvedValue({ allowed: true, reservationId: 'test' });
@@ -116,7 +124,6 @@ describe('agent workflow MCP boundary', () => {
       expectedVersion: 1,
       patch: { mode: 'preview', capabilities: ['crm:create', 'crm:enrich', 'crm:write'] },
     });
-
     const prepared = await service.prepare({
       requestId: 'preview-request',
       target: { kind: 'conversation', conversationId: 101 },
@@ -126,26 +133,24 @@ describe('agent workflow MCP boundary', () => {
     if (prepared.state !== 'ready') return;
     expect(prepared.work.snapshot.conversations[0]?.messages[0]?.id).toBe(201);
     expect(fetch.mock.calls.every(([request]) => request.method === 'GET')).toBe(true);
-
     const analysis = plannerAnalysis();
     analysis.customerSelection = { kind: 'new', entity: 'person', record: { name: 'Synthetic Contact' } };
     analysis.demands = [];
-    const submission = buildAnalysisInput({
+    const submission = {
       workId: prepared.work.workId,
       leaseToken: prepared.work.leaseToken,
       expectedSnapshotVersion: prepared.work.snapshotVersion,
+      expectedContextVersion: 0,
       analysis,
-    });
+    };
     const plan = await service.submit(submission);
     expect(plan.state).toBe('review');
-
     const stub = accountState(env);
     await evictDurableObject(env.AUTOMATION_STATE.get(stub.id));
     expect(JSON.parse((await stub.getServicePlan(plan.planId))!)).toMatchObject({
       plan,
       workflow: { analysis, lease: { mode: 'preview' }, work: prepared.work },
     });
-
     const replay = await service.prepare({
       requestId: 'preview-request',
       target: { kind: 'conversation', conversationId: 101 },
@@ -153,7 +158,6 @@ describe('agent workflow MCP boundary', () => {
     });
     expect(replay).toEqual(prepared);
     expect(await createAutomationService(env, actor).submit(submission)).toEqual(plan);
-
     await runInDurableObject(env.AUTOMATION_STATE.get(stub.id), (_instance, ctx) => {
       expect(ctx.storage.sql.exec('SELECT work_id FROM snapshot_manifest').toArray()).toEqual([
         { work_id: prepared.work.workId },
@@ -162,7 +166,6 @@ describe('agent workflow MCP boundary', () => {
     });
     expect(fetch.mock.calls.every(([request]) => request.method === 'GET')).toBe(true);
   });
-
   it('binds submission to its actor, lease, versions and current source manifest', async () => {
     const env = configured();
     budgetMock(env).mockResolvedValue({ allowed: true, reservationId: 'test' });
@@ -175,25 +178,24 @@ describe('agent workflow MCP boundary', () => {
     });
     expect(prepared.state).toBe('ready');
     if (prepared.state !== 'ready') return;
-
-    const input = buildAnalysisInput({
+    const input = {
       workId: prepared.work.workId,
       leaseToken: prepared.work.leaseToken,
+      expectedSnapshotVersion: 1,
+      expectedContextVersion: 0,
       analysis: plannerAnalysis(),
-    });
+    };
     for (const changed of [
       { ...input, leaseToken: 'wrong' },
       { ...input, expectedSnapshotVersion: 2 },
       { ...input, expectedContextVersion: 1 },
-    ]) {
+    ])
       await expect(service.submit(changed)).rejects.toThrow();
-    }
     await expect(
       createAutomationService(env, { ...actor, clientId: 'another-client' }).submit(input),
     ).rejects.toThrow();
     await expect(service.submit(input)).rejects.toThrow(); // references not in the persisted manifest
   });
-
   it('returns and binds a persisted continuation after budget deferral', async () => {
     const env = configured();
     vi.stubGlobal('fetch', upstream());
@@ -209,7 +211,6 @@ describe('agent workflow MCP boundary', () => {
     if (deferred.state !== 'deferred') return;
     expect(deferred.leaseToken).toBeTruthy();
     expect(deferred.continuation).toBeTruthy();
-
     const resume = {
       requestId: 'resume',
       workId: deferred.workId,
@@ -220,7 +221,6 @@ describe('agent workflow MCP boundary', () => {
     await expect(
       createAutomationService({ ...env, AGENDOR_CHAT_ACCOUNT_ID: '999' }, actor).prepare(resume),
     ).rejects.toThrow();
-
     budget.mockResolvedValue({ allowed: true, reservationId: 'test' });
     await runInDurableObject(env.AUTOMATION_STATE.get(accountState(env).id), (_instance, ctx) =>
       ctx.storage.sql.exec(
@@ -231,7 +231,6 @@ describe('agent workflow MCP boundary', () => {
     );
     expect((await service.prepare(resume)).state).toBe('ready');
   });
-
   it('allows management reprocessing without requiring a process grant', async () => {
     const env = configured();
     budgetMock(env).mockResolvedValue({ allowed: true, reservationId: 'test' });
@@ -245,13 +244,11 @@ describe('agent workflow MCP boundary', () => {
     });
     expect(result.state).toBe('ready');
   });
-
   it('bounds a response rather than returning an oversized upstream field', () => {
     const result = jsonToolResult({ text: 'x'.repeat(600_000) });
     expect(result.content[0]!.text.length).toBeLessThan(1000);
     expect(result.isError).toBe(true);
   });
-
   it('continues persisted catalog preparation under a small per-call limit', async () => {
     const env = configured();
     budgetMock(env).mockResolvedValue({ allowed: true, reservationId: 'test' });
@@ -261,7 +258,6 @@ describe('agent workflow MCP boundary', () => {
       expectedVersion: 1,
       patch: { limits: { maxConversations: 1, maxCommands: 10, maxRequests: 1 } },
     });
-
     const first = await service.prepare({
       requestId: 'catalog-continue',
       target: { kind: 'conversation', conversationId: 101 },
@@ -269,7 +265,6 @@ describe('agent workflow MCP boundary', () => {
     });
     expect(first.state).toBe('continue');
     if (first.state !== 'continue') return;
-
     let current = first;
     for (let count = 0; count < 10; count++) {
       const next = await service.prepare({
@@ -285,7 +280,6 @@ describe('agent workflow MCP boundary', () => {
     }
     throw Error('Catalog continuation did not finish');
   });
-
   it('directs pending callers to separate discovery before choosing or reading a conversation', async () => {
     const fetch = upstream();
     vi.stubGlobal('fetch', fetch);
@@ -312,14 +306,12 @@ it('diagnoses the effective allowlist and storage without upstream calls or work
   });
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
-
   const target = { kind: 'conversation', conversationId: 101 };
   const scopes = ['automation:process', 'chat:read', 'crm:read'];
   const diagnose = async (args: object, runtime = env) => {
     const { data } = await callTool('automation_preflight_sync', { target, mode: 'preview', ...args }, runtime, scopes);
     return JSON.parse(data.result.content[0].text);
   };
-
   expect(await diagnose({ inboxIds: [4101], limits: { maxMessagePages: 1, maxAttachmentPages: 0 } })).toMatchObject({
     state: 'ready_for_scope_check',
     effectiveMode: 'preview',
@@ -341,7 +333,6 @@ it('diagnoses the effective allowlist and storage without upstream calls or work
     persistence: { available: false },
     concurrency: { available: false },
   });
-
   const stub = accountState(env);
   await runInDurableObject(env.AUTOMATION_STATE.get(stub.id), (_instance, ctx) => {
     for (const table of ['work', 'snapshot_manifest', 'plans', 'execution_operations', 'budget']) {
@@ -379,7 +370,6 @@ it('revalidates the canonical inbox before returning a completed replay', async 
     mode: 'preview' as const,
   };
   expect((await service.prepare(input)).state).toBe('ready');
-
   fetch.mockClear().mockResolvedValueOnce(Response.json({ id: 101, inbox_id: 9999 }));
   await expect(service.prepare(input)).rejects.toMatchObject({ code: 'MCP_UNAUTHORIZED' });
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -392,7 +382,6 @@ it('enforces page caps and refuses a mode or inbox expansion', async () => {
   vi.stubGlobal('fetch', fetch);
   const service = createAutomationService(env, actor);
   await service.updatePolicy({ expectedVersion: 1, patch: { mode: 'preview', capabilities: ['crm:create'] } });
-
   const input = {
     requestId: 'bounded',
     target: { kind: 'conversation' as const, conversationId: 101 },
@@ -401,7 +390,6 @@ it('enforces page caps and refuses a mode or inbox expansion', async () => {
   await expect(service.prepare({ ...input, mode: 'apply' })).rejects.toThrow();
   await expect(service.prepare({ ...input, inboxIds: [4101, 9999] })).rejects.toThrow();
   expect(fetch).not.toHaveBeenCalled();
-
   fetch.mockImplementation(async (request: Request) => {
     const path = new URL(request.url).pathname;
     if (path.endsWith('/conversations/101')) return Response.json({ id: 101, inbox_id: 4102 });
@@ -409,7 +397,6 @@ it('enforces page caps and refuses a mode or inbox expansion', async () => {
       return Response.json({ payload: Array.from({ length: 100 }, (_, i) => ({ id: i + 2 })) });
     return Response.json({ data: [] });
   });
-
   const result = await service.prepare({
     ...input,
     inboxIds: [4102],
@@ -439,7 +426,6 @@ it('revalidates a CRM-only continuation before reading another catalog page', as
     expectedVersion: 1,
     patch: { mode: 'preview', limits: { maxConversations: 1, maxCommands: 10, maxRequests: 1 } },
   });
-
   const first = await service.prepare({
     requestId: 'partially-prepared',
     target: { kind: 'conversation', conversationId: 101 },
@@ -447,7 +433,6 @@ it('revalidates a CRM-only continuation before reading another catalog page', as
     inboxIds: [4101],
   });
   if (first.state !== 'continue' || !first.leaseToken) throw Error('Expected catalog continuation');
-
   const resume = {
     requestId: 'continue-prepare',
     workId: first.workId,
@@ -472,27 +457,24 @@ it('renews an expired preparation with a new snapshot and rejects the old token 
     target: { kind: 'conversation' as const, conversationId: 101 },
     mode: 'preview' as const,
   };
-
   const first = await service.prepare(start);
   if (first.state !== 'ready') throw Error('Expected initial snapshot');
-
   const stub = accountState(env);
   await runInDurableObject(env.AUTOMATION_STATE.get(stub.id), (_instance, ctx) => {
     ctx.storage.sql.exec('UPDATE work SET expires_at = 0 WHERE work_id = ?', first.work.workId);
   });
-
   const next = await service.prepare(start);
   if (next.state !== 'ready') throw Error('Expected renewed snapshot');
   expect(next.work.workId).toBe(first.work.workId);
   expect(next.work.leaseToken).not.toBe(first.work.leaseToken);
   expect(next.work.snapshotVersion).toBe(first.work.snapshotVersion + 1);
-
-  const stale = buildAnalysisInput({
+  const stale = {
     workId: first.work.workId,
     leaseToken: next.work.leaseToken,
     expectedSnapshotVersion: first.work.snapshotVersion,
+    expectedContextVersion: 0,
     analysis: plannerAnalysis(),
-  });
+  };
   await expect(service.submit(stale)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   await expect(
     service.submit({ ...stale, leaseToken: first.work.leaseToken, expectedSnapshotVersion: next.work.snapshotVersion }),
@@ -513,13 +495,11 @@ it('verifies all customer conversation IDs before reading any of their content',
       Date.now() + 60_000,
     );
   });
-
   const fetch = vi.fn(async (request: Request) => {
     const id = Number(new URL(request.url).pathname.split('/').at(-1));
     return Response.json({ id, inbox_id: id === 101 ? 4101 : 9999, meta: { sender: { id: 2 } } });
   });
   vi.stubGlobal('fetch', fetch);
-
   const service = createAutomationService(env, actor);
   await expect(
     service.prepare({
@@ -542,12 +522,11 @@ it('recovers the same preparation after a simulated SQLite snapshot persistence 
   let failures = 1;
   const wrapped = new Proxy(real, {
     get(target, property) {
-      if (property === 'installSnapshot') {
+      if (property === 'installSnapshot')
         return async (...args: Parameters<typeof real.installSnapshot>) => {
           if (failures-- > 0) throw new Error('synthetic persistence outage');
           return real.installSnapshot(...args);
         };
-      }
       return Reflect.get(target, property);
     },
   });
@@ -557,7 +536,6 @@ it('recovers the same preparation after a simulated SQLite snapshot persistence 
       return Reflect.get(target, property);
     },
   });
-
   const service = createAutomationService({ ...env, AUTOMATION_STATE: namespace }, actor);
   const request = {
     requestId: 'snapshot-outage',
@@ -566,13 +544,11 @@ it('recovers the same preparation after a simulated SQLite snapshot persistence 
     limits: { maxMessagePages: 1, maxAttachmentPages: 0 },
   };
   await expect(service.prepare(request)).rejects.toThrow('synthetic persistence outage');
-
   const again = await service.prepare(request);
   expect(again.state).toBe('ready');
   if (again.state !== 'ready') throw Error('Expected a prepared work');
   expect(again.work.coverage.complete).toBe(false);
   expect(again.work.coverage.missingReasons).toContain('attachment_page_limit');
-
   const replay = await service.prepare(request);
   expect(replay).toEqual(again);
 });
@@ -588,10 +564,9 @@ it('routes a mismatched message page to review and never treats it as a ready sn
     listMessages: async () => ({
       conversationId: 999,
       messages: [],
-      coverage: buildCoverage(),
+      coverage: { complete: true, missingReasons: [], pagesRead: 1 },
     }),
   });
-
   const result = await createAutomationService(env, actor).prepare({
     requestId: 'bad-conversation-page',
     target: { kind: 'conversation', conversationId: 101 },
@@ -624,7 +599,6 @@ it('excludes concurrent preparation of the same work and releases the lock on co
     return original(request);
   });
   vi.stubGlobal('fetch', fetch);
-
   const service = createAutomationService(env, actor);
   const request = {
     requestId: 'same-concurrent-work',

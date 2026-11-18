@@ -12,7 +12,6 @@ const current: DealSnapshot = {
   stage: 'new_request',
   fields: [],
 };
-
 function evidence(requested: StageKey, event: string, changes = {}): StageEvidence {
   return {
     demandId: 'demand-a',
@@ -28,7 +27,6 @@ function evidence(requested: StageKey, event: string, changes = {}): StageEviden
     ],
   } as StageEvidence;
 }
-
 describe('evidence-backed stage decisions', () => {
   it.each([
     ['new_request', 'request', 1],
@@ -40,7 +38,6 @@ describe('evidence-backed stage decisions', () => {
     expect(result.patch).toEqual({ funnel: 10, dealStage: sequence });
     expect(result.reviewReasons).toEqual([]);
   });
-
   it.each([
     ['internal_approval', 'client_approval', { actor: 'client' }],
     ['proposal_sent', 'future_send', {}],
@@ -53,7 +50,6 @@ describe('evidence-backed stage decisions', () => {
     expect(result.patch).toBeUndefined();
     expect(result.reviewReasons).toContain('STAGE_EVIDENCE_INSUFFICIENT');
   });
-
   it('keeps completed internal approval until actual sending', () => {
     expect(
       decideStage(evidence('internal_approval', 'internal_approval_completed'), {
@@ -63,7 +59,6 @@ describe('evidence-backed stage decisions', () => {
       }).patch,
     ).toBeUndefined();
   });
-
   it('routes regressions and funnel corrections to review', () => {
     expect(
       decideStage(evidence('preparing_proposal', 'preparation'), { ...current, stage: 'proposal_sent', stageId: 104 })
@@ -73,13 +68,11 @@ describe('evidence-backed stage decisions', () => {
       decideStage({ ...evidence('proposal_sent', 'proposal_sent'), approach: 'elotenant' }, current).reviewReasons,
     ).toContain('FUNNEL_CHANGE_REQUIRES_REVIEW');
   });
-
   it.each(['won', 'lost'] as const)('protects a %s deal', (status) => {
     expect(decideStage(evidence('proposal_sent', 'proposal_sent'), { ...current, status })).toMatchObject({
       reviewReasons: ['DEAL_CLOSED'],
     });
   });
-
   it('rejects ambiguous mappings and missing sources', () => {
     const input = evidence('proposal_sent', 'proposal_sent');
     expect(decideStage({ ...input, mapping: [...input.mapping!, input.mapping![3]!] }, current).patch).toBeUndefined();

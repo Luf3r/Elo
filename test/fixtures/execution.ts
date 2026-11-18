@@ -4,20 +4,16 @@ import { authorizePlan } from '../../src/domain/authorization';
 import type { ExecutionDeps } from '../../src/automation/execution/executor';
 import type { MutationOutcome } from '../../src/agendor/crm/types';
 import type { Env } from '../../src/env';
-import type { MutationCommand } from '../../src/automation/types';
-import { catalogFixture, validCommand } from './automation';
-import {
-  buildActor,
-  buildPageInfo,
-  buildPlanBasis,
-  buildPolicy,
-  buildSnapshotManifest,
-  buildSyncPlan,
-} from './builders';
-
+import type { MutationCommand, SyncPlan } from '../../src/automation/types';
+import { catalogFixture, validCommand, validPlan } from './automation';
 export async function executionFixture(commands: MutationCommand[] = [validCommand]) {
   const stub = (env as Env).AUTOMATION_STATE.get((env as Env).AUTOMATION_STATE.newUniqueId());
-  const actor = buildActor({ scopes: ['automation:process', 'crm:create', 'crm:enrich', 'crm:write'] });
+  const actor = {
+    userId: 'operator-1',
+    clientId: 'client-1',
+    scopes: ['automation:process', 'crm:create', 'crm:enrich', 'crm:write'],
+    expiresAt: Date.now() + 600_000,
+  };
   const lease = await stub.reserveWork({
     requestId: 'work-request',
     target: { kind: 'customer', customerId: 'customer-1' },
@@ -25,21 +21,32 @@ export async function executionFixture(commands: MutationCommand[] = [validComma
     actor,
     payloadDigest: 'input',
   });
-  const basis = buildPlanBasis(lease);
-  const plan = buildSyncPlan({ workId: lease.workId, orderedCommands: commands });
-
-  await stub.installSnapshot(
-    lease,
-    buildSnapshotManifest({
-      workId: lease.workId,
-      readAt: new Date().toISOString(),
-      sources: validCommand.sourceRefs,
-    }),
-  );
+  const basis = { lease, customerId: 'customer-1', snapshotVersion: 1, contextVersion: 0, catalogVersion: 'catalog-1' };
+  const plan: SyncPlan = { ...validPlan, workId: lease.workId, orderedCommands: commands };
+  await stub.installSnapshot(lease, {
+    workId: lease.workId,
+    snapshotVersion: 1,
+    contextVersion: 0,
+    catalogVersion: 'catalog-1',
+    readAt: new Date().toISOString(),
+    sources: validCommand.sourceRefs,
+    messages: [],
+    records: [],
+    coverage: { complete: true, pagesRead: 1, missingReasons: [] },
+  });
   await stub.savePlan(plan, basis);
-
-  const policy = buildPolicy({ capabilities: ['crm:create', 'crm:enrich', 'crm:write'] });
-  const authorization = authorizePlan(actor, plan, policy);
+  const policy = {
+    version: 1,
+    mode: 'apply' as const,
+    allowedInboxIds: [],
+    capabilities: ['crm:create', 'crm:enrich', 'crm:write'] as const,
+    funnelMapping: {},
+    stageMapping: [],
+    customFieldMapping: [],
+    nativeCreatorDisabled: true,
+    limits: { maxConversations: 10, maxCommands: 10, maxRequests: 20 },
+  };
+  const authorization = authorizePlan(actor, plan, { ...policy, capabilities: [...policy.capabilities] });
   const write = vi.fn(async (): Promise<MutationOutcome> => ({
     state: 'confirmed',
     ref: { kind: 'organization', id: 99 },
@@ -47,7 +54,6 @@ export async function executionFixture(commands: MutationCommand[] = [validComma
   }));
   const verify = vi.fn(async () => [] as string[]);
   const read = vi.fn(async () => ({ id: 99, name: 'Synthetic Organization' }));
-
   const deps: ExecutionDeps = {
     repository: stub,
     basis,
@@ -73,10 +79,9 @@ export async function executionFixture(commands: MutationCommand[] = [validComma
       getTask: read,
       searchOrganizations: vi.fn(async () => ({
         items: [],
-        pageInfo: buildPageInfo(),
+        pageInfo: { page: 1, perPage: 100, hasNext: false, nextPage: null },
       })),
     },
   };
-
   return { stub, authorization, deps, write, verify, read };
 }

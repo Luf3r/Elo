@@ -6,10 +6,7 @@ import type {
   SourceRef,
 } from '../../src/automation/types';
 import { catalogFixture, validAnalysisInput } from './automation';
-import { buildPolicy, buildPreparedWork, buildSourceRef } from './builders';
-
 export const source = { kind: 'message', id: '101:201', revision: 'message-r1' } as const satisfies SourceRef;
-
 export const plannerCatalog: CatalogSnapshot = {
   ...catalogFixture,
   funnels: [
@@ -29,8 +26,8 @@ export const plannerCatalog: CatalogSnapshot = {
     { id: 'logistics', entityType: 'deals', type: 'select', options: [{ id: 'included', name: 'Incluída' }] },
   ],
 };
-
-export const plannerPolicy: AutomationPolicy = buildPolicy({
+export const plannerPolicy: AutomationPolicy = {
+  version: 1,
   mode: 'preview',
   allowedInboxIds: [4101, 4102],
   capabilities: ['crm:read', 'chat:read', 'crm:create', 'crm:enrich', 'crm:write'],
@@ -46,9 +43,9 @@ export const plannerPolicy: AutomationPolicy = buildPolicy({
     { entity: 'deals', field: 'sampleCount', catalogFieldId: 'samples' },
     { entity: 'deals', field: 'logistics', catalogFieldId: 'logistics' },
   ],
+  nativeCreatorDisabled: true,
   limits: { maxConversations: 100, maxCommands: 100, maxRequests: 100 },
-});
-
+};
 export function plannerAnalysis() {
   const analysis = structuredClone(validAnalysisInput.analysis);
   analysis.facts = [];
@@ -58,19 +55,52 @@ export function plannerAnalysis() {
   demand.stage.sources = [source];
   return analysis;
 }
-
 export function plannerWork(): PreparedWork {
-  const work = buildPreparedWork();
-  work.snapshot.catalog = structuredClone(plannerCatalog);
-  return work;
+  return {
+    workId: 'work-1',
+    leaseToken: 'lease-1',
+    expiresAt: '2026-10-29T10:00:00Z',
+    snapshotVersion: 1,
+    contextVersion: 0,
+    customerId: 'customer-1',
+    markdown: '',
+    catalogVersion: 'catalog-1',
+    coverage: { complete: true, missingReasons: [], pagesRead: 1 },
+    snapshot: {
+      catalog: structuredClone(plannerCatalog),
+      candidates: {
+        customerId: 'customer-1',
+        candidates: [
+          {
+            ref: { kind: 'organization', id: 11 },
+            name: 'Synthetic Organization',
+            organizationIds: [],
+            sourceRefs: [],
+          },
+        ],
+        coverage: { complete: true, missingReasons: [], pagesRead: 1 },
+      },
+      conversations: [
+        {
+          conversationId: 101,
+          revision: 'message-r1',
+          contact: null,
+          messages: [{ id: 201, createdAt: 1793142000, direction: 'outgoing', senderType: 'user' }],
+          attachments: [],
+          coverage: { complete: true, missingReasons: [], pagesRead: 1 },
+        },
+      ],
+      records: [],
+      deals: [],
+    },
+  };
 }
-
 export const plannerResolution: ResolutionBundle = {
   customer: {
     kind: 'resolved',
     customerId: 'customer-1',
     ref: { kind: 'organization', id: 11 },
-    sourceRefs: [buildSourceRef({ revision: 'message-r1' })],
+    sourceRefs: [source],
     reviewReasons: [],
   },
   demands: {
