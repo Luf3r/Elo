@@ -1,19 +1,80 @@
 # Elo Agendor Remote MCP
 
-Worker TypeScript com OAuth e Streamable HTTP em `/mcp`. A versão candidata local **0.1.2** oferece **42 ferramentas** quando CRM e Chat estão configurados, preservando as 15 anteriores. Ela prepara conversas, contexto Markdown e catálogo para interpretação pelo agente MCP; submete análises e executa planos somente com política, evidência e escopos válidos. Não requer API ou segredo de IA.
+Worker TypeScript executado na Cloudflare Workers que expõe um servidor MCP remoto via Streamable HTTP (`/mcp`) autenticado por OAuth 2.1 (Cloudflare Access OIDC). Integra Agendor CRM V3 e Agendor Chat V1 com estado durável em Durable Object SQLite (`AutomationAccount`), fila de execução (`AUTOMATION_QUEUE`) e gate de orçamento compartilhado. O agente conectado ao MCP interpreta conversas e envia análises estruturadas; o servidor coordena identidade, catálogo, políticas, fencing e execução recuperável no CRM sem depender de API ou segredo de IA.
 
-Endpoint existente: [MCP](https://elo-agendor-mcp.example.workers.dev/mcp) e [saúde pública](https://elo-agendor-mcp.example.workers.dev/health). A ampliação local ainda **não foi publicada** neste rollout. A última publicação registrada, seus destinos e o gate de ativação estão em [deployment](docs/deployment.md). O [manifesto inicial](docs/rollout-pilot.json) mantém automação `disabled`, capacidades e alvos vazios; não autoriza chamadas remotas ou escrita.
+## Estado atual
 
-Requer Node >=22.19.0. Execute `npm ci`, copie `.dev.vars.example` para `.dev.vars` e preencha os secrets apenas localmente. `npm run dev` inicia o runtime; no Windows, `npm run dev:ephemeral` contorna falhas locais de persistência SQLite. OAuth usa KV, e o estado da automação usa Durable Object SQLite. O modo ephemeral perde esse estado ao encerrar. [OAuth e Access](docs/oauth-setup.md) explicam a conexão dos clientes. Nunca inclua credenciais em URLs ou em `vars` do Wrangler.
+- **Versão do pacote:** `0.1.7` (fonte única em [package.json](package.json) / [src/version.ts](src/version.ts)) — veja o histórico completo e a tabela de versões Cloudflare em [CHANGELOG.md](CHANGELOG.md).
+- **Política de automação:** armazenada e versionada no Durable Object `AutomationAccount` (consulte o modo e a versão vigentes em tempo de execução pela ferramenta `automation_get_status`; não existe manifesto estático de modo).
+- **Catálogo de ferramentas:** gerado diretamente a partir de `tools/list` do servidor em [docs/tools.md](docs/tools.md) (mantido em sincronia por teste automatizado).
+- **Ingresso opcional:** `POST /automation/chat-events` permanece desabilitado por padrão (`AUTOMATION_CHAT_HINTS_ENABLED="false"`).
 
-O fluxo é `automation_prepare_sync` → ler mensagens/contexto e cobertura → interpretar → `automation_submit_analysis` → `automation_apply_plan` somente em apply delegado → `automation_get_operation` → conferir contexto. Preview termina antes de apply. GET/contexto não criam registros; submit grava estado interno e plano, sem escrever CRM. Automação desabilitada não bloqueia ferramentas diretas já autorizadas por seus próprios escopos.
+## Início rápido
 
-As ferramentas CRM incluem leitura, catálogo, criação e enriquecimento tipados, além das quatro atualizações legadas. Criação exige `crm:create`, enriquecimento `crm:enrich`; `crm:write` antigo não concede esses poderes. As oito ferramentas Chat exigem `chat:read`, usam conta fixa e apenas leitura. O [inventário exato e matriz de permissões](docs/operations.md) explicam os 42 nomes e sua disponibilidade condicional.
+Requer **Node `>=22.19.0`**.
 
-Cobertura parcial do Chat, anexos indisponíveis, ambiguidades e semântica não comprovada permanecem pendências. Escrita de produtos/preços e substituição de coleções continuam bloqueadas. Sem comprovação da exclusividade do criador nativo e do vínculo conversa/caixa, mantenha preview. Não há declaração de automação comercial completa ou de piloto real concluído.
+1. Instale as dependências:
 
-Atualização local de confiabilidade: [histórico, inboxes, identidade e anexos](docs/agendor-reliability.md). Apenas inboxes 4101/4102; cobertura de mensagens é calculada e o vínculo nativo tem prioridade. Paginação de coleções e CDN continuam condicionadas à evidência da API real.
+   ```bash
+   npm ci
+   ```
 
-Verificação offline: `npm run check` executa `npm run typecheck`, `npm test`, `npm run test:adapters`, `npm run test:scripts` e `npm run build` (dry-run). Os testes do Vitest usam [configuração dedicada](test/wrangler.jsonc) com bindings sintéticos e não carregam `.dev.vars`. Para evitar que rejeições esperadas de domínio dentro do Durable Object gerem `uncaught exception` ao cruzar o RPC no `@cloudflare/vitest-plugin` 1.4.6, os testes diretos de Durable Object usam `durableFailure` e os stubs em `testEnv` (`test/helpers.ts`) encaminham chamadas via `runInDurableObject`. Para preparar um release sem publicar, `npm run release` valida árvore git limpa, tag `vX.Y.Z` no `HEAD` e `npm run check`, imprimindo o comando `npx wrangler deploy --define ... --tag ... --message ...` (validado com `--dry-run`, nunca executando deploy). O verificador `npm run verify:automation` não chama rede por padrão; leitura real e piloto exigem opções e alvos deliberados. Veja [operação](docs/operations.md), [fluxo do agente](docs/agent-workflow.md), [recuperação e piloto](docs/automation-operations.md) e [contratos e limites](docs/automation-contracts.md).
+2. Copie `.dev.vars.example` para `.dev.vars` e preencha apenas localmente `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET` e, para Chat/automação, `AGENDOR_CHAT_TOKEN`. Nunca grave segredos em URLs, argumentos de CLI, logs ou arquivos versionados.
+3. Inicie o servidor em desenvolvimento local:
 
-As dependências diretas são fixadas em `package.json`/`package-lock.json`: Agents 0.29.0 com SDK MCP 2.3.1, Inspector 2.11.0 e biblioteca OAuth 1.2.3. `src/version.ts` deriva a versão do pacote; a versão local não é um identificador de publicação Cloudflare.
+   ```bash
+   npm run dev
+   ```
+
+   No Windows, `npm run dev:ephemeral` contorna falhas locais de persistência SQLite usando armazenamento temporário (OAuth KV e estado do Durable Object são descartados ao encerrar).
+
+Endpoints expostos pelo Worker:
+
+- `GET /health`: liveness público que retorna `status`, `service`, `version` e `commit` sem consultar o Agendor.
+- `POST /mcp`: endpoint MCP Streamable HTTP autenticado via OAuth 2.1 (escopos verificados por ferramenta e no autorizador).
+
+## Verificação
+
+Execute a suíte offline completa antes de qualquer commit ou PR:
+
+```bash
+npm run check
+```
+
+O comando `npm run check` executa em sequência:
+
+1. `npm run format:check` (Prettier em `src/`, `test/` e `scripts/`)
+2. `npm run lint` (ESLint com checagem de tipos e fronteiras)
+3. `npm run typecheck` (`tsc --noEmit`)
+4. `npm test` (suíte Vitest no runtime workerd com [test/wrangler.jsonc](test/wrangler.jsonc) sintético e hermético, sem carregar `.dev.vars`)
+5. `npm run test:adapters` (testes unitários de adaptadores em Node)
+6. `npm run test:scripts` (testes dos scripts em `scripts/`, incluindo a validação de sincronia de [docs/tools.md](docs/tools.md))
+7. `npm run build` (`wrangler deploy --dry-run --outdir dist`)
+
+Para atualizar [docs/tools.md](docs/tools.md) após alterar o registro de ferramentas:
+
+```bash
+npm run docs:tools
+```
+
+Verificações de rede real (`npm run test:contract`, `npm run verify:oauth`, `npm run verify:mcp`, `npm run verify:automation -- --read`, `npm run verify:chat-contract`) são opt-in e nunca compõem a suíte offline.
+
+## Mapa da documentação
+
+| Documento | Conteúdo |
+|---|---|
+| [docs/README.md](docs/README.md) | Índice geral da documentação vigente |
+| [docs/tools.md](docs/tools.md) | Inventário de ferramentas MCP gerado de `tools/list` |
+| [docs/architecture.md](docs/architecture.md) | Camadas, fluxo da automação, DO, fila/DLQ, cron e gate de orçamento |
+| [docs/security.md](docs/security.md) | Modelo de ameaça, matriz de escopos, allowlist, fencing e evidência não confiável |
+| [docs/operations/deploy.md](docs/operations/deploy.md) | Procedimento vigente de release e deploy |
+| [docs/operations/rotation.md](docs/operations/rotation.md) | Rotação de segredos e revogação/renovação OAuth |
+| [docs/operations/recovery.md](docs/operations/recovery.md) | Pausa, reconciliação, DLQ, revisões, retenção e rollback |
+| [docs/operations/pilot.md](docs/operations/pilot.md) | Regras de verificação e piloto controlado |
+| [docs/integrations/agendor-crm.md](docs/integrations/agendor-crm.md) | Contrato e limites da integração Agendor CRM |
+| [docs/integrations/agendor-chat.md](docs/integrations/agendor-chat.md) | Contrato e limites da integração Agendor Chat |
+| [docs/decisions/README.md](docs/decisions/README.md) | Registros de decisões arquiteturais (ADRs) |
+| [docs/plano-refatoracao.md](docs/plano-refatoracao.md) | Plano de refatoração e correção do projeto |
+| [docs/history/README.md](docs/history/README.md) | Arquivo histórico de planos, specs e logs datados |
+| [CHANGELOG.md](CHANGELOG.md) | Histórico de versões e correspondência com versões Cloudflare |
+| [AGENTS.md](AGENTS.md) | Convenções e regras para agentes que trabalham no repositório |
