@@ -4,23 +4,33 @@ import * as crm from '../src/automation/clients';
 import { createAutomationService } from '../src/automation/service';
 import { budgetMock, testEnv } from './helpers';
 import type { AgentAnalysis, PrepareInput } from '../src/automation/types';
+import {
+  buildActor,
+  buildAnalysis,
+  buildCoverage,
+  buildDemand,
+  buildFact,
+  buildPageInfo,
+  buildSourceRef,
+} from './fixtures/builders';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
 async function fixture() {
   const runtime = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic', AGENDOR_CHAT_ACCOUNT_ID: '123' });
   budgetMock(runtime).mockResolvedValue({ allowed: true, reservationId: 'test' });
-  const actor = {
+  const actor = buildActor({
     userId: 'review-owner',
     clientId: 'review-client',
     scopes: ['automation:process', 'automation:manage', 'automation:read', 'crm:read', 'chat:read', 'crm:create'],
-    expiresAt: Date.now() + 600_000,
-  };
+  });
   const chatClient = chat.createAgendorChatClient(runtime);
   const crmClient = crm.createAgendorCrmClient(runtime);
   let message = 'Synthetic identity question';
-  const complete = { complete: true, missingReasons: [], pagesRead: 1 };
+  const complete = buildCoverage();
+
   vi.spyOn(chat, 'createAgendorChatClient').mockReturnValue({
     ...chatClient,
     getContact: async (id) => ({ contact: { id, name: 'Synthetic Customer' }, coverage: complete }),
@@ -39,7 +49,8 @@ async function fixture() {
     }),
     listAttachments: async () => ({ attachments: [], coverage: complete }),
   });
-  const pageInfo = { page: 1, perPage: 100, hasNext: false, nextPage: null };
+
+  const pageInfo = buildPageInfo();
   vi.spyOn(crm, 'createAgendorCrmClient').mockReturnValue({
     ...crmClient,
     searchPeople: async () => ({ items: [], pageInfo }),
@@ -53,6 +64,7 @@ async function fixture() {
       coverage: { status: 'complete', pages: [1] },
     }),
   });
+
   const service = createAutomationService(runtime, actor);
   await service.updatePolicy({ expectedVersion: 1, patch: { mode: 'preview', capabilities: ['crm:create'] } });
   const input: PrepareInput = {
@@ -62,12 +74,8 @@ async function fixture() {
   };
   const first = await service.prepare(input);
   if (first.state !== 'ready') throw Error('fixture preparation failed');
-  const analysis: AgentAnalysis = {
-    customerSelection: { kind: 'organization', id: 11 },
-    facts: [],
-    demands: [],
-    ambiguities: [],
-  };
+
+  const analysis: AgentAnalysis = buildAnalysis({ facts: [], demands: [] });
   const submission = (work: typeof first.work, value = analysis) => ({
     workId: work.workId,
     leaseToken: work.leaseToken,
@@ -75,6 +83,7 @@ async function fixture() {
     expectedContextVersion: work.contextVersion,
     analysis: value,
   });
+
   return {
     runtime,
     service,
@@ -93,12 +102,14 @@ it('consumes a customer review in the next fresh snapshot and plan instead of re
   const f = await fixture();
   const original = await f.service.submit(f.submission(f.first.work));
   expect(original.state).toBe('review');
+
   const review = (await f.service.listReviews({})).reviews[0]!;
   await f.service.resolveReview({
     reviewId: review.reviewId,
     expectedVersion: review.version,
     decision: { kind: 'selectCustomer', ref: { kind: 'organization', id: 11 } },
   });
+
   const next = await f.service.prepare(f.input);
   expect(next.state).toBe('ready');
   if (next.state !== 'ready') return;
@@ -110,16 +121,19 @@ it('consumes a customer review in the next fresh snapshot and plan instead of re
       decision: { kind: 'selectCustomer', ref: { kind: 'organization', id: 11 } },
     },
   });
+
   const fresh = await f.service.submit(f.submission(next.work));
   expect(fresh.planId).not.toBe(original.planId);
   expect(fresh.state).toBe('noop');
   expect(fresh.reviewIds).toEqual([]);
+
   const audit = await f.service.getAudit({ limit: 100 });
   expect(audit.entries).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ action: 'review_consumed', targetId: review.reviewId, version: 3 }),
     ]),
   );
+
   const another = await f.service.prepare({
     requestId: 'different-order',
     target: { kind: 'conversation', conversationId: 102 },
@@ -134,33 +148,26 @@ it('applies a sourced fact correction to one reviewed analysis and creates a fre
   const source = f.first.work.snapshot.sourceRefs!.find((s) => s.kind === 'message')!;
   f.analysis.customerSelection = { kind: 'new', entity: 'organization', record: { name: 'Wrong proposed name' } };
   f.analysis.facts = [
-    {
-      entity: 'organization',
-      field: 'name',
+    buildFact({
       value: 'Wrong proposed name',
       certainty: 'ambiguous',
       sources: [{ ...source, kind: 'message' }],
-    },
+    }),
   ];
+
   const original = await f.service.submit(f.submission(f.first.work));
   expect(original.state).toBe('review');
+
   const review = (await f.service.listReviews({})).reviews[0]!;
   await f.service.resolveReview({
     reviewId: review.reviewId,
     expectedVersion: 1,
     decision: {
       kind: 'correctFacts',
-      facts: [
-        {
-          entity: 'organization',
-          field: 'name',
-          value: 'Corrected Company',
-          certainty: 'confirmed',
-          sources: [source],
-        },
-      ],
+      facts: [buildFact({ value: 'Corrected Company', sources: [{ ...source, kind: 'message' }] })],
     },
   });
+
   const next = await f.service.prepare(f.input);
   if (next.state !== 'ready') throw Error('next preparation failed');
   const fresh = await f.service.submit(f.submission(next.work));
@@ -181,6 +188,7 @@ it('does not carry a reviewed decision to changed canonical sources or another a
     expectedVersion: 1,
     decision: { kind: 'selectCustomer', ref: { kind: 'organization', id: 11 } },
   });
+
   f.changeMessage();
   const next = await f.service.prepare(f.input);
   if (next.state !== 'ready') throw Error('next preparation failed');
@@ -199,31 +207,26 @@ it('binds approval to its reviewed plan and does not bypass unresolved canonical
     expectedVersion: 1,
     decision: { kind: 'approvePlan', planId: original.planId, planVersion: original.version },
   });
+
   const next = await f.service.prepare(f.input);
   if (next.state !== 'ready') throw Error('next preparation failed');
+
+  const snapshotSource = next.work.snapshot.sourceRefs!.find((s) => s.kind === 'message')!;
+  const msgSource = buildSourceRef({ ...snapshotSource, kind: 'message' });
   const changed = structuredClone(f.analysis);
   changed.demands = [
-    {
+    buildDemand({
       clientKey: 'new-order',
       service: 'new',
       scope: 'new',
-      explicitRequest: {
-        value: true,
-        sources: [{ ...next.work.snapshot.sourceRefs!.find((s) => s.kind === 'message')!, kind: 'message' }],
-      },
-      approach: {
-        value: 'client',
-        sources: [{ ...next.work.snapshot.sourceRefs!.find((s) => s.kind === 'message')!, kind: 'message' }],
-      },
-      stage: {
-        value: 'new_request',
-        sources: [{ ...next.work.snapshot.sourceRefs!.find((s) => s.kind === 'message')!, kind: 'message' }],
-      },
-      items: [],
-      commitments: [],
-    },
+      explicitRequest: { value: true, sources: [msgSource] },
+      approach: { value: 'client', sources: [msgSource] },
+      stage: { value: 'new_request', sources: [msgSource] },
+    }),
   ];
+
   await expect(f.service.submit(f.submission(next.work, changed))).rejects.toThrow('REVIEW_ANALYSIS_CHANGED');
+
   const fresh = await f.service.submit(f.submission(next.work));
   expect(fresh.planId).not.toBe(original.planId);
   expect(fresh.state).toBe('review');

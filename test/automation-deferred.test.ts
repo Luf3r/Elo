@@ -5,31 +5,34 @@ import { runInDurableObject } from 'cloudflare:test';
 import { accountState } from '../src/automation/state/budget';
 import * as chat from '../src/automation/clients';
 import { SafeError } from '../src/shared/errors';
+import { buildActor } from './fixtures/builders';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+
 it('reports and bounds repeated budget deferrals without durable progress', async () => {
   const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic', AGENDOR_CHAT_ACCOUNT_ID: '123' });
   const budget = budgetMock(env);
   budget.mockImplementation(async () => ({ allowed: false, retryAt: Date.now() + 10_000 }));
-  const actor = {
+  const actor = buildActor({
     userId: 'synthetic',
     clientId: 'client',
     scopes: ['automation:process', 'automation:read', 'chat:read', 'crm:read'],
-    expiresAt: Date.now() + 600_000,
-  };
+  });
   const service = createAutomationService(env, actor);
   const fetch = vi.fn();
   vi.stubGlobal('fetch', fetch);
+
   const input = {
     requestId: 'bounded-deferred',
     target: { kind: 'conversation' as const, conversationId: 101 },
     mode: 'preview' as const,
     limits: { maxMessagePages: 1, maxAttachmentPages: 0 },
   };
+
   let result = await service.prepare(input);
   expect(result).toMatchObject({
     state: 'deferred',
@@ -37,6 +40,7 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
     progress: expect.objectContaining({ stage: expect.any(String) }),
   });
   if (result.state !== 'deferred') throw Error('Expected deferred');
+
   const early = await service.prepare({
     requestId: input.requestId,
     workId: result.workId,
@@ -45,6 +49,7 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
   });
   expect(early).toEqual(result);
   expect(budget).toHaveBeenCalledTimes(1);
+
   for (let attempt = 1; attempt < 5; attempt++) {
     if (result.state !== 'deferred') throw Error('Expected deferred');
     const deferredWorkId = result.workId;
@@ -62,6 +67,7 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
       continuation: result.continuation!,
     });
   }
+
   expect(result).toMatchObject({ state: 'blocked', reason: 'PREPARATION_NO_PROGRESS', progress: expect.any(Object) });
   const audit = await service.getAudit({ limit: 100 });
   expect(audit.entries.map((e) => e.action)).toEqual(
@@ -79,14 +85,14 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
 it('keeps pending work and audit isolated to its owner across independent clients', async () => {
   const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic', AGENDOR_CHAT_ACCOUNT_ID: '123' });
   budgetMock(env).mockResolvedValue({ allowed: false, retryAt: Date.now() + 10_000 });
-  const actor = {
+  const actor = buildActor({
     userId: 'synthetic',
     clientId: 'client-one',
     scopes: ['automation:process', 'automation:read', 'automation:manage', 'chat:read', 'crm:read'],
-    expiresAt: Date.now() + 600_000,
-  };
+  });
   const own = createAutomationService(env, actor);
   const other = createAutomationService(env, { ...actor, clientId: 'client-two' });
+
   await own.updatePolicy({ expectedVersion: 1, patch: { mode: 'preview' } });
   const result = await own.prepare({
     requestId: 'owner-work',
@@ -96,10 +102,12 @@ it('keeps pending work and audit isolated to its owner across independent client
   expect(result.state).toBe('deferred');
   expect(await own.getStatus()).toMatchObject({ awaitingAgent: 0, preparing: 1, incompleteCoverage: 0 });
   expect(await other.getStatus()).toMatchObject({ awaitingAgent: 0, preparing: 0, incompleteCoverage: 0 });
+
   const first = await own.getAudit({ limit: 100 });
   const second = await other.getAudit({ limit: 100 });
   expect(first.entries.some((e) => e.action === 'work_created')).toBe(true);
   expect(second.entries).toEqual([]);
+
   if (result.state !== 'deferred') throw Error('Expected deferred');
   const deferredWorkId = result.workId;
   await runInDurableObject(env.AUTOMATION_STATE.get(accountState(env).id), (_instance, ctx) =>
@@ -116,12 +124,7 @@ it('keeps pending work and audit isolated to its owner across independent client
 it('recovers an expired processing lock and fences the previous holder', async () => {
   const env = testEnv();
   const repo = accountState(env);
-  const actor = {
-    userId: 'owner',
-    clientId: 'client',
-    scopes: ['automation:process'],
-    expiresAt: Date.now() + 600_000,
-  };
+  const actor = buildActor({ userId: 'owner', clientId: 'client', scopes: ['automation:process'] });
   const lease = await repo.reserveWork({
     requestId: 'lock-expiry',
     target: { kind: 'conversation', conversationId: 101 },
@@ -130,6 +133,7 @@ it('recovers an expired processing lock and fences the previous holder', async (
     payloadDigest: 'synthetic',
   });
   const previous = await repo.beginPreparation(lease);
+
   const firstError = await durableFailure(env.AUTOMATION_STATE.get(repo.id), (instance) =>
     instance.beginPreparation(lease),
   );
@@ -137,15 +141,18 @@ it('recovers an expired processing lock and fences the previous holder', async (
     code: 'UPSTREAM_CONFLICT',
     retryable: true,
   });
+
   await runInDurableObject(env.AUTOMATION_STATE.get(repo.id), (_instance, ctx) =>
     ctx.storage.sql.exec('UPDATE preparation_locks SET expires_at = 0 WHERE work_id = ?', lease.workId),
   );
   const next = await repo.beginPreparation(lease);
   expect(next).not.toBe(previous);
+
   const staleError = await durableFailure(env.AUTOMATION_STATE.get(repo.id), (instance) =>
     instance.renewPreparation(lease, previous),
   );
   expect({ code: staleError.code }).toEqual({ code: 'UPSTREAM_CONFLICT' });
+
   await repo.endPreparation(lease, previous);
   await repo.renewPreparation(lease, next);
   await repo.endPreparation(lease, next);
@@ -173,12 +180,12 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
       return Response.json({ data: [] });
     }),
   );
-  const actor = {
+
+  const actor = buildActor({
     userId: 'synthetic',
     clientId: 'progress',
     scopes: ['automation:process', 'automation:read', 'chat:read', 'crm:read'],
-    expiresAt: Date.now() + 600_000,
-  };
+  });
   const service = createAutomationService(env, actor);
   const request = {
     requestId: 'progress-test',
@@ -186,6 +193,7 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
     mode: 'preview' as const,
     limits: { maxMessagePages: 1, maxAttachmentPages: 0 },
   };
+
   const first = await service.prepare(request);
   expect(first).toMatchObject({
     state: 'deferred',
@@ -194,6 +202,7 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
     progress: { stage: 'conversation', messagePages: 0 },
   });
   if (first.state !== 'deferred') throw Error('Expected first deferral');
+
   const resume = {
     requestId: request.requestId,
     workId: first.workId,
@@ -208,6 +217,7 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
         'workflow:' + first.workId,
       ),
     );
+
   phase = 1;
   await unlock();
   const second = await service.prepare(resume);
@@ -218,6 +228,7 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
     noProgressAttempts: 1,
     progress: { stage: 'candidates', messagePages: 1, messages: 1 },
   });
+
   phase = 2;
   await unlock();
   const ready = await service.prepare(resume);
@@ -240,13 +251,13 @@ it('reports a Chat timeout without exposing upstream error text', async () => {
       throw new SafeError('UPSTREAM_TIMEOUT', 'synthetic private upstream body', true);
     },
   });
-  const actor = {
+  const actor = buildActor({
     userId: 'synthetic',
     clientId: 'timeout',
     scopes: ['automation:process', 'automation:read', 'chat:read', 'crm:read'],
-    expiresAt: Date.now() + 600_000,
-  };
+  });
   const service = createAutomationService(env, actor);
+
   const result = await service.prepare({
     requestId: 'timeout',
     target: { kind: 'conversation', conversationId: 101 },
@@ -254,6 +265,7 @@ it('reports a Chat timeout without exposing upstream error text', async () => {
   });
   expect(result).toMatchObject({ state: 'deferred', reason: 'UPSTREAM_TIMEOUT', progress: { stage: 'conversation' } });
   expect(JSON.stringify(result)).not.toContain('private upstream body');
+
   const audit = await service.getAudit({ limit: 100 });
   expect(audit.entries.some((entry) => entry.action === 'preparation_deferred_UPSTREAM_TIMEOUT')).toBe(true);
   expect(JSON.stringify(audit)).not.toContain('private upstream body');

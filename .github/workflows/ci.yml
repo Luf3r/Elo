@@ -14,5 +14,6 @@ jobs:
           node-version: '22.19'
           cache: npm
       - run: npm ci
+      # Runs format:check, lint, typecheck, test:domain, test:adapters, test:scripts, test:coverage (istanbul thresholds), and build
       - run: npm run check
       - run: npm audit --omit=dev

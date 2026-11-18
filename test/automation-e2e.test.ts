@@ -15,24 +15,17 @@ import { budgetMock, context, testEnv } from './helpers';
 import { issueTestToken } from './oauth-token';
 import { plannerCatalog, plannerPolicy } from './fixtures/planner';
 import { scenarioAnalysis } from './fixtures/automation';
+import { ALL_CAPABILITIES, buildActor, buildCoverage, buildFact, buildPageInfo } from './fixtures/builders';
 import type { AgentAnalysis, PreparedWork, SyncPlan, OperationStatus } from '../src/automation/types';
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-const scopes = [
-  'automation:read',
-  'automation:process',
-  'automation:manage',
-  'crm:read',
-  'chat:read',
-  'crm:create',
-  'crm:enrich',
-  'crm:write',
-];
-const complete = { complete: true, missingReasons: [], pagesRead: 1 };
-const pageInfo = { page: 1, perPage: 100, hasNext: false, nextPage: null };
+
+const scopes = [...ALL_CAPABILITIES];
+const complete = buildCoverage();
+const pageInfo = buildPageInfo();
 
 async function scenario(
   options: {
@@ -221,7 +214,7 @@ async function scenario(
     );
     return tool<OperationStatus>('automation_get_operation', { operationId: op.operationId });
   };
-  const actor = { userId: 'owner-sub', clientId: token.clientId, scopes, expiresAt: Date.now() + 600_000 };
+  const actor = buildActor({ userId: 'owner-sub', clientId: token.clientId, scopes });
   return {
     env,
     get client() {
@@ -612,21 +605,8 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
       analysis.customerSelection = { kind: 'person', id: 1001 };
       const source = analysis.facts[0]!.sources[0]!;
       analysis.facts = [
-        {
-          entity: 'person',
-          field: 'email',
-          value: 'synthetic@example.invalid',
-          certainty: 'confirmed',
-          sources: [source],
-        },
-        {
-          entity: 'demand',
-          clientKey: 'request-a',
-          field: 'value',
-          value: 400,
-          certainty: 'confirmed',
-          sources: [source],
-        },
+        buildFact({ entity: 'person', field: 'email', value: 'synthetic@example.invalid', sources: [source] }),
+        buildFact({ entity: 'demand', clientKey: 'request-a', field: 'value', value: 400, sources: [source] }),
       ];
       analysis.demands[0]!.references = [{ kind: 'order', value: 'PO-42', sources: [source] }];
       const fresh = await f.submit(analysis, next.work);
@@ -692,14 +672,15 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
       d.stage.value = 'internal_approval';
       d.stage.observations = [{ demandKey: d.clientKey, event: 'client_approval', actor: 'client', sources: [source] }];
       d.items = [{ productId: 31, quantity: 4, unit: 'sample', sources: [source] }];
-      analysis.facts.push({
-        entity: 'demand',
-        clientKey: d.clientKey,
-        field: 'customFields.logistics',
-        value: 'included',
-        certainty: 'confirmed',
-        sources: [source],
-      });
+      analysis.facts.push(
+        buildFact({
+          entity: 'demand',
+          clientKey: d.clientKey,
+          field: 'customFields.logistics',
+          value: 'included',
+          sources: [source],
+        }),
+      );
       const plan = await f.submit(analysis);
       expect(plan.state).toBe('review');
       expect(plan.orderedCommands).toEqual([]);
@@ -763,13 +744,12 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
       analysis.customerSelection = { kind: 'person', id: 1001 };
       analysis.demands = [];
       analysis.facts = [
-        {
+        buildFact({
           entity: 'person',
           field: 'email',
           value: 'agent@example.invalid',
-          certainty: 'confirmed',
           sources: analysis.facts[0]!.sources,
-        },
+        }),
       ];
       const plan = await f.submit(analysis, next.work);
       expect(plan.state).toBe('ready');
@@ -823,13 +803,12 @@ it('blocks a moved inbox after canonical reads were cached by a deferred verific
     const analysis = scenarioAnalysis(f.work, 'person');
     analysis.demands = [];
     analysis.facts = [
-      {
+      buildFact({
         entity: 'person',
         field: 'email',
         value: 'enrich@example.invalid',
-        certainty: 'confirmed',
         sources: analysis.facts[0]!.sources,
-      },
+      }),
     ];
     const plan = await f.submit(analysis);
     expect(plan.state).toBe('ready');

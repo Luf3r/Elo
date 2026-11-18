@@ -37,7 +37,7 @@ Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets
    O script valida:
    - Árvore de trabalho limpa (`git status --porcelain` vazio);
    - Existência da tag `vX.Y.Z` apontando para o `HEAD` atual;
-   - Passagem integral de `npm run check` (`format:check`, `lint`, `typecheck`, `test`, `test:adapters`, `test:scripts`, `build`).
+   - Passagem integral de `npm run check` (`format:check`, `lint`, `typecheck`, `test:domain`, `test:adapters`, `test:scripts`, `test:coverage`, `build`).
 
    Ao passar, `npm run release` **não faz deploy automaticamente**; ele imprime o comando exato de publicação com `__BUILD_COMMIT__` injetado e `--tag` / `--message` rastreáveis.
 
@@ -64,3 +64,4 @@ Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets
 
 3. No cliente MCP autenticado, consulte `server_status` e `automation_get_status` para confirmar `policyVersion`, modo vigente e ausência de operações/revisões inesperadas.
 4. A política de aplicação reside no Durable Object `AutomationAccount` e **não** é redefinida pelo deploy de código (nunca assuma que um deploy redefine ou ativa a política).
+5. Caso o release tenha alterado adaptadores Agendor ou validação OAuth/JWKS, avalie a execução manual e pontual de `npm run test:contract` conforme [scripts.md](scripts.md#quando-executar-testcontract).
