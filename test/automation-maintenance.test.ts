@@ -1,9 +1,9 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { expect, it, vi } from 'vitest';
-import { maintainAccount } from '../src/automation/maintenance';
+import { maintainAccount } from '../src/automation/execution/maintenance';
 import { AccountRepository, EVIDENCE_RETENTION_MS } from '../src/automation/state/repository';
-import { runPlan } from '../src/automation/executor';
-import { enqueueOperation, handleAutomationQueue } from '../src/automation/queue';
+import { runPlan } from '../src/automation/execution/executor';
+import { enqueueOperation, handleAutomationQueue } from '../src/automation/execution/queue';
 import { executionFixture } from './fixtures/execution';
 import type { Env } from '../src/env';
 import { defaultAutomationPolicy } from '../src/automation/service';

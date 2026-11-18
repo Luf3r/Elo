@@ -1,14 +1,10 @@
-import type { AgentAnalysis } from '../automation/types';
-import type { WorkflowState } from '../automation/service-state';
+import type { AgentAnalysis, PendingReview } from './schemas/analysis';
 import { canonical } from '../shared/canonical';
 
 /** A reviewed analysis is a single request, not an account-wide identity rule.
  * The original submission must be replayed exactly; new commercial requests
  * require separate work and cannot inherit this operator decision. */
-export function applyReviewDecision(
-  raw: AgentAnalysis,
-  pending: NonNullable<WorkflowState['pendingReview']>,
-): AgentAnalysis {
+export function applyReviewDecision(raw: AgentAnalysis, pending: PendingReview): AgentAnalysis {
   if (canonical(raw) !== canonical(pending.analysis)) throw Error('REVIEW_ANALYSIS_CHANGED');
   const analysis = structuredClone(raw);
   const decision = pending.decision;

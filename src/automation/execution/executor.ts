@@ -1,14 +1,14 @@
-import type { CrmMutationClient, CatalogSnapshot, MutationOutcome } from '../agendor/crm/types';
-import type { AuthorizedPlan, MutationCommand, OperationReceipt, OperationStatus, PlanBasis } from './types';
-import type { AsyncRepository, ExecutionCommand, ExecutionOperation } from './operations';
-import { authorizedPlanSchema } from './schemas';
+import type { CrmMutationClient, CatalogSnapshot, MutationOutcome } from '../../agendor/crm/types';
+import type { AuthorizedPlan, MutationCommand, OperationReceipt, OperationStatus, PlanBasis } from '../types';
+import type { AsyncRepository, ExecutionCommand, ExecutionOperation } from '../operations';
+import { authorizedPlanSchema } from '../schemas';
 import { checkedReceipt, reconcileCommand, resolvedTarget, type ReconciliationReads } from './reconciliation';
-import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
-import { safeError } from '../shared/errors';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
+import { safeError } from '../../shared/errors';
 
 export interface ExecutionDeps {
   legacy?: Pick<
-    import('../agendor/crm/types').AgendorCrmClient,
+    import('../../agendor/crm/types').AgendorCrmClient,
     'updateOrganization' | 'updatePerson' | 'updateDeal' | 'updateDealStage'
   >;
   repository: AsyncRepository;

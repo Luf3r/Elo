@@ -10,7 +10,7 @@ import { RESOURCE } from '../src/oauth/config';
 import { accountState } from '../src/automation/state/budget';
 import { createAutomationService } from '../src/automation/service';
 import { AccountRepository, EVIDENCE_RETENTION_MS } from '../src/automation/state/repository';
-import { handleAutomationQueue } from '../src/automation/queue';
+import { handleAutomationQueue } from '../src/automation/execution/queue';
 import { budgetMock, context, testEnv } from './helpers';
 import { issueTestToken } from './oauth-token';
 import { plannerCatalog, plannerPolicy } from './fixtures/planner';

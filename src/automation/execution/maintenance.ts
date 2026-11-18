@@ -1,8 +1,8 @@
-import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
-import { contextEvidenceRefs, renderCustomerContext } from './context/render';
-import type { AccountRepository, ContextRenderer } from './state/repository';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
+import { contextEvidenceRefs, renderCustomerContext } from '../context/render';
+import type { AccountRepository, ContextRenderer } from '../state/repository';
 import type { AutomationQueuePayload } from './queue';
-import type { ExecutionOperation } from './operations';
+import type { ExecutionOperation } from '../operations';
 export const WATCHDOG_INTERVAL_MS = 300_000;
 export interface MaintenanceReport {
   expiredEvidence: number;

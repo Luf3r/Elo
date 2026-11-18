@@ -4,7 +4,7 @@ import { testEnv } from './helpers';
 import { executeDirectCommand } from '../src/automation/direct';
 import { createAutomationService } from '../src/automation/service';
 import { runInDurableObject } from 'cloudflare:test';
-import { handleAutomationQueue } from '../src/automation/queue';
+import { handleAutomationQueue } from '../src/automation/execution/queue';
 import { accountState } from '../src/automation/state/budget';
 const actor = {
   userId: 'operator',

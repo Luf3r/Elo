@@ -1,5 +1,7 @@
-import type { StageEvidence, StageDecision, DealSnapshot, StageKey } from '../automation/types';
-import { stageEvidenceSchemaForDecision, dealSnapshotSchema } from '../automation/schemas';
+import type { StageKey } from './schemas/common';
+import type { DealSnapshot } from './schemas/snapshot';
+import { stageEvidenceSchemaForDecision, type StageDecision, type StageEvidence } from './schemas/planning';
+import { dealSnapshotSchema } from './schemas/snapshot';
 import { uniqueSources } from './identity';
 const order: StageKey[] = ['new_request', 'preparing_proposal', 'internal_approval', 'proposal_sent'];
 

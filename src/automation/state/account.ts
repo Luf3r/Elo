@@ -22,7 +22,7 @@ import { takeBudget } from './budget';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot } from '../types';
 import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
 import type { AutomationPolicy } from '../types';
-import { maintainAccount } from '../maintenance';
+import { maintainAccount } from '../execution/maintenance';
 
 export interface AutomationDomainHooks {
   resolveWork: ResolveWorkHooks;

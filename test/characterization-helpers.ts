@@ -8,7 +8,7 @@ import worker from '../src/index';
 import { RESOURCE } from '../src/oauth/config';
 import { accountState, BudgetDeferredError } from '../src/automation/state/budget';
 import { buildSyncPlan } from '../src/domain/planner';
-import { handleAutomationQueue } from '../src/automation/queue';
+import { handleAutomationQueue } from '../src/automation/execution/queue';
 import { automationPolicySchema } from '../src/domain/policy-types';
 import { agentAnalysisSchema, preparedWorkSchema, resolutionBundleSchema } from '../src/automation/schemas';
 import type {

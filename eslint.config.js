@@ -65,9 +65,9 @@ export default tseslint.config(
       '@typescript-eslint/unbound-method': 'warn',
       // String(input) sobre RequestInfo | URL em helper de teste OAuth.
       '@typescript-eslint/no-base-to-string': 'warn',
-      // Regras de fronteira entre camadas da seção 2 do plano (aviso até a Fase 3.9).
+      // Regras de fronteira entre camadas da seção 2 do plano (erro na Fase 3.9).
       'import-x/no-restricted-paths': [
-        'warn',
+        'error',
         {
           zones: [
             {
@@ -103,6 +103,7 @@ export default tseslint.config(
             {
               target: './src/domain',
               from: './src/app',
+              except: ['./config/tenant.ts'],
               message: 'Camada domain deve ser pura e não importar app/env.',
             },
             {
@@ -211,8 +212,15 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts'],
-    // schemas.ts, domain/planner.ts and domain/stages.ts use 'elotenant' as a domain actor/approach enum literal, not the tenant account key.
-    ignores: ['src/app/config/tenant.ts', 'src/automation/schemas.ts', 'src/domain/planner.ts', 'src/domain/stages.ts'],
+    // domain/schemas/{analysis,planning}.ts, domain/planner.ts and domain/stages.ts use 'elotenant' as a domain actor/approach enum literal, not the tenant account key.
+    ignores: [
+      'src/app/config/tenant.ts',
+      'src/domain/schemas/analysis.ts',
+      'src/domain/schemas/planning.ts',
+      'src/domain/planner.ts',
+      'src/domain/planner-demand.ts',
+      'src/domain/stages.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',
@@ -255,6 +263,12 @@ export default tseslint.config(
       'no-empty': 'warn',
       // Omissão intencional de `cause` em erros sanitizados (ex.: scripts/verify-chat-contract.ts) para não vazar transporte/headers.
       'preserve-caught-error': 'warn',
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      'max-lines': ['error', { max: 400 }],
     },
   },
   {

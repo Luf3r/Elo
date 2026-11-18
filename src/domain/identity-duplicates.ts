@@ -1,12 +1,13 @@
-import type { AgendorCrmClient } from '../agendor/crm/types';
-import type { CustomerCandidate, CustomerCandidates, Fact } from '../automation/types';
+import type { CandidateCrmReader } from './identity-candidates';
+import type { Fact } from './schemas/common';
+import type { CustomerCandidate, CustomerCandidates } from './schemas/snapshot';
 import { SafeError } from '../shared/errors';
 const normalizedName = (v: string) => v.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 const object = (v: unknown): Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 /** Diagnostic only. A duplicate never changes the native contact/person link. */
 export async function readDuplicateCandidates(
-  crm: Pick<AgendorCrmClient, 'searchPeople'>,
+  crm: Pick<CandidateCrmReader, 'searchPeople'>,
   current: CustomerCandidate,
   facts: readonly Fact[] = [],
 ): Promise<NonNullable<CustomerCandidates['duplicateCheck']>> {

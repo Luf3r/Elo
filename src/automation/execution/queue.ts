@@ -1,22 +1,22 @@
-import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
-import { SafeError } from '../shared/errors';
-import { readJson } from '../shared/json';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
+import { SafeError } from '../../shared/errors';
+import { readJson } from '../../shared/json';
 import { readVerificationSnapshot } from './verification-reader';
-import { assertInboxAllowed } from '../domain/inbox-policy';
+import { assertInboxAllowed } from '../../domain/inbox-policy';
 import { z } from 'zod';
-import type { Env } from '../env';
-import { accountState } from './state/budget';
+import type { Env } from '../../env';
+import { accountState } from '../state/budget';
 import { resumeOperation, type ExecutionDeps } from './executor';
 import {
   createAgendorChatClient,
   createAgendorCrmClient,
   createCrmMutationClient,
   readCanonicalConversation,
-} from './clients';
+} from '../clients';
 import { matchesFields, readRef, resolvedTarget } from './reconciliation';
-import { canonical } from './operations';
-import { catalogSnapshotSchema } from './schemas';
-import { workflowStateSchema } from './service-state';
+import { canonical } from '../operations';
+import { catalogSnapshotSchema } from '../schemas';
+import { workflowStateSchema } from '../service-state';
 
 export const automationQueuePayloadSchema = z.strictObject({
   accountKey: z.literal(TENANT_ACCOUNT_KEY),

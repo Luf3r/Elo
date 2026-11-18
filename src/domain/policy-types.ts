@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { crmIdSchema } from '../agendor/crm/mutation-schemas';
+import { crmIdSchema } from '../shared/contracts/crm-mutations';
 export const capabilitySchema = z.enum([
   'crm:read',
   'chat:read',

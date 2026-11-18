@@ -1,7 +1,8 @@
-import { createMutationSchemas, customFieldMatchesCatalog } from '../agendor/crm/mutation-schemas';
-import { fieldPatchInputSchema } from '../automation/schemas';
+import { createMutationSchemas, customFieldMatchesCatalog } from '../shared/contracts/crm-mutations';
+import type { CatalogSnapshot } from '../shared/contracts/crm';
 import { uniqueSources } from './identity';
-import type { CatalogSnapshot, Fact, FieldPatchDecision, FieldPatchInput } from '../automation/types';
+import type { Fact } from './schemas/common';
+import { fieldPatchInputSchema, type FieldPatchDecision, type FieldPatchInput } from './schemas/planning';
 
 const START = '<!-- elotenant:auto:start -->';
 const END = '<!-- elotenant:auto:end -->';

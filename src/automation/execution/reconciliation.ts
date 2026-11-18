@@ -1,7 +1,7 @@
-import type { AgendorCrmClient, CrmMutationRef } from '../agendor/crm/types';
-import type { MutationCommand, OperationReceipt, ReconciliationResult } from './types';
-import type { AsyncRepository, ExecutionCommand } from './operations';
-import { canonical } from './operations';
+import type { AgendorCrmClient, CrmMutationRef } from '../../agendor/crm/types';
+import type { MutationCommand, OperationReceipt, ReconciliationResult } from '../types';
+import type { AsyncRepository, ExecutionCommand } from '../operations';
+import { canonical } from '../operations';
 
 export type ReconciliationReads = Pick<AgendorCrmClient, 'getOrganization' | 'getPerson' | 'getDeal' | 'getTask'> &
   Partial<Pick<AgendorCrmClient, 'searchOrganizations' | 'searchPeople' | 'searchDeals' | 'listTasks'>>;

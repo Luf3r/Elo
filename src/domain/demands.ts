@@ -1,4 +1,5 @@
-import type { AgentAnalysis, CustomerResolution, DemandRecord, DemandResolution } from '../automation/types';
+import type { AgentAnalysis } from './schemas/analysis';
+import type { CustomerResolution, DemandRecord, DemandResolution } from './schemas/planning';
 import { uniqueSources } from './identity';
 const sameReference = (
   a: NonNullable<DemandRecord['references']>[number],

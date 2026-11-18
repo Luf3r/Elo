@@ -1,7 +1,7 @@
 import { env, runInDurableObject } from 'cloudflare:test';
 import { expect, it, vi } from 'vitest';
-import { enqueueOperation, handleAutomationQueue } from '../src/automation/queue';
-import { runPlan } from '../src/automation/executor';
+import { enqueueOperation, handleAutomationQueue } from '../src/automation/execution/queue';
+import { runPlan } from '../src/automation/execution/executor';
 import { executionFixture } from './fixtures/execution';
 import type { Env } from '../src/env';
 

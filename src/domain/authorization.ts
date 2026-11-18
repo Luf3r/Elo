@@ -1,16 +1,16 @@
 import { requireCapabilities, type AuthContext } from '../auth';
 import { SafeError } from '../shared/errors';
-import { automationPolicySchema } from './policy-types';
-import { authorizedPlanSchema, syncPlanSchema, workLeaseSchema } from '../automation/schemas';
-import type {
-  AnalysisInput,
-  AuthorizedPlan,
-  AutomationPolicy,
-  Capability,
-  MutationCommand,
-  SyncPlan,
-  WorkLease,
-} from '../automation/types';
+import { automationPolicySchema, type AutomationPolicy, type Capability } from './policy-types';
+import type { AnalysisInput } from './schemas/analysis';
+import {
+  authorizedPlanSchema,
+  syncPlanSchema,
+  workLeaseSchema,
+  type AuthorizedPlan,
+  type MutationCommand,
+  type SyncPlan,
+  type WorkLease,
+} from './schemas/planning';
 
 export const automationOperationCapabilities = {
   discover: ['automation:process', 'chat:read', 'crm:read'],

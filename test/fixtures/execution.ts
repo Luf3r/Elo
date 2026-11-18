@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test';
 import { vi } from 'vitest';
 import { authorizePlan } from '../../src/domain/authorization';
-import type { ExecutionDeps } from '../../src/automation/executor';
+import type { ExecutionDeps } from '../../src/automation/execution/executor';
 import type { MutationOutcome } from '../../src/agendor/crm/types';
 import type { Env } from '../../src/env';
 import type { MutationCommand, SyncPlan } from '../../src/automation/types';

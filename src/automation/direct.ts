@@ -17,10 +17,10 @@ import {
 import { accountState } from './state/budget';
 import { automationActor, persistWorkflow, readWorkflow } from './service';
 import { payloadDigest, canonical } from './operations';
-import { runPlan } from './executor';
-import { enqueueOperation } from './queue';
+import { runPlan } from './execution/executor';
+import { enqueueOperation } from './execution/queue';
 import { mutationCommandSchema, authorizedPlanSchema, syncPlanSchema } from './schemas';
-import { readRef } from './reconciliation';
+import { readRef } from './execution/reconciliation';
 import type { WorkflowState } from './service-state';
 import type { CatalogSnapshot, MutationCommand, OperationStatus } from './types';
 

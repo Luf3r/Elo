@@ -1,5 +1,5 @@
 import { readJson } from '../../../shared/json';
-import { WATCHDOG_INTERVAL_MS } from '../../maintenance';
+import { WATCHDOG_INTERVAL_MS } from '../../execution/maintenance';
 import { executionOperationSchema, type ExecutionCommand, type ExecutionOperation } from '../../operations';
 import {
   workflowStateSchema,

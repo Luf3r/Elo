@@ -31,6 +31,7 @@ import {
   syncPlanSchema,
   workLeaseSchema,
 } from './schemas';
+import { pendingReviewSchema, type PendingReview } from '../domain/schemas/analysis';
 
 /** Server-owned state; neither this envelope nor an upstream route is an MCP input. */
 export interface WorkflowState {
@@ -57,16 +58,7 @@ export interface WorkflowState {
   basis?: PlanBasis;
   analysis?: AgentAnalysis;
   snapshotVersion?: number;
-  pendingReview?: {
-    reviewId: string;
-    version: number;
-    sourceSnapshotVersion: number;
-    sourceRefs: SourceRef[];
-    analysis: AgentAnalysis;
-    policyVersion: number;
-    decision: NonNullable<WorkflowReview['decision']>;
-    clientKey?: string;
-  };
+  pendingReview?: PendingReview;
   hydration?: {
     offset: number;
     records: NonNullable<PreparedWork['snapshot']['records']>;
@@ -141,18 +133,7 @@ export const workflowStateSchema: z.ZodType<WorkflowState> = z.strictObject({
   basis: planBasisSchema.optional(),
   analysis: agentAnalysisSchema.optional(),
   snapshotVersion: z.number().int().nonnegative().optional(),
-  pendingReview: z
-    .strictObject({
-      reviewId: z.string(),
-      version: z.number().int().positive(),
-      sourceSnapshotVersion: z.number().int().positive(),
-      sourceRefs: z.array(sourceRefSchema),
-      analysis: agentAnalysisSchema,
-      policyVersion: z.number().int().positive(),
-      decision: reviewDecisionSchema,
-      clientKey: z.string().optional(),
-    })
-    .optional(),
+  pendingReview: pendingReviewSchema.optional(),
   hydration: z
     .strictObject({
       offset: z.number().int().nonnegative(),

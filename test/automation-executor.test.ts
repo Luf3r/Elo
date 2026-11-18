@@ -1,7 +1,7 @@
 import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
-import { runPlan, resumeOperation } from '../src/automation/executor';
-import { reconcileCommand } from '../src/automation/reconciliation';
+import { runPlan, resumeOperation } from '../src/automation/execution/executor';
+import { reconcileCommand } from '../src/automation/execution/reconciliation';
 import type { MutationCommand } from '../src/automation/types';
 import { validCommand } from './fixtures/automation';
 import { executionFixture } from './fixtures/execution';
