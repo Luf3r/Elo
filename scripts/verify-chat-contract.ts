@@ -1,82 +1,104 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { isEntrypoint, parseEnvVars } from './lib/args.ts';
 
 const API_ORIGIN = 'https://chat.agendor.com.br/api/v1';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 10_000;
 
-function readVars(text) {
-  const values = new Map();
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
-    if (!match) continue;
-    let value = match[2];
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
-      value = value.slice(1, -1);
-    values.set(match[1], value);
-  }
-  return values;
+type ShapeDescriptor =
+  | string
+  | { type: 'array'; item: ShapeDescriptor; count: number }
+  | { type: 'object'; fields: Record<string, ShapeDescriptor> };
+
+export interface VerifyChatContractOptions {
+  token?: string;
+  accountId?: string;
+  conversationId?: string;
+  fetchImpl?: typeof fetch;
+  write?: (line: string) => void;
+  persistAccountId?: (accountId: string) => Promise<void> | void;
+  timeoutMs?: number;
 }
 
-function schemaShape(value, depth = 0) {
+function schemaShape(value: unknown, depth = 0): ShapeDescriptor {
   if (value === null) return 'null';
-  if (Array.isArray(value))
+  if (Array.isArray(value)) {
     return {
       type: 'array',
-      item: value.length && depth < 4 ? schemaShape(value[0], depth + 1) : 'unknown',
+      item: value.length > 0 && depth < 4 ? schemaShape(value[0], depth + 1) : 'unknown',
       count: value.length,
     };
+  }
   if (typeof value !== 'object') return typeof value;
-  const fields = Object.create(null);
-  for (const [key, field] of Object.entries(value).slice(0, 40))
+  const fields: Record<string, ShapeDescriptor> = Object.create(null) as Record<string, ShapeDescriptor>;
+  for (const [key, field] of Object.entries(value as Record<string, unknown>).slice(0, 40)) {
     fields[key] = depth >= 4 ? typeof field : schemaShape(field, depth + 1);
+  }
   return { type: 'object', fields };
 }
 
-function findAccountId(profile) {
+function findAccountId(profile: unknown): string | undefined {
   if (!profile || typeof profile !== 'object' || Array.isArray(profile)) return undefined;
+  const record = profile as Record<string, unknown>;
   const data =
-    profile.data && typeof profile.data === 'object' && !Array.isArray(profile.data) ? profile.data : undefined;
+    record.data && typeof record.data === 'object' && !Array.isArray(record.data)
+      ? (record.data as Record<string, unknown>)
+      : undefined;
+  const recordAccount =
+    record.account && typeof record.account === 'object' && !Array.isArray(record.account)
+      ? (record.account as Record<string, unknown>)
+      : undefined;
+  const dataAccount =
+    data?.account && typeof data.account === 'object' && !Array.isArray(data.account)
+      ? (data.account as Record<string, unknown>)
+      : undefined;
   const candidates = [
-    profile.account_id,
-    profile.accountId,
-    profile.account?.id,
+    record.account_id,
+    record.accountId,
+    recordAccount?.id,
     data?.account_id,
     data?.accountId,
-    data?.account?.id,
+    dataAccount?.id,
   ];
-  const value = candidates.find(
-    (candidate) =>
-      (typeof candidate === 'string' || typeof candidate === 'number') && /^\d{1,20}$/.test(String(candidate)),
-  );
-  return value === undefined ? undefined : String(value);
-}
-
-function findFirstConversationId(response) {
-  const payload = response?.data?.payload;
-  if (!Array.isArray(payload)) return undefined;
-  for (const conversation of payload) {
-    const value = conversation?.id;
-    if ((typeof value === 'number' || typeof value === 'string') && /^\d{1,20}$/.test(String(value)))
-      return String(value);
+  for (const candidate of candidates) {
+    if ((typeof candidate === 'string' || typeof candidate === 'number') && /^\d{1,20}$/.test(String(candidate))) {
+      return String(candidate);
+    }
   }
   return undefined;
 }
 
-async function readBounded(response) {
+function findFirstConversationId(response: unknown): string | undefined {
+  if (!response || typeof response !== 'object' || Array.isArray(response)) return undefined;
+  const data = (response as Record<string, unknown>).data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const payload = (data as Record<string, unknown>).payload;
+  if (!Array.isArray(payload)) return undefined;
+  for (const conversation of payload) {
+    if (!conversation || typeof conversation !== 'object') continue;
+    const value = (conversation as Record<string, unknown>).id;
+    if ((typeof value === 'number' || typeof value === 'string') && /^\d{1,20}$/.test(String(value))) {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+async function readBounded(response: Response): Promise<unknown> {
   const length = Number(response.headers.get('content-length'));
   if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
     await response.body?.cancel();
     throw new Error('Chat response exceeded the size limit.');
   }
   if (!response.body) return null;
-  const reader = response.body.getReader();
-  const chunks = [];
+  const reader = response.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+  const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
+      if (!value) continue;
       size += value.byteLength;
       if (size > MAX_RESPONSE_BYTES) {
         await reader.cancel();
@@ -93,14 +115,21 @@ async function readBounded(response) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body));
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(body)) as unknown;
 }
 
-async function getJson(route, token, fetchImpl, timeoutMs = TIMEOUT_MS) {
+async function getJson(
+  route: string,
+  token: string,
+  fetchImpl: typeof fetch,
+  timeoutMs = TIMEOUT_MS,
+): Promise<{ status: number; body: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response | undefined;
+  let transportFailure = false;
   try {
-    const response = await fetchImpl(
+    response = await fetchImpl(
       new Request(`${API_ORIGIN}${route}`, {
         method: 'GET',
         redirect: 'manual',
@@ -108,27 +137,43 @@ async function getJson(route, token, fetchImpl, timeoutMs = TIMEOUT_MS) {
         headers: { Accept: 'application/json', api_access_token: token },
       }),
     );
+  } catch {
+    // Intentionally suppress transport errors and headers from propagated failures.
+    transportFailure = true;
+  }
+
+  try {
+    if (transportFailure || !response) {
+      throw new Error(controller.signal.aborted ? 'Chat request timed out.' : 'Chat request failed.');
+    }
     if (response.status < 200 || response.status >= 300) {
       await response.body?.cancel();
       throw new Error(`Chat request failed (${response.status}).`);
     }
-    return { status: response.status, body: await readBounded(response) };
-  } catch (error) {
-    if (error instanceof Error && /^Chat (request failed|response exceeded)/.test(error.message)) throw error;
-    throw new Error(controller.signal.aborted ? 'Chat request timed out.' : 'Chat request failed.');
+    try {
+      return { status: response.status, body: await readBounded(response) };
+    } catch (error: unknown) {
+      if (error instanceof Error && /^Chat (request failed|response exceeded)/.test(error.message)) {
+        throw error;
+      }
+      throw new Error(controller.signal.aborted ? 'Chat request timed out.' : 'Chat request failed.', {
+        cause: error,
+      });
+    }
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function pauseBetweenRequests() {
-  await new Promise((resolve) => setTimeout(resolve, 350));
+async function pauseBetweenRequests(): Promise<void> {
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
 }
 
-function emit(write, event) {
+function emit(write: (line: string) => void, event: Record<string, unknown>): void {
   write(JSON.stringify(event));
 }
 
+/** Verify pinned read-only Agendor Chat API endpoints without emitting customer payloads or secrets. */
 export async function verifyChatContract({
   token,
   accountId,
@@ -137,13 +182,15 @@ export async function verifyChatContract({
   write = (line) => console.log(line),
   persistAccountId,
   timeoutMs = TIMEOUT_MS,
-}) {
-  if (typeof token !== 'string' || token.length < 1 || /\s/.test(token))
+}: VerifyChatContractOptions): Promise<void> {
+  if (typeof token !== 'string' || token.length < 1 || /\s/.test(token)) {
     throw new Error('Set AGENDOR_CHAT_TOKEN in the ignored local .dev.vars file.');
+  }
   const profile = await getJson('/profile', token, fetchImpl, timeoutMs);
   const profileAccountId = findAccountId(profile.body);
-  if (profileAccountId && accountId && String(profileAccountId) !== String(accountId))
+  if (profileAccountId && accountId && String(profileAccountId) !== String(accountId)) {
     throw new Error('Configured Chat account ID does not match the authenticated profile.');
+  }
   if (profileAccountId && !accountId && persistAccountId) await persistAccountId(profileAccountId);
   emit(write, {
     endpoint: 'profile',
@@ -196,18 +243,19 @@ export async function verifyChatContract({
   emit(write, { endpoint: 'conversation messages', status: messages.status, shape: schemaShape(messages.body) });
 }
 
-async function persistAccountIdLocally(accountId) {
+async function persistAccountIdLocally(accountId: string): Promise<void> {
   const path = '.dev.vars';
   const text = await readFile(path, 'utf8');
   const line = 'AGENDOR_CHAT_ACCOUNT_ID=' + JSON.stringify(accountId);
-  const pattern = new RegExp('^\\s*AGENDOR_CHAT_ACCOUNT_ID\\s*=.*$', 'm');
+  const pattern = /^\s*AGENDOR_CHAT_ACCOUNT_ID\s*=.*$/m;
   const updated = pattern.test(text)
     ? text.replace(pattern, line)
     : text.trimEnd() + String.fromCharCode(10) + line + String.fromCharCode(10);
   await writeFile(path, updated);
 }
-async function main() {
-  const vars = readVars(await readFile('.dev.vars', 'utf8'));
+
+async function main(): Promise<void> {
+  const vars = parseEnvVars(await readFile('.dev.vars', 'utf8'));
   await verifyChatContract({
     token: vars.get('AGENDOR_CHAT_TOKEN'),
     accountId: vars.get('AGENDOR_CHAT_ACCOUNT_ID'),
@@ -216,8 +264,8 @@ async function main() {
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
+if (isEntrypoint(import.meta.url)) {
+  main().catch((error: unknown) => {
     const message =
       error instanceof Error && /^Set AGENDOR_CHAT_TOKEN|^Chat (request failed|response exceeded)/.test(error.message)
         ? error.message

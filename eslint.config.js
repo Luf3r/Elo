@@ -135,9 +135,9 @@ export default tseslint.config(
       'max-lines': ['warn', { max: 400 }],
       // Escapes redundantes legados em regexes e template strings; limpeza sem mudar comportamento fica para refatoração.
       'no-useless-escape': 'warn',
-      // Bloco catch vazio intencional ao extrair código JSON de erro em scripts/verify-automation-mcp.mjs.
+      // Bloco catch vazio legado; mantido em aviso para compatibilidade.
       'no-empty': 'warn',
-      // scripts/verify-chat-contract.mjs omite `cause` intencionalmente para não vazar detalhes de transporte/headers.
+      // Omissão intencional de `cause` em erros sanitizados (ex.: scripts/verify-chat-contract.ts) para não vazar transporte/headers.
       'preserve-caught-error': 'warn',
     },
   },

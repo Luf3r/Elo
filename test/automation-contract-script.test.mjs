@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { discoverAutomationContracts } from '../scripts/discover-automation-contracts.mjs';
+import { discoverAutomationContracts } from '../scripts/discover-automation-contracts.ts';
 import { syntheticContracts as fixtures } from './fixtures/automation-contracts.ts';
 
 function transport(calls) {
@@ -142,7 +142,7 @@ test('timeout aborts both transport and stalled response streams', async () => {
 
 test('CLI requires explicit opt-in and rejects arguments before reading credentials or network', () => {
   for (const args of [[], ['--token', 'unit-agendor-key'], ['--live', '--token', 'unit-agendor-key']]) {
-    const child = spawnSync(process.execPath, ['scripts/discover-automation-contracts.mjs', ...args], {
+    const child = spawnSync(process.execPath, ['scripts/discover-automation-contracts.ts', ...args], {
       encoding: 'utf8',
     });
     assert.equal(child.status, 1);
@@ -152,7 +152,7 @@ test('CLI requires explicit opt-in and rejects arguments before reading credenti
 });
 
 test('live CLI fails closed before credential access while the shared durable budget is unavailable', () => {
-  const scriptUrl = new URL('../scripts/discover-automation-contracts.mjs', import.meta.url).href;
+  const scriptUrl = new URL('../scripts/discover-automation-contracts.ts', import.meta.url).href;
   const code = `
     import { promises } from 'node:fs';
     import { fileURLToPath } from 'node:url';

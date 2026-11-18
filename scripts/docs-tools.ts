@@ -1,20 +1,55 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
+import { isEntrypoint } from './lib/args.ts';
 
 const ROOT_DIR = resolve(import.meta.dirname, '..');
 const DOCS_TOOLS_PATH = resolve(ROOT_DIR, 'docs/tools.md');
 
-const SYNTHETIC_AUTH = {
+interface SyntheticAuth {
+  clientId: string;
+  userId: string;
+  scopes: string[];
+}
+
+interface McpToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+interface McpSecurityScheme {
+  scopes?: string[];
+}
+
+interface McpToolDescriptor {
+  name: string;
+  annotations?: McpToolAnnotations;
+  _meta?: {
+    securitySchemes?: McpSecurityScheme[];
+  };
+}
+
+interface ToolsRunner {
+  listToolsForEnv: (env: Record<string, string>, auth: SyntheticAuth) => Promise<McpToolDescriptor[]>;
+}
+
+interface AvailabilitySets {
+  base: Set<string>;
+  crmOnly: Set<string>;
+  chatOnly: Set<string>;
+}
+
+const SYNTHETIC_AUTH: SyntheticAuth = {
   clientId: 'docs-tools-generator',
   userId: 'docs-tools-user',
   scopes: [],
 };
 
-let cachedRunnerPromise;
+let cachedRunnerPromise: Promise<ToolsRunner> | undefined;
 
-async function loadToolsRunner() {
+async function loadToolsRunner(): Promise<ToolsRunner> {
   if (!cachedRunnerPromise) {
     cachedRunnerPromise = (async () => {
       const entry = [
@@ -54,15 +89,23 @@ async function loadToolsRunner() {
         },
       });
 
-      const code = result.outputFiles[0].text;
-      const dataUrl = `data:text/javascript;base64,${Buffer.from(code, 'utf8').toString('base64')}`;
-      return import(dataUrl);
+      const outputFile = result.outputFiles[0];
+      if (!outputFile) {
+        throw new Error('Failed to bundle docs-tools runner.');
+      }
+      const bytes = new TextEncoder().encode(outputFile.text);
+      let binary = '';
+      for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+      }
+      const dataUrl = `data:text/javascript;base64,${btoa(binary)}`;
+      return (await import(dataUrl)) as ToolsRunner;
     })();
   }
   return cachedRunnerPromise;
 }
 
-function makeSyntheticEnv(overrides = {}) {
+function makeSyntheticEnv(overrides: Record<string, string> = {}): Record<string, string> {
   return {
     AGENDOR_CRM_TOKEN: '',
     AGENDOR_CHAT_TOKEN: '',
@@ -79,7 +122,7 @@ function makeSyntheticEnv(overrides = {}) {
   };
 }
 
-function formatScopes(tool) {
+function formatScopes(tool: McpToolDescriptor): string {
   const schemes = Array.isArray(tool._meta?.securitySchemes) ? tool._meta.securitySchemes : [];
   const scopes = schemes.flatMap((scheme) => (Array.isArray(scheme.scopes) ? scheme.scopes : []));
   if (scopes.length === 0) {
@@ -88,11 +131,11 @@ function formatScopes(tool) {
   return scopes.map((scope) => `\`${scope}\``).join(', ');
 }
 
-function formatReadWrite(tool) {
+function formatReadWrite(tool: McpToolDescriptor): string {
   return tool.annotations?.readOnlyHint === true ? 'Leitura' : 'Escrita';
 }
 
-function formatAnnotations(tool) {
+function formatAnnotations(tool: McpToolDescriptor): string {
   const annotations = tool.annotations ?? {};
   const parts = [
     `readOnly=${Boolean(annotations.readOnlyHint)}`,
@@ -103,7 +146,7 @@ function formatAnnotations(tool) {
   return `\`${parts.join(', ')}\``;
 }
 
-function determineAvailability(name, sets) {
+function determineAvailability(name: string, sets: AvailabilitySets): string {
   if (sets.base.has(name)) {
     if (name === 'server_status') {
       return 'Sempre registrada (não contata o Agendor)';
@@ -119,7 +162,8 @@ function determineAvailability(name, sets) {
   return 'Requer CRM (`AGENDOR_CRM_TOKEN`) e Chat (`AGENDOR_CHAT_TOKEN` + `AGENDOR_CHAT_ACCOUNT_ID` numérico) configurados';
 }
 
-export async function generateToolsMarkdown() {
+/** Generate `docs/tools.md` Markdown directly from `createServer` `tools/list` output. */
+export async function generateToolsMarkdown(): Promise<string> {
   const { listToolsForEnv } = await loadToolsRunner();
 
   const [baseTools, crmOnlyTools, chatOnlyTools, fullTools] = await Promise.all([
@@ -139,7 +183,7 @@ export async function generateToolsMarkdown() {
     ),
   ]);
 
-  const sets = {
+  const sets: AvailabilitySets = {
     base: new Set(baseTools.map((tool) => tool.name)),
     crmOnly: new Set(crmOnlyTools.map((tool) => tool.name)),
     chatOnly: new Set(chatOnlyTools.map((tool) => tool.name)),
@@ -156,7 +200,7 @@ export async function generateToolsMarkdown() {
   const lines = [
     '# Inventário de Ferramentas MCP',
     '',
-    '> Arquivo gerado automaticamente por `npm run docs:tools` (`scripts/docs-tools.mjs`) a partir de `tools/list` real do servidor (`createServer` com `env` sintético CRM + Chat configurados). Não edite manualmente.',
+    '> Arquivo gerado automaticamente por `npm run docs:tools` (`scripts/docs-tools.ts`) a partir de `tools/list` real do servidor (`createServer` com `env` sintético CRM + Chat configurados). Não edite manualmente.',
     '',
     `Total de ferramentas registradas com CRM e Chat configurados: **${fullTools.length}** (sem segredos CRM/Chat: **${baseTools.length}**; apenas CRM: **${crmOnlyTools.length}**; apenas Chat: **${chatOnlyTools.length}**).`,
     '',
@@ -176,18 +220,25 @@ export async function generateToolsMarkdown() {
   return lines.join('\n');
 }
 
-export async function writeToolsDoc(targetPath = DOCS_TOOLS_PATH) {
+/** Generate and write `docs/tools.md` to disk. */
+export async function writeToolsDoc(targetPath = DOCS_TOOLS_PATH): Promise<string> {
   const markdown = await generateToolsMarkdown();
   writeFileSync(targetPath, markdown, 'utf8');
   return markdown;
 }
 
-export function readToolsDoc(targetPath = DOCS_TOOLS_PATH) {
-  return readFileSync(targetPath, 'utf8');
+/** Read `docs/tools.md` with normalized LF line endings for cross-platform comparison. */
+export function readToolsDoc(targetPath = DOCS_TOOLS_PATH): string {
+  return readFileSync(targetPath, 'utf8').replace(/\r\n/g, '\n');
 }
 
-const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isEntrypoint) {
-  await writeToolsDoc();
-  console.log(`Updated ${DOCS_TOOLS_PATH}`);
+if (isEntrypoint(import.meta.url)) {
+  writeToolsDoc()
+    .then(() => {
+      console.log(`Updated ${DOCS_TOOLS_PATH}`);
+    })
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
 }

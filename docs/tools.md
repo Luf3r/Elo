@@ -1,6 +1,6 @@
 # Inventário de Ferramentas MCP
 
-> Arquivo gerado automaticamente por `npm run docs:tools` (`scripts/docs-tools.mjs`) a partir de `tools/list` real do servidor (`createServer` com `env` sintético CRM + Chat configurados). Não edite manualmente.
+> Arquivo gerado automaticamente por `npm run docs:tools` (`scripts/docs-tools.ts`) a partir de `tools/list` real do servidor (`createServer` com `env` sintético CRM + Chat configurados). Não edite manualmente.
 
 Total de ferramentas registradas com CRM e Chat configurados: **44** (sem segredos CRM/Chat: **15**; apenas CRM: **23**; apenas Chat: **23**).
 

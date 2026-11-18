@@ -28,7 +28,7 @@ Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets
    git tag vX.Y.Z
    ```
 
-2. Execute o preparador de release (`scripts/release.mjs`):
+2. Execute o preparador de release (`scripts/release.ts`):
 
    ```bash
    npm run release

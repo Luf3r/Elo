@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { verifyChatContract } from '../scripts/verify-chat-contract.mjs';
+import { verifyChatContract } from '../scripts/verify-chat-contract.ts';
 
 test('verifier uses only pinned GET routes and redacts tokens and customer values', async () => {
   const calls = [];

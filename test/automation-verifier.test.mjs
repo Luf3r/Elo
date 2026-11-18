@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commandDigest, runVerification } from '../scripts/verify-automation-mcp.mjs';
+import { commandDigest, runVerification } from '../scripts/verify-automation-mcp.ts';
 
 function fixture(overrides = {}) {
   const calls = [];

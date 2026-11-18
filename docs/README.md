@@ -15,6 +15,7 @@ Documentação vigente do projeto `elo-agendor-mcp`. Para o inventário atualiza
 - [operations/rotation.md](operations/rotation.md) — Rotação de segredos e revogação/renovação OAuth.
 - [operations/recovery.md](operations/recovery.md) — Pausa da automação, reconciliação, DLQ, revisões, retenção e rollback.
 - [operations/pilot.md](operations/pilot.md) — Verificação controlada e requisitos do piloto supervisionado.
+- [operations/scripts.md](operations/scripts.md) — Catálogo completo dos scripts NPM e utilitários operacionais em `scripts/`.
 
 ## Integrações e templates
 

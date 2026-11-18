@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateMcpTarget } from '../scripts/oauth-session.mjs';
+import { validateMcpTarget } from '../scripts/lib/oauth-session.ts';
 test('credentials cannot be sent to another remote MCP host or a URL carrying query credentials', () => {
   for (const target of [
     'https://other.workers.dev/mcp',

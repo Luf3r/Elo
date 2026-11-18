@@ -1,23 +1,49 @@
-import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { isEntrypoint, readJsonFile } from './lib/args.ts';
+
+export interface GitCommandResult {
+  status: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
+}
+
+export interface CheckCommandResult {
+  status: number | null;
+}
+
+export interface PackageMetadata {
+  version?: string;
+}
+
+export interface ReleaseDeps {
+  readPackageJson: () => PackageMetadata;
+  runGit: (args: string[]) => GitCommandResult;
+  runCheck: () => CheckCommandResult;
+}
+
+export interface ReleasePlan {
+  version: string;
+  tag: string;
+  commit: string;
+  deployCommand: string;
+}
+
+const DEFAULT_DEPS: ReleaseDeps = {
+  readPackageJson: () => readJsonFile<PackageMetadata>('package.json'),
+  runGit: (args) => spawnSync('git', args, { encoding: 'utf8' }),
+  runCheck: () =>
+    spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], {
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    }),
+};
 
 /**
  * Validate release preconditions (clean git tree, passing `npm run check`, and
  * matching `vX.Y.Z` tag on `HEAD`) and format the `wrangler deploy` command.
  * Never executes a deployment.
  */
-export function prepareRelease(
-  deps = {
-    readPackageJson: () => JSON.parse(readFileSync('package.json', 'utf8')),
-    runGit: (args) => spawnSync('git', args, { encoding: 'utf8' }),
-    runCheck: () =>
-      spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'check'], {
-        stdio: 'inherit',
-        shell: process.platform === 'win32',
-      }),
-  },
-) {
+export function prepareRelease(deps: ReleaseDeps = DEFAULT_DEPS): ReleasePlan {
   const pkg = deps.readPackageJson();
   const version = pkg.version;
   if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
@@ -56,13 +82,12 @@ export function prepareRelease(
   return { version, tag, commit, deployCommand };
 }
 
-const isEntrypoint = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isEntrypoint) {
+if (isEntrypoint(import.meta.url)) {
   try {
     const result = prepareRelease();
     console.log('Release checks passed. Run the following command manually to deploy:');
     console.log(result.deployCommand);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   }
