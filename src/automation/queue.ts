@@ -1,5 +1,6 @@
 import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import { SafeError } from '../shared/errors';
+import { readJson } from '../shared/json';
 import { readVerificationSnapshot } from './verification-reader';
 import { assertInboxAllowed } from '../domain/inbox-policy';
 import { z } from 'zod';
@@ -13,9 +14,9 @@ import {
   readCanonicalConversation,
 } from './clients';
 import { matchesFields, readRef, resolvedTarget } from './reconciliation';
-import type { CatalogSnapshot } from '../agendor/crm/types';
 import { canonical } from './operations';
-import type { WorkflowState } from './service-state';
+import { catalogSnapshotSchema } from './schemas';
+import { workflowStateSchema } from './service-state';
 
 export const automationQueuePayloadSchema = z.strictObject({
   accountKey: z.literal(TENANT_ACCOUNT_KEY),
@@ -48,7 +49,7 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
   const operation = await repository.getOperation(payload.operationId);
   if (!operation) throw Error('OPERATION_UNAVAILABLE');
   const reads = createAgendorCrmClient(env);
-  const catalog = JSON.parse(operation.input.catalogJson) as CatalogSnapshot;
+  const catalog = readJson(catalogSnapshotSchema, operation.input.catalogJson, 'operation.input.catalogJson');
   const deps: ExecutionDeps = {
     repository,
     basis: operation.input.basis,
@@ -60,7 +61,7 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
     mutations: createCrmMutationClient({ env, catalog }),
     async verify(command, phase, stored) {
       const workflowJson = await repository.getWorkflow(stored.input.basis.lease.workId);
-      const workflow = workflowJson ? (JSON.parse(workflowJson) as WorkflowState) : undefined;
+      const workflow = workflowJson ? readJson(workflowStateSchema, workflowJson, 'workflow') : undefined;
       if (workflow?.direct) {
         const direct = workflow.direct;
         const actor = stored.input.authorization.actor;

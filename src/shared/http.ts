@@ -26,7 +26,7 @@ function retryAfterSeconds(value: string | null): number | undefined {
       : NaN;
   return Number.isFinite(seconds) && seconds >= 0 ? Math.min(seconds, 86_400) : undefined;
 }
-export async function fetchJson<T>(request: Request, options: UpstreamRequestOptions = {}): Promise<T> {
+export async function fetchJson(request: Request, options: UpstreamRequestOptions = {}): Promise<unknown> {
   throwIfCancelled(request.signal);
   const controller = new AbortController();
   const signal = AbortSignal.any([request.signal, controller.signal]);
@@ -105,7 +105,8 @@ export async function fetchJson<T>(request: Request, options: UpstreamRequestOpt
       offset += chunk.byteLength;
     }
     try {
-      return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes)) as T;
+      const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
+      return parsed;
     } catch {
       throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Upstream returned invalid JSON.', false, response.status);
     }

@@ -100,7 +100,7 @@ export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutat
     let dispatched = false;
     let response: unknown;
     try {
-      response = await fetchJson<unknown>(request, {
+      response = await fetchJson(request, {
         timeoutMs: deps.timeoutMs,
         request: (request) => {
           dispatched = true;

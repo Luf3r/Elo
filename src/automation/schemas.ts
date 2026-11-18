@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import type { CatalogSnapshot } from '../agendor/crm/types';
+import type { CatalogPage, CatalogSnapshot } from '../agendor/crm/types';
 import type { ConversationSnapshot, Coverage } from '../agendor/chat/types';
 import {
   positiveId,
+  recordSchema,
   updateOrganizationInput,
   updatePersonInput,
   updateDealInput,
@@ -467,7 +468,7 @@ export const coverageSchema: z.ZodType<Coverage> = z.strictObject({
 });
 // Read DTO ownership stays with the Chat and CRM adapters. These are internal,
 // server-produced snapshots, not accepted as part of submit_analysis.
-const conversationSnapshotSchema: z.ZodType<ConversationSnapshot> = z.strictObject({
+export const conversationSnapshotSchema: z.ZodType<ConversationSnapshot> = z.strictObject({
   conversationId: positiveId,
   inboxId: positiveId.optional(),
   revision: key,
@@ -534,13 +535,41 @@ const conversationSnapshotSchema: z.ZodType<ConversationSnapshot> = z.strictObje
   coverage: coverageSchema,
   continuation: z.strictObject({ conversationId: positiveId, after: positiveId }).optional(),
 });
-const catalogSnapshotSchema = z.custom<CatalogSnapshot>(
+export const catalogSnapshotSchema = z.custom<CatalogSnapshot>(
   (v) =>
     !!v &&
     typeof v === 'object' &&
     typeof (v as CatalogSnapshot).version === 'string' &&
     Array.isArray((v as CatalogSnapshot).customFields),
 );
+export const catalogPageSchema: z.ZodType<CatalogPage> = z.strictObject({
+  items: z.array(recordSchema),
+  pageInfo: z.strictObject({
+    page: z.number().int().nonnegative(),
+    perPage: z.number().int().positive(),
+    hasNext: z.boolean(),
+    nextPage: z.number().int().positive().nullable(),
+  }),
+  section: z.enum([
+    'funnels',
+    'stages',
+    'customFields',
+    'users',
+    'products',
+    'origins',
+    'categories',
+    'sectors',
+    'cities',
+  ]),
+  entityType: z.enum(['organizations', 'people', 'deals', 'products']).optional(),
+  funnelId: positiveId.optional(),
+  state: z.string().optional(),
+  fetchedAt: z.string(),
+  coverage: z.strictObject({
+    status: z.enum(['partial', 'complete']),
+    pages: z.array(z.number().int().nonnegative()),
+  }),
+});
 export const customerCandidateSchema = z.strictObject({
   ref: entityRefSchema,
   name: z.string().min(1).max(255),
@@ -594,7 +623,7 @@ export const customerCandidatesSchema = z.strictObject({
     .max(100)
     .optional(),
 });
-const recordSnapshotSchema = z.strictObject({
+export const recordSnapshotSchema = z.strictObject({
   ref: taskParentSchema,
   fields: z.array(factSchema).max(500),
   lastWritten: z.array(factSchema).max(500).optional(),
@@ -860,6 +889,10 @@ export const snapshotVersionSchema = z.strictObject({
   catalogVersion: key,
 });
 export const planBasisSchema = snapshotVersionSchema.extend({ lease: workLeaseSchema, customerId: key });
+export const contextProjectionEnvelopeSchema = z.strictObject({
+  projection: contextProjectionSchema,
+  basis: planBasisSchema,
+});
 export const commandReservationSchema = planBasisSchema.extend({
   operationId: key,
   command: mutationCommandSchema,

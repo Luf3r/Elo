@@ -170,6 +170,19 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/app/config/tenant.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',
+          message: 'Use readJson(schema, text) from src/shared/json.ts instead of JSON.parse(...) as T.',
+        },
+      ],
+    },
+  },
+  {
     files: ['src/**/*.ts'],
     ignores: ['src/app/config/tenant.ts'],
     rules: {
@@ -187,6 +200,11 @@ export default tseslint.config(
         {
           selector: 'Literal[value="elo-agendor-mcp"], TemplateElement[value.raw="elo-agendor-mcp"]',
           message: 'Use TENANT_SERVICE_NAME from src/app/config/tenant.ts instead of hardcoding the service name.',
+        },
+        {
+          selector:
+            'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',
+          message: 'Use readJson(schema, text) from src/shared/json.ts instead of JSON.parse(...) as T.',
         },
       ],
     },
@@ -214,6 +232,11 @@ export default tseslint.config(
         {
           selector: 'Literal[value="elotenant"], TemplateElement[value.raw="elotenant"]',
           message: 'Use TENANT_ACCOUNT_KEY from src/app/config/tenant.ts instead of hardcoding "elotenant".',
+        },
+        {
+          selector:
+            'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',
+          message: 'Use readJson(schema, text) from src/shared/json.ts instead of JSON.parse(...) as T.',
         },
       ],
     },

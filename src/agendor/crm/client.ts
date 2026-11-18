@@ -45,7 +45,7 @@ export function createAgendorCrmClient(
       if (value !== undefined && value !== '') url.searchParams.set(name, String(value));
     await budgetGate();
     throwIfCancelled(options.signal);
-    return fetchJson<unknown>(
+    return fetchJson(
       new Request(url, {
         method: 'GET',
         signal: options.signal,
@@ -78,7 +78,7 @@ export function createAgendorCrmClient(
     const url = new URL(`https://api.agendor.com.br/v3${route}`);
     await budgetGate();
     throwIfCancelled(options.signal);
-    const response = await fetchJson<unknown>(
+    const response = await fetchJson(
       new Request(url, {
         method: 'PUT',
         signal: options.signal,

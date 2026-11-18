@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import { canonical } from '../shared/canonical';
-import { authorizedPlanSchema, planBasisSchema, operationStatusSchema } from './schemas';
+import { readJson } from '../shared/json';
+import {
+  authorizedPlanSchema,
+  mutationCommandSchema,
+  operationReceiptSchema,
+  operationStatusSchema,
+  planBasisSchema,
+} from './schemas';
 import type {
   CommandReservation,
   MutationCommand,
@@ -37,6 +44,25 @@ export interface ExecutionCommand {
   fence: number;
   reservationVersion: number;
 }
+export const executionOperationSchema: z.ZodType<ExecutionOperation> = z.strictObject({
+  operationId: z.string().min(1).max(200),
+  version: z.number().int().positive(),
+  input: operationInputSchema,
+  status: operationStatusSchema,
+  createdAt: z.number().finite(),
+  authorizedAt: z.number().finite(),
+});
+export const executionCommandSchema: z.ZodType<ExecutionCommand> = z.strictObject({
+  operationId: z.string().min(1).max(200),
+  command: mutationCommandSchema,
+  state: z.enum(['ready', 'sending', 'retry', 'confirmed', 'uncertain', 'review']),
+  attempts: z.number().int().nonnegative(),
+  nextAttemptAt: z.number().finite(),
+  token: z.string().min(1).max(200).optional(),
+  receipt: operationReceiptSchema,
+  fence: z.number().int().positive(),
+  reservationVersion: z.number().int().positive(),
+});
 export { canonical };
 export async function payloadDigest(value: unknown): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical(value))))]
@@ -62,7 +88,7 @@ export class OperationsStore {
     const row = this.sql
       .exec<{ data: string }>('SELECT data FROM execution_operations WHERE operation_id = ?', operationId)
       .toArray()[0];
-    return row ? (JSON.parse(row.data) as ExecutionOperation) : undefined;
+    return row ? readJson(executionOperationSchema, row.data, 'execution_operations.data') : undefined;
   }
   getOperationByRequest(requestId: string) {
     const row = this.sql
@@ -145,7 +171,9 @@ export class OperationsStore {
         commandKey,
       )
       .toArray()[0];
-    return row ? { ...(JSON.parse(row.data) as ExecutionCommand), nextAttemptAt: row.next_attempt_at } : undefined;
+    return row
+      ? { ...readJson(executionCommandSchema, row.data, 'execution_commands.data'), nextAttemptAt: row.next_attempt_at }
+      : undefined;
   }
   private putCommand(record: ExecutionCommand) {
     this.sql.exec(

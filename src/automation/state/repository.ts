@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type {
   CommandCompletion,
   CommandReservation,
@@ -15,32 +16,47 @@ import type {
 import {
   commandCompletionSchema,
   commandReservationSchema,
+  contextProjectionEnvelopeSchema,
   contextProjectionSchema,
   customerContextSchema,
   demandRecordSchema,
+  operationReceiptSchema,
   reserveWorkInputSchema,
   snapshotManifestSchema,
+  sourceRefSchema,
   planBasisSchema,
   syncPlanSchema,
   workLeaseSchema,
 } from '../schemas';
 import { contextEvidenceRefs, contextValue, renderCustomerContext } from '../context/render';
 import { SafeError } from '../../shared/errors';
+import { readJson } from '../../shared/json';
 import type { AgentAnalysis, CustomerCandidates, CatalogSnapshot, ResolutionBundle, SourceRef } from '../types';
 import { createAnalysisInputSchema, customerCandidatesSchema, resolutionBundleSchema } from '../schemas';
 import { resolveCustomer, uniqueSources, normalizedPhone } from '../../domain/identity';
 import { resolveDemands } from '../../domain/demands';
-import { OperationsStore } from '../operations';
+import { OperationsStore, executionCommandSchema, executionOperationSchema } from '../operations';
 import type { OperationInput } from '../operations';
 import { automationPolicySchema } from '../../domain/policy-types';
-import type { WorkflowState, WorkflowReview, ListReviewsInput } from '../service-state';
+import {
+  workflowReviewSchema,
+  workflowStateSchema,
+  type WorkflowState,
+  type WorkflowReview,
+  type ListReviewsInput,
+} from '../service-state';
 import type { AutomationPolicy } from '../types';
 import { reviewResolutionInputSchema } from '../schemas';
 import { WATCHDOG_INTERVAL_MS } from '../maintenance';
-import type { ExecutionCommand, ExecutionOperation } from '../operations';
 import { applyReviewDecision } from '../../domain/reviews';
 import { canonical } from '../../shared/canonical';
-import { discoveryCursorMs, type DiscoveryCursor, type PendingActivity } from '../discovery';
+import {
+  discoveryCursorMs,
+  discoveryCursorSchema,
+  pendingActivitySchema,
+  type DiscoveryCursor,
+  type PendingActivity,
+} from '../discovery';
 
 export const EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 async function digest(value: unknown): Promise<string> {
@@ -206,7 +222,7 @@ export class AccountRepository {
         Date.now(),
       )
       .toArray()[0];
-    return row ? (JSON.parse(row.data) as DiscoveryCursor) : undefined;
+    return row ? readJson(discoveryCursorSchema, row.data, 'pending_cursors.data') : undefined;
   }
   getPendingActivity(id: string): (PendingActivity & { planId: string | null }) | undefined {
     const row = this.sql
@@ -216,7 +232,9 @@ export class AccountRepository {
         Date.now(),
       )
       .toArray()[0];
-    return row ? { ...(JSON.parse(row.data) as PendingActivity), planId: row.plan_id } : undefined;
+    return row
+      ? { ...readJson(pendingActivitySchema, row.data, 'pending_activity.data'), planId: row.plan_id }
+      : undefined;
   }
   savePendingPage(entries: PendingActivity[], policyVersion: number, next?: DiscoveryCursor) {
     return this.storage.transactionSync(() => {
@@ -290,7 +308,7 @@ export class AccountRepository {
         )
         .toArray();
       for (const row of operations) {
-        const operation = JSON.parse(row.data) as ExecutionOperation;
+        const operation = readJson(executionOperationSchema, row.data, 'execution_operations.data');
         if (operation.createdAt + EVIDENCE_RETENTION_MS <= now) {
           this.sql.exec(
             'INSERT INTO execution_tombstones VALUES (?, ?, ?) ON CONFLICT(operation_id) DO NOTHING',
@@ -391,7 +409,7 @@ export class AccountRepository {
         )
         .toArray()[0];
       if (!pending?.data) return;
-      const envelope = JSON.parse(pending.data) as { basis: PlanBasis; projection: ContextProjection };
+      const envelope = readJson(contextProjectionEnvelopeSchema, pending.data, 'facts.data');
       if (canonical(envelope.basis) !== canonical(basis)) throw Error('CONTEXT_STALE');
       for (const command of operation.input.authorization.plan.orderedCommands) {
         const receipt = this.operations.getExecutionCommand(command.commandKey)?.receipt;
@@ -487,7 +505,7 @@ export class AccountRepository {
   }
   getExecutionPolicy() {
     const row = this.sql.exec<{ data: string }>('SELECT data FROM policy WHERE singleton = 1').toArray()[0];
-    return row ? automationPolicySchema.parse(JSON.parse(row.data)) : undefined;
+    return row ? readJson(automationPolicySchema, row.data, 'policy.data') : undefined;
   }
   private get sql() {
     return this.storage.sql;
@@ -500,7 +518,7 @@ export class AccountRepository {
       )
       .toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) return;
-    return JSON.parse(row.data) as WorkflowState;
+    return readJson(workflowStateSchema, row.data, 'events.data');
   }
   saveWorkflow(state: WorkflowState, expectedRevision: number): void {
     this.storage.transactionSync(() => {
@@ -558,7 +576,7 @@ export class AccountRepository {
     if (!row?.valid || !row.data || row.evidence_expires_at <= Date.now()) return;
     const workflow = this.getWorkflow(row.work_id);
     if (!workflow) return;
-    return { plan: syncPlanSchema.parse(JSON.parse(row.data)), workflow };
+    return { plan: readJson(syncPlanSchema, row.data, 'plans.data'), workflow };
   }
   updatePolicy(policy: AutomationPolicy, expectedVersion: number, owner?: WorkLease['owner']): AutomationPolicy {
     const valid = automationPolicySchema.parse(policy);
@@ -594,7 +612,7 @@ export class AccountRepository {
       )
       .toArray();
     const selected = rows
-      .map((r) => JSON.parse(r.data) as WorkflowReview)
+      .map((r) => readJson(workflowReviewSchema, r.data, 'reviews.data'))
       .filter(
         (r) =>
           r.state === 'open' &&
@@ -632,7 +650,7 @@ export class AccountRepository {
         )
         .toArray()[0];
       if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('REVIEW_UNAVAILABLE');
-      const review = JSON.parse(row.data) as WorkflowReview;
+      const review = readJson(workflowReviewSchema, row.data, 'reviews.data');
       if (
         review.owner.userId !== owner.userId ||
         review.owner.clientId !== owner.clientId ||
@@ -676,7 +694,7 @@ export class AccountRepository {
           )
           .toArray()[0];
         if (!manifest?.data || manifest.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
-        const snapshot = snapshotManifestSchema.parse(JSON.parse(manifest.data));
+        const snapshot = readJson(snapshotManifestSchema, manifest.data, 'snapshot_manifest.data');
         if (
           decision.kind === 'selectCustomer' &&
           !snapshot.records.some((r) => canonical(r.ref) === canonical(decision.ref))
@@ -728,7 +746,7 @@ export class AccountRepository {
           reviewId: review.reviewId,
           version: resolved.version,
           sourceSnapshotVersion: workflow.work.snapshotVersion,
-          sourceRefs: snapshotManifestSchema.parse(JSON.parse(manifest.data)).sources,
+          sourceRefs: readJson(snapshotManifestSchema, manifest.data, 'snapshot_manifest.data').sources,
           analysis: workflow.analysis,
           policyVersion: this.getExecutionPolicy()?.version ?? 1,
           decision,
@@ -784,7 +802,7 @@ export class AccountRepository {
       )
       .toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('REVIEW_UNAVAILABLE');
-    const review = JSON.parse(row.data) as WorkflowReview;
+    const review = readJson(workflowReviewSchema, row.data, 'reviews.data');
     if (
       review.workId !== basis.lease.workId ||
       review.customerId !== basis.customerId ||
@@ -812,7 +830,7 @@ export class AccountRepository {
     const pendingOperations = this.sql
       .exec<{ data: string }>('SELECT data FROM execution_operations')
       .toArray()
-      .map((r) => JSON.parse(r.data) as import('../operations').ExecutionOperation)
+      .map((r) => readJson(executionOperationSchema, r.data, 'execution_operations.data'))
       .filter(
         (o) =>
           o.input.authorization.actor.userId === owner.userId &&
@@ -825,7 +843,7 @@ export class AccountRepository {
         Date.now(),
       )
       .toArray()
-      .map((r) => JSON.parse(r.data) as WorkflowState)
+      .map((r) => readJson(workflowStateSchema, r.data, 'events.data'))
       .filter((w) => w.lease.owner.userId === owner.userId && w.lease.owner.clientId === owner.clientId);
     const active = workflows.filter((w) => Date.parse(w.lease.expiresAt) > Date.now());
     const awaitingAgent = active.filter((w) => !w.direct && !!w.work && !w.analysis).length;
@@ -871,7 +889,7 @@ export class AccountRepository {
   }
   private checkLease(lease: WorkLease): WorkRow {
     const row = this.liveWork(lease.workId);
-    if (canonical(JSON.parse(row.lease)) !== canonical(lease)) throw Error('LEASE_FENCED');
+    if (canonical(readJson(workLeaseSchema, row.lease, 'work.lease')) !== canonical(lease)) throw Error('LEASE_FENCED');
     return row;
   }
   beginPreparation(lease: WorkLease): string {
@@ -941,7 +959,8 @@ export class AccountRepository {
   private checkBasis(basis: PlanBasis, allowExpired = false): SnapshotManifest {
     if (allowExpired) {
       const work = this.work(basis.lease.workId);
-      if (!work || canonical(JSON.parse(work.lease)) !== canonical(basis.lease)) throw Error('LEASE_FENCED');
+      if (!work || canonical(readJson(workLeaseSchema, work.lease, 'work.lease')) !== canonical(basis.lease))
+        throw Error('LEASE_FENCED');
     } else this.checkLease(basis.lease);
     const row = this.sql
       .exec<{ data: string | null; evidence_expires_at: number }>(
@@ -950,7 +969,7 @@ export class AccountRepository {
       )
       .toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('SNAPSHOT_REQUIRED');
-    const manifest = snapshotManifestSchema.parse(JSON.parse(row.data));
+    const manifest = readJson(snapshotManifestSchema, row.data, 'snapshot_manifest.data');
     if (
       manifest.snapshotVersion !== basis.snapshotVersion ||
       manifest.contextVersion !== basis.contextVersion ||
@@ -1014,7 +1033,7 @@ export class AccountRepository {
       row.snapshot_version !== input.snapshotVersion ||
       row.context_version !== input.contextVersion ||
       row.catalog_version !== input.catalogVersion ||
-      canonical(JSON.parse(row.data)) !== canonical(plan)
+      canonical(readJson(syncPlanSchema, row.data, 'plans.data')) !== canonical(plan)
     )
       throw Error('PLAN_STALE');
     this.checkBasis(input);
@@ -1080,7 +1099,7 @@ export class AccountRepository {
       if (input.actor.expiresAt !== undefined && input.actor.expiresAt <= now) throw Error('AUTHORIZATION_EXPIRED');
       const previous = this.sql.exec<WorkRow>('SELECT * FROM work WHERE request_id = ?', input.requestId).toArray()[0];
       if (previous && previous.digest !== fingerprint) throw Error('IDEMPOTENCY_CONFLICT');
-      if (previous && previous.expires_at > now) return JSON.parse(previous.lease) as WorkLease;
+      if (previous && previous.expires_at > now) return readJson(workLeaseSchema, previous.lease, 'work.lease');
       const identity = this.sql
         .exec<{ work_id: string; fence: number }>('SELECT * FROM identity_reservations WHERE target_key = ?', targetKey)
         .toArray()[0];
@@ -1265,7 +1284,7 @@ export class AccountRepository {
       if (previous) {
         if (previous.digest !== fingerprint) throw Error('IDEMPOTENCY_CONFLICT');
         if (!previous.data || previous.evidence_expires_at <= Date.now()) throw Error('RESOLUTION_EVIDENCE_EXPIRED');
-        return resolutionBundleSchema.parse(JSON.parse(previous.data));
+        return readJson(resolutionBundleSchema, previous.data, 'events.data');
       }
       const existing = this.sql
         .exec<{ data: string | null; evidence_expires_at: number }>(
@@ -1274,7 +1293,7 @@ export class AccountRepository {
         )
         .toArray()
         .filter((r) => r.data && r.evidence_expires_at > Date.now())
-        .map((r) => demandRecordSchema.parse(JSON.parse(r.data!)));
+        .map((r) => readJson(demandRecordSchema, r.data!, 'demands.data'));
       const validation = createAnalysisInputSchema({
         sourceRefs: manifest.sources.filter(
           (s): s is SourceRef & { kind: 'message' | 'contact' | 'crm' } => s.kind !== 'operator',
@@ -1395,7 +1414,7 @@ export class AccountRepository {
               .exec<{ data: string }>('SELECT data FROM demands WHERE demand_id = ?', record.demandId)
               .toArray()[0];
             if (prior) {
-              const previous = demandRecordSchema.parse(JSON.parse(prior.data));
+              const previous = readJson(demandRecordSchema, prior.data, 'demands.data');
               record.dealRef = previous.dealRef;
               record.state = previous.state;
               record.references = [
@@ -1434,12 +1453,9 @@ export class AccountRepository {
         Date.now(),
       )
       .toArray()[0];
-    const refs: unknown = row?.refs ? JSON.parse(row.refs) : [];
-    if (!Array.isArray(refs)) return [];
+    const refs = row?.refs ? readJson(z.array(sourceRefSchema), row.refs, 'contexts.evidenceRefs') : [];
     const ids = refs.flatMap((ref) =>
-      ref?.kind === 'message' && typeof ref.id === 'string' && /^[1-9][0-9]*:[1-9][0-9]*$/.test(ref.id)
-        ? [Number(ref.id.split(':')[0])]
-        : [],
+      ref.kind === 'message' && /^[1-9][0-9]*:[1-9][0-9]*$/.test(ref.id) ? [Number(ref.id.split(':')[0])] : [],
     );
     return [...new Set(ids)].filter((id) => Number.isSafeInteger(id)).slice(0, limit);
   }
@@ -1451,7 +1467,7 @@ export class AccountRepository {
       )
       .toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('CONTEXT_UNAVAILABLE');
-    return customerContextSchema.parse(JSON.parse(row.data));
+    return readJson(customerContextSchema, row.data, 'contexts.data');
   }
   /** Internal structured writer, never exposed as a Markdown upload tool. */
   saveContextProjection(raw: ContextProjection, rawBasis: PlanBasis): void {
@@ -1483,7 +1499,7 @@ export class AccountRepository {
         if (
           !row ||
           row.customer_id !== projection.customerId ||
-          canonical(JSON.parse(row.receipt)) !== canonical(receipt)
+          canonical(readJson(operationReceiptSchema, row.receipt, 'commands.receipt')) !== canonical(receipt)
         )
           throw Error('CONTEXT_RECEIPT_UNVERIFIED');
       }
@@ -1497,7 +1513,7 @@ export class AccountRepository {
       // Only an unpublished projection owns the pending slot. A rendered version
       // may be superseded by reconciled work from another conversation.
       if (previous?.data && previous.valid && previous.version > (current?.version ?? 0)) {
-        const stored = JSON.parse(previous.data) as { projection: ContextProjection; basis: PlanBasis };
+        const stored = readJson(contextProjectionEnvelopeSchema, previous.data, 'facts.data');
         if (
           contextValue(stored.basis) === contextValue(basis) &&
           contextValue({ ...stored.projection, verifiedAt: projection.verifiedAt }) === contextValue(projection)
@@ -1509,7 +1525,7 @@ export class AccountRepository {
       // conversation does not repeat them. Only the stored structured envelope
       // can carry historical sources; new facts above require this manifest.
       if (previous?.data && previous.valid && previous.version === basis.contextVersion) {
-        const prior = contextProjectionSchema.parse((JSON.parse(previous.data) as { projection: unknown }).projection);
+        const prior = readJson(contextProjectionEnvelopeSchema, previous.data, 'facts.data').projection;
         const replacementKeys = new Set(
           projection.facts.filter((f) => f.certainty === 'confirmed').map((f) => `${f.entity}:${f.field}`),
         );
@@ -1581,9 +1597,9 @@ export class AccountRepository {
         )
         .toArray()[0];
       if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('CONTEXT_PROJECTION_UNAVAILABLE');
-      const stored = JSON.parse(row.data) as { projection: ContextProjection; basis: PlanBasis };
-      const projection = contextProjectionSchema.parse(stored.projection);
-      const basis = planBasisSchema.parse(stored.basis);
+      const stored = readJson(contextProjectionEnvelopeSchema, row.data, 'facts.data');
+      const projection = stored.projection;
+      const basis = stored.basis;
       if (
         projection.customerId !== customerId ||
         projection.version !== expectedVersion + 1 ||
@@ -1598,7 +1614,7 @@ export class AccountRepository {
           customerId,
         )
         .toArray()
-        .map((r) => JSON.parse(r.receipt) as OperationReceipt);
+        .map((r) => readJson(operationReceiptSchema, r.receipt, 'commands.receipt'));
       const context = customerContextSchema.parse({
         customerId,
         version: projection.version,
@@ -1630,7 +1646,7 @@ export class AccountRepository {
       )
       .toArray()[0];
     if (!row?.data || row.evidence_expires_at <= Date.now()) throw Error('DEMAND_UNAVAILABLE');
-    return demandRecordSchema.parse(JSON.parse(row.data));
+    return readJson(demandRecordSchema, row.data, 'demands.data');
   }
   /** Structured retained state supplies IDs and previous automated values only.
    * Mutable CRM fields must be read again before planning. */
@@ -1642,14 +1658,14 @@ export class AccountRepository {
       )
       .toArray()
       .filter((r) => r.data && r.evidence_expires_at > Date.now())
-      .map((r) => demandRecordSchema.parse(JSON.parse(r.data!)));
+      .map((r) => readJson(demandRecordSchema, r.data!, 'demands.data'));
     const commands = this.sql
       .exec<{ data: string }>(
         'SELECT e.data FROM execution_commands e JOIN commands c ON e.command_key = c.command_key JOIN work_customers w ON c.work_id = w.work_id WHERE w.customer_id = ? LIMIT 501',
         customerId,
       )
       .toArray()
-      .map((r) => JSON.parse(r.data) as ExecutionCommand)
+      .map((r) => readJson(executionCommandSchema, r.data, 'execution_commands.data'))
       .filter((c) => c.state === 'confirmed' && c.receipt.checkedAt && c.receipt.crmRef);
     return { demands, commands };
   }
@@ -1681,7 +1697,7 @@ export class AccountRepository {
           .toArray()[0];
         if (!customer || customer.customer_id !== input.customerId) throw Error('CONTEXT_CUSTOMER_MISMATCH');
         if (row.digest !== fingerprint) throw Error('IDEMPOTENCY_CONFLICT');
-        const receipt = JSON.parse(row.receipt) as OperationReceipt;
+        const receipt = readJson(operationReceiptSchema, row.receipt, 'commands.receipt');
         if (row.state === 'confirmed') return { state: 'already_confirmed', version: row.version, receipt };
         if (row.state === 'uncertain') return { state: 'uncertain', version: row.version, receipt };
         if (row.state === 'rejected' || row.state === 'review')

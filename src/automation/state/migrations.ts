@@ -1,55 +1,66 @@
+import { readJson } from '../../shared/json';
 import { workLeaseSchema } from '../schemas';
 
-/** Numbered, atomic migrations. Never rewrite an applied migration. */
-export function migrate(storage: DurableObjectStorage): void {
-  storage.transactionSync(() => {
-    const sql = storage.sql;
-    sql.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)');
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 1').toArray().length) {
+/** Declarative, numbered schema migration step. Never rewrite an applied migration. */
+export interface Migration {
+  readonly version: number;
+  up(sql: SqlStorage): void;
+}
+
+export const migrations: readonly Migration[] = [
+  {
+    version: 1,
+    up(sql) {
       sql.exec(`
-      CREATE TABLE account_binding (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), crm_account_id TEXT NOT NULL, chat_account_id TEXT NOT NULL);
-      CREATE TABLE customers (customer_id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1);
-      CREATE TABLE bindings (binding_key TEXT PRIMARY KEY, customer_id TEXT NOT NULL, kind TEXT NOT NULL, external_id TEXT NOT NULL);
-      CREATE UNIQUE INDEX unique_verified_binding ON bindings(kind, external_id) WHERE kind IN ('organization', 'person', 'chat_contact');
-      CREATE TABLE identity_reservations (target_key TEXT PRIMARY KEY, work_id TEXT NOT NULL, fence INTEGER NOT NULL);
-      CREATE TABLE events (event_id TEXT PRIMARY KEY, digest TEXT NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE work (work_id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, digest TEXT NOT NULL, target_key TEXT NOT NULL, lease TEXT NOT NULL, expires_at INTEGER NOT NULL, fence INTEGER NOT NULL);
-      CREATE TABLE snapshot_manifest (work_id TEXT PRIMARY KEY, version INTEGER NOT NULL, digest TEXT NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE demands (demand_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, version INTEGER NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE facts (fact_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE contexts (customer_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE plans (plan_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, digest TEXT NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE commands (command_key TEXT PRIMARY KEY, operation_id TEXT NOT NULL, work_id TEXT NOT NULL, digest TEXT NOT NULL, fence INTEGER NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, receipt TEXT NOT NULL);
-      CREATE TABLE reviews (review_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
-      CREATE TABLE outbox (outbox_id TEXT PRIMARY KEY, command_key TEXT UNIQUE NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL);
-      CREATE TABLE policy (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), version INTEGER NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE budget (reservation_id TEXT PRIMARY KEY, product TEXT NOT NULL CHECK(product IN ('crm', 'chat')), reserved_at INTEGER NOT NULL);
-      CREATE INDEX budget_window ON budget(product, reserved_at);
-      CREATE TABLE budget_clock (product TEXT PRIMARY KEY, last_now INTEGER NOT NULL);
-      INSERT INTO schema_migrations VALUES (1);
-    `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 2').toArray().length) {
+        CREATE TABLE account_binding (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), crm_account_id TEXT NOT NULL, chat_account_id TEXT NOT NULL);
+        CREATE TABLE customers (customer_id TEXT PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE bindings (binding_key TEXT PRIMARY KEY, customer_id TEXT NOT NULL, kind TEXT NOT NULL, external_id TEXT NOT NULL);
+        CREATE UNIQUE INDEX unique_verified_binding ON bindings(kind, external_id) WHERE kind IN ('organization', 'person', 'chat_contact');
+        CREATE TABLE identity_reservations (target_key TEXT PRIMARY KEY, work_id TEXT NOT NULL, fence INTEGER NOT NULL);
+        CREATE TABLE events (event_id TEXT PRIMARY KEY, digest TEXT NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE work (work_id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, digest TEXT NOT NULL, target_key TEXT NOT NULL, lease TEXT NOT NULL, expires_at INTEGER NOT NULL, fence INTEGER NOT NULL);
+        CREATE TABLE snapshot_manifest (work_id TEXT PRIMARY KEY, version INTEGER NOT NULL, digest TEXT NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE demands (demand_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL, version INTEGER NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE facts (fact_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE contexts (customer_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE plans (plan_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, digest TEXT NOT NULL, valid INTEGER NOT NULL DEFAULT 1, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE commands (command_key TEXT PRIMARY KEY, operation_id TEXT NOT NULL, work_id TEXT NOT NULL, digest TEXT NOT NULL, fence INTEGER NOT NULL, version INTEGER NOT NULL, state TEXT NOT NULL, receipt TEXT NOT NULL);
+        CREATE TABLE reviews (review_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, version INTEGER NOT NULL, data TEXT, evidence_expires_at INTEGER NOT NULL);
+        CREATE TABLE outbox (outbox_id TEXT PRIMARY KEY, command_key TEXT UNIQUE NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL);
+        CREATE TABLE policy (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), version INTEGER NOT NULL, data TEXT NOT NULL);
+        CREATE TABLE budget (reservation_id TEXT PRIMARY KEY, product TEXT NOT NULL CHECK(product IN ('crm', 'chat')), reserved_at INTEGER NOT NULL);
+        CREATE INDEX budget_window ON budget(product, reserved_at);
+        CREATE TABLE budget_clock (product TEXT PRIMARY KEY, last_now INTEGER NOT NULL);
+      `);
+    },
+  },
+  {
+    version: 2,
+    up(sql) {
       sql.exec(`
         ALTER TABLE plans ADD COLUMN fence INTEGER;
         ALTER TABLE plans ADD COLUMN snapshot_version INTEGER;
         ALTER TABLE plans ADD COLUMN context_version INTEGER;
         ALTER TABLE plans ADD COLUMN catalog_version TEXT;
         UPDATE plans SET valid = 0;
-        INSERT INTO schema_migrations VALUES (2);
       `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 3').toArray().length) {
+    },
+  },
+  {
+    version: 3,
+    up(sql) {
       sql.exec(`
         CREATE TABLE work_customers (work_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL);
         CREATE INDEX work_customers_by_customer ON work_customers(customer_id);
         INSERT INTO work_customers SELECT work_id, MIN(customer_id) FROM contexts GROUP BY work_id HAVING COUNT(DISTINCT customer_id) = 1;
         UPDATE plans SET valid = 0;
         UPDATE facts SET valid = 0 WHERE fact_id LIKE 'customer-context:%';
-        INSERT INTO schema_migrations VALUES (3);
       `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 4').toArray().length) {
+    },
+  },
+  {
+    version: 4,
+    up(sql) {
       // Stored leases were generated by reserveWork, before an agent analysis.
       // Conversation/pending targets and malformed or conflicting rows cannot
       // establish customer ownership and remain unassociated.
@@ -58,15 +69,14 @@ export function migrate(storage: DurableObjectStorage): void {
           'SELECT work_id, lease FROM work WHERE work_id NOT IN (SELECT work_id FROM work_customers)',
         )
         .toArray()) {
-        let raw: unknown;
+        let lease;
         try {
-          raw = JSON.parse(row.lease);
+          lease = readJson(workLeaseSchema, row.lease, 'migration:v4:work.lease');
         } catch {
           continue;
         }
-        const parsed = workLeaseSchema.safeParse(raw);
-        if (!parsed.success || parsed.data.workId !== row.work_id || parsed.data.target.kind !== 'customer') continue;
-        const customerId = parsed.data.target.customerId;
+        if (lease.workId !== row.work_id || lease.target.kind !== 'customer') continue;
+        const customerId = lease.target.customerId;
         if (
           sql
             .exec(
@@ -79,17 +89,21 @@ export function migrate(storage: DurableObjectStorage): void {
           continue;
         sql.exec('INSERT INTO work_customers VALUES (?, ?)', row.work_id, customerId);
       }
-      sql.exec('INSERT INTO schema_migrations VALUES (4)');
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 5').toArray().length) {
+    },
+  },
+  {
+    version: 5,
+    up(sql) {
       sql.exec(`
         CREATE TABLE execution_operations (operation_id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, digest TEXT NOT NULL, data TEXT NOT NULL);
         CREATE TABLE execution_commands (command_key TEXT PRIMARY KEY, operation_id TEXT NOT NULL, next_attempt_at INTEGER NOT NULL, data TEXT NOT NULL);
         CREATE INDEX execution_commands_by_operation ON execution_commands(operation_id);
-        INSERT INTO schema_migrations VALUES (5);
       `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 6').toArray().length) {
+    },
+  },
+  {
+    version: 6,
+    up(sql) {
       sql.exec(`
         CREATE TABLE operation_delivery (operation_id TEXT PRIMARY KEY, next_attempt_at INTEGER NOT NULL, failures INTEGER NOT NULL DEFAULT 0);
         CREATE INDEX operation_delivery_due ON operation_delivery(next_attempt_at);
@@ -98,23 +112,66 @@ export function migrate(storage: DurableObjectStorage): void {
         CREATE INDEX operational_audit_owner ON operational_audit(user_id, client_id, audit_id);
         CREATE TABLE chat_hints (hint_key TEXT PRIMARY KEY, conversation_id INTEGER, received_at INTEGER NOT NULL, digest TEXT NOT NULL);
         CREATE INDEX chat_hints_window ON chat_hints(received_at);
-        INSERT INTO schema_migrations VALUES (6);
       `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 7').toArray().length) {
+    },
+  },
+  {
+    version: 7,
+    up(sql) {
       sql.exec(`
         CREATE TABLE pending_cursors (cursor TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, data TEXT NOT NULL);
         CREATE INDEX pending_cursors_expiry ON pending_cursors(expires_at);
         CREATE TABLE pending_activity (event_id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, data TEXT NOT NULL, plan_id TEXT);
         CREATE INDEX pending_activity_expiry ON pending_activity(expires_at);
-        INSERT INTO schema_migrations VALUES (7);
       `);
-    }
-    if (!sql.exec('SELECT version FROM schema_migrations WHERE version = 8').toArray().length) {
+    },
+  },
+  {
+    version: 8,
+    up(sql) {
       sql.exec(`
         CREATE TABLE preparation_locks (work_id TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at INTEGER NOT NULL);
-        INSERT INTO schema_migrations VALUES (8);
       `);
+    },
+  },
+];
+
+/** Apply pending migrations in ascending version order inside one synchronous transaction. */
+export function runMigrations(
+  storage: DurableObjectStorage,
+  list: readonly Migration[],
+  maxVersion = Number.POSITIVE_INFINITY,
+): void {
+  const seen = new Set<number>();
+  for (const migration of list) {
+    if (!Number.isInteger(migration.version) || migration.version <= 0) {
+      throw new Error(`Invalid migration version: ${migration.version}`);
+    }
+    if (seen.has(migration.version)) {
+      throw new Error(`Duplicate migration version: ${migration.version}`);
+    }
+    seen.add(migration.version);
+  }
+  storage.transactionSync(() => {
+    const sql = storage.sql;
+    sql.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)');
+    const applied = new Set(
+      sql
+        .exec<{ version: number }>('SELECT version FROM schema_migrations')
+        .toArray()
+        .map((row) => row.version),
+    );
+    const pending = [...list]
+      .filter((migration) => migration.version <= maxVersion && !applied.has(migration.version))
+      .sort((a, b) => a.version - b.version);
+    for (const migration of pending) {
+      migration.up(sql);
+      sql.exec('INSERT INTO schema_migrations VALUES (?)', migration.version);
     }
   });
+}
+
+/** Apply all pending schema migrations up to `maxVersion` (defaults to the latest version). */
+export function migrate(storage: DurableObjectStorage, maxVersion?: number): void {
+  runMigrations(storage, migrations, maxVersion);
 }

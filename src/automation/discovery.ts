@@ -18,22 +18,24 @@ export const discoveryInputSchema = z.strictObject({
   cursor: z.uuid().optional(),
 });
 export type DiscoveryInput = z.infer<typeof discoveryInputSchema>;
-export type DiscoveryCursor = {
-  scope: string;
-  inboxIndex: number;
-  page: number;
-  seen: string[];
-  startedAt: number;
-};
-export type PendingActivity = {
-  eventId: string;
-  accountId: string;
-  conversationId: number;
-  inboxId: number;
-  timestamp: number;
-  status: string;
-  page: number;
-};
+export const discoveryCursorSchema = z.strictObject({
+  scope: z.string().min(1),
+  inboxIndex: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  seen: z.array(z.string()),
+  startedAt: z.number().finite(),
+});
+export type DiscoveryCursor = z.infer<typeof discoveryCursorSchema>;
+export const pendingActivitySchema = z.strictObject({
+  eventId: z.string().min(1),
+  accountId: z.string().min(1),
+  conversationId: z.number().int().positive(),
+  inboxId: z.number().int().positive(),
+  timestamp: z.number().finite(),
+  status: z.string().min(1),
+  page: z.number().int().positive(),
+});
+export type PendingActivity = z.infer<typeof pendingActivitySchema>;
 type ActivityRow = Awaited<
   ReturnType<ReturnType<typeof createAgendorChatClient>['listScopedActivity']>
 >['rows'][number];

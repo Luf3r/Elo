@@ -16,6 +16,7 @@ import type { Env } from '../env';
 import { requireCapabilities, type AuthContext } from '../auth';
 import { SafeError } from '../shared/errors';
 import { throwIfCancelled } from '../shared/cancellation';
+import { readJson } from '../shared/json';
 import {
   createAgendorChatClient,
   createAgendorCrmClient,
@@ -58,9 +59,9 @@ import { runPlan } from './executor';
 import { reconcileCommand } from './reconciliation';
 import { createQueueExecutionDeps, enqueueOperation } from './queue';
 import { hydrateRecord } from './hydration';
-import type { WorkflowState } from './service-state';
-import type { PrepareInput, PrepareResult, SourceRef, AutomationPolicy, OperationStatus, SyncPlan } from './types';
-import type { ConfigurationInput } from '../agendor/crm/types';
+import { servicePlanEnvelopeSchema, workflowStateSchema, type WorkflowState } from './service-state';
+import type { PrepareInput, PrepareResult, SourceRef, AutomationPolicy, OperationStatus } from './types';
+import type { ConfigurationInput, PagedResult } from '../agendor/crm/types';
 
 export const defaultAutomationPolicy: AutomationPolicy = {
   version: 1,
@@ -138,7 +139,7 @@ export async function readWorkflow(
   id: string,
 ): Promise<WorkflowState | undefined> {
   const json = await repository.getWorkflow(id);
-  return json ? (JSON.parse(json) as WorkflowState) : undefined;
+  return json ? readJson(workflowStateSchema, json, 'workflow') : undefined;
 }
 /** Authorization precedes adapter construction. Account, evidence and commands
  * are always loaded from server-owned state rather than caller claims. */
@@ -440,11 +441,11 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
         const contact = state.conversations[0]?.contact;
         // Cache successful reads in server-owned work state before requesting another
         // page, so a shared-budget deferral cannot restart the same search forever.
-        const remembered = async <T>(key: string, load: () => Promise<T>): Promise<T> => {
+        const remembered = async <T>(key: string, schema: z.ZodType<T>, load: () => Promise<T>): Promise<T> => {
           await validateScope();
           state.candidateReadCache ??= {};
           const cached = state.candidateReadCache[key];
-          if (cached !== undefined) return JSON.parse(cached) as T;
+          if (cached !== undefined) return readJson(schema, cached, 'candidateReadCache');
           const value = await load();
           const json = JSON.stringify(value);
           if (Object.values(state.candidateReadCache).reduce((n, v) => n + v.length, 0) + json.length > 500_000)
@@ -453,12 +454,23 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
           await persistWorkflow(repository(), state);
           return value;
         };
+        const pagedResultSchema: z.ZodType<PagedResult<unknown>> = z.object({
+          items: z.array(z.unknown()),
+          pageInfo: z.object({
+            page: z.number(),
+            perPage: z.number(),
+            hasNext: z.boolean(),
+            nextPage: z.number().nullable(),
+          }),
+        });
         const candidatesCrm = {
-          getPerson: (id: number) => remembered('person:' + id, () => crm.getPerson(id)),
+          getPerson: (id: number) => remembered('person:' + id, z.unknown(), () => crm.getPerson(id)),
           searchPeople: (input: Parameters<typeof crm.searchPeople>[0]) =>
-            remembered('people:' + JSON.stringify(input), () => crm.searchPeople(input)),
+            remembered('people:' + JSON.stringify(input), pagedResultSchema, () => crm.searchPeople(input)),
           searchOrganizations: (input: Parameters<typeof crm.searchOrganizations>[0]) =>
-            remembered('organizations:' + JSON.stringify(input), () => crm.searchOrganizations(input)),
+            remembered('organizations:' + JSON.stringify(input), pagedResultSchema, () =>
+              crm.searchOrganizations(input),
+            ),
         };
         state.candidates = contact
           ? await readCustomerCandidates(candidatesCrm, contact, state.conversations[0]!.revision)
@@ -780,7 +792,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
           state.discoveryPlanId === pending.planId &&
           (await payloadDigest(state.analysis)) === (await payloadDigest(input.analysis))
         ) {
-          return (JSON.parse(stored) as { plan: SyncPlan }).plan;
+          return readJson(servicePlanEnvelopeSchema, stored, 'servicePlan').plan;
         }
         return unavailable('This activity already has a proposal.');
       }
@@ -870,7 +882,7 @@ export function createAutomationService(env: Env, auth: AuthContext, signal?: Ab
     }
     const storedJson = await repository().getServicePlan(input.planId);
     if (!storedJson) return unavailable();
-    const stored = JSON.parse(storedJson) as { plan: SyncPlan; workflow: WorkflowState };
+    const stored = readJson(servicePlanEnvelopeSchema, storedJson, 'servicePlan');
     owns(stored.workflow, auth, env);
     const { plan, workflow } = stored;
     if (plan.version !== input.planVersion || workflow.lease.mode !== 'apply' || !workflow.basis || !workflow.catalog)
