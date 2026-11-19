@@ -18,7 +18,7 @@ Base: `main` em `07473e3` (0.1.7). Diagnóstico completo na seção 1; execuçã
 
 ### Decisões da seção 5 (registradas como tomadas)
 
-1. **Remoto privado (5.1)**: adotar repositório privado no GitHub (execução operacional de `0.1`, proteção de branch `0.6` e Dependabot `5.4` pendentes).
+1. **Remoto (5.1)**: repositório **público** no GitHub, decidido em 2026-11-19, depois de limpar identificadores do código e do histórico e renomear o projeto para Elo (execução operacional de `0.1`, proteção de branch `0.6` e Dependabot `5.4` pendentes).
 2. **Histórico (5.2)**: preservado em `docs/history/` (aplicado na Fase 2).
 3. **Quebra de códigos de erro na Fase 4 (5.3)**: **aceita** — `POLICY_BLOCKED`, `WORK_STALE` e `CONFLICT` integrados; próximo release sai como `0.2.0`.
 4. **Staging / Fase 8 (5.4)**: **adiado** — sem provisionamento de ambiente `staging` na Cloudflare/Access nesta rodada; apenas o runbook de rollback por versão (`8.3`) foi incluído.
