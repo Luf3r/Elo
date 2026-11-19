@@ -24,12 +24,46 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
-- **Fase 0 — Rede de segurança (`c2f2518`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
+> **Próxima versão publicada: `0.2.0`** devido à **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4). A versão em `package.json` permanece `0.1.7` até o momento da preparação do release.
+
+- **Fase 0 — Rede de segurança (`c2f2518`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
 - **Fase 1 — Formatação e lint (`a0b4ad3`, `062b4d7`, `f4431fb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
 - **Fase 5.1 — Remoção do token fixo (`61c9fae`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
 - **Fase 2 — Documentação**: gerador `scripts/docs-tools.mjs` (`npm run docs:tools`) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
-- **Fase 4.2 (parte 1) — Logger estruturado**: adicionado `src/shared/logger.ts` (`logEvent` e `errorFields`) emitindo um único objeto indexável pelo Workers Logs com redação automática de campos sensíveis e padrões de PII/token, omissão de objetos/arrays aninhados e extração de erros sem mensagem.
-- **Fase 4.2 (parte 2) — Logs nos pontos de entrada HTTP e MCP**: uso de `logEvent` e `errorFields` em `src/index.ts` (`auth_service_unavailable` no `503` sem query string), `src/mcp/result.ts` (`unexpected_error` apenas para erros fora de `SafeError`) e `src/oauth/handler.ts` (`oauth_authorization_failed`), preservando todas as respostas.
+- **Fase 3 — Reestruturação**:
+  - Camada de domínio pura extraída para `src/domain/` (identidade, demandas, planejador, campos, estágios, política, autorização e revisões), sem dependências de IO, `env`, `fetch` ou Durable Object.
+  - Portas de adaptadores definidas em `src/agendor/ports.ts` (`BudgetGate` e `InboxGuard`), injetadas na criação dos clientes Agendor e removendo imports de `src/agendor/` para `src/automation/` ou `src/domain/` (C5).
+  - Divisão do repositório monolítico em repositórios por agregado em `src/automation/state/repositories/` (`audit.ts`, `commands.ts`, `context.ts`, `customers.ts`, `discovery.ts`, `plans.ts`, `reviews.ts`, `work.ts`) e dos casos de uso em `src/automation/usecases/` (`apply.ts`, `audit.ts`, `context.ts`, `discover.ts`, `policy.ts`, `preflight.ts`, `prepare.ts`, `prepare-hydration.ts`, `prepare-steps.ts`, `reprocess.ts`, `reviews.ts`, `status.ts`, `submit.ts`), com schemas separados em `src/domain/schemas/` e configuração do tenant centralizada em `src/app/config/tenant.ts` (C3, C4, C12).
+  - Migrations SQLite declarativas (`src/automation/state/migrations.ts`, lista `Migration[]` + `runMigrations` transacional, versões 1–8) verificadas por testes de caracterização e upgrade (C9).
+  - Leitura validada de JSON persistido via `readJson(schema, text, label)` em `src/shared/json.ts` (lançando `CorruptedJsonError`) no lugar de `JSON.parse(...) as T` (C8), e promoção das regras de fronteira de camadas no ESLint para erro.
+- **Fase 4 — Erros e observabilidade — QUEBRA DE COMPATIBILIDADE (`0.2.0`)**:
+  - **Quebra de compatibilidade para clientes MCP (`ChatGPT`, `Zapia`)**: separação explícita entre falha de identidade/escopo OAuth, bloqueio por política operacional, trabalho/cursor obsoleto e conflito de payload/idempotência em `src/shared/errors.ts`, com atualização das descrições e instruções do servidor MCP (`POLICY_BLOCKED`, `WORK_STALE` e `CONFLICT`). Clientes que inspecionavam `error.code` precisam adotar os novos códigos abaixo:
+
+    | Situação | Antes | Depois | HTTP |
+    |---|---|---|---|
+    | Bloqueio por política (`mode`, escopo de preparação/aplicação ou inbox fora da allowlist `4101`/`4102`) | `MCP_UNAUTHORIZED` | `POLICY_BLOCKED` | `403` |
+    | Ausência de identidade ou escopo OAuth (`src/auth.ts`, `automationActor`) | `MCP_UNAUTHORIZED` | `MCP_UNAUTHORIZED` | `403` |
+    | Trabalho, estado de preparação, conversa ou cursor de descoberta obsoleto/expirado | `INVALID_INPUT` | `WORK_STALE` | `409` |
+    | Conflito de `requestId` com payload ou ator divergente | `INVALID_INPUT` | `CONFLICT` | `409` |
+
+  - **Logger estruturado e pontos de entrada (`src/shared/logger.ts`)**: emissão via `logEvent` e `errorFields` de objeto único indexável pelo Workers Logs, com redação automática de campos sensíveis e padrões de PII/token, omissão de objetos/arrays aninhados e extração de erros sem `error.message`:
+    - `auth_service_unavailable` (`error`, `src/index.ts`) no `503` de autenticação sem query string;
+    - `unexpected_error` (`error`, `src/mcp/result.ts`) apenas para erros fora de `SafeError`;
+    - `oauth_authorization_failed` (`warn`, `src/oauth/handler.ts`) em falhas de autorização OAuth;
+    - `mcp_request_failed` (`error`, `src/oauth/provider.ts`) no `catch` do `apiHandler` de `/mcp` para erros fora de `SafeError`;
+    - `queue_message_retry` (`warn`, `src/automation/execution/queue.ts`) quando `handleAutomationQueue` agenda retry (`attempts < 4`);
+    - `queue_message_dead_lettered` (`error`, `src/automation/execution/queue.ts`) na 4ª tentativa antes do envio à DLQ;
+    - `watchdog_failed` (`error`, `src/index.ts`) quando o handler `scheduled` falha ao executar `maintainAccount`.
+- **Fase 5.2 — Remoção de `/automation/chat-events` e endurecimento OAuth**:
+  - Remoção do endpoint não assinado `/automation/chat-events` e da flag `AUTOMATION_CHAT_HINTS_ENABLED` (C11).
+  - Rotas OAuth (`/authorize`, `/callback`, `/token`, `/token/revoke`, `/register`) sem cabeçalho `CF-Connecting-IP` passam a responder HTTP `429` (`temporarily_unavailable`, `Retry-After: 10`, `Cache-Control: no-store`) antes de consultar `OAUTH_RATE_LIMITER`.
+- **Fase 6 — Testes**:
+  - Suíte unitária pura de domínio em ambiente Node (`vitest.domain.config.ts`, `npm run test:domain`) desacoplada do runtime `workerd`.
+  - Builders de fixture em `test/fixtures/builders.ts` e fixtures dedicadas em `test/fixtures/` substituindo objetos literais repetidos.
+  - Cobertura Istanbul (`npm run test:coverage` em `vitest.config.ts`) com limiares mínimos exigidos no CI para `src/domain/**/*.ts` e `src/automation/**/*.ts`.
+  - Testes de propriedade com `fast-check` (`test/domain/properties.test.ts`) cobrindo idempotência e invariantes de `normalizeName`, `normalizeEmail`, `normalizeDocument`, `normalizedPhone`, `canonical` e `payloadDigest`.
+- **Fase 7 — Scripts em TypeScript**:
+  - Migração dos utilitários `scripts/*.mjs` para TypeScript (`scripts/*.ts`) executados diretamente pelo Node (`>=22.19.0`) via *type stripping*, com helpers compartilhados em `scripts/lib/` (`args.ts`, `redaction.ts`, `oauth-session.ts`, `mcp-client.ts`) e catálogo atualizado em `docs/operations/scripts.md`.
 
 ## [0.1.7] — 2026-11-10
 

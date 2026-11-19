@@ -65,3 +65,38 @@ Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets
 3. No cliente MCP autenticado, consulte `server_status` e `automation_get_status` para confirmar `policyVersion`, modo vigente e ausência de operações/revisões inesperadas.
 4. A política de aplicação reside no Durable Object `AutomationAccount` e **não** é redefinida pelo deploy de código (nunca assuma que um deploy redefine ou ativa a política).
 5. Caso o release tenha alterado adaptadores Agendor ou validação OAuth/JWKS, avalie a execução manual e pontual de `npm run test:contract` conforme [scripts.md](scripts.md#quando-executar-testcontract).
+
+## Rollback por versão
+
+Antes de executar rollback, siga as pré-condições de segurança descritas em [recovery.md](recovery.md#5-rollback-de-código): pause a automação (`automation_update_policy` com `mode: "disabled"`), inspecione pendências `queued`/`uncertain`, verifique compatibilidade da versão alvo com o schema atual de `schema_migrations` em `AutomationAccount` e com o formato da fila, e nunca remova a classe `AutomationAccount` nem recrie `OAUTH_KV`.
+
+1. **Identificar a versão atual e a versão alvo**:
+   - Consulte `GET /health` e a ferramenta MCP `server_status` para confirmar `version` e `commit` atualmente servidos em produção (veja também o histórico de publicações em [CHANGELOG.md](../../CHANGELOG.md#tabela-de-versões-e-implantações-cloudflare)).
+   - Liste as versões registradas na Cloudflare:
+
+     ```bash
+     npx wrangler versions list
+     ```
+
+   - Localize o `<version-id>` desejado pela tag e mensagem gravadas por `npm run release` (`--tag vX.Y.Z` e `--message "Release vX.Y.Z (<commit>)"`), conferindo que o hash de commit corresponde ao da tag Git esperada e aos campos `version` / `commit` expostos em `/health` e `server_status`.
+
+2. **Reverter a versão ativa**:
+   - Execute `wrangler rollback` apontando para o ID da versão alvo:
+
+     ```bash
+     npx wrangler rollback <version-id>
+     ```
+
+   - Como alternativa equivalente para promover integralmente uma versão já enviada:
+
+     ```bash
+     npx wrangler versions deploy <version-id>@100%
+     ```
+
+   > Rollback de código não redefine a política persistida no Durable Object `AutomationAccount` nem desfaz empresas, pessoas, negócios ou tarefas já gravados no Agendor CRM.
+
+3. **O que conferir depois do rollback**:
+   - Confirme `GET https://elo-agendor-mcp.example.workers.dev/health` retornando HTTP `200` com `status: "ok"` e os valores de `version` e `commit` da versão restaurada.
+   - Execute `npm run verify:oauth` e `npm run verify:mcp` para validar OAuth e catálogo MCP.
+   - No cliente MCP autenticado, consulte `server_status` (confirmando `version` e `commit`) e `automation_get_status` (confirmando `policyVersion`, `mode` e ausência de erros inesperados).
+   - Acompanhe os Workers Logs para confirmar ausência de `auth_service_unavailable`, `mcp_request_failed`, `unexpected_error`, `queue_message_retry`, `queue_message_dead_lettered` ou `watchdog_failed`.
