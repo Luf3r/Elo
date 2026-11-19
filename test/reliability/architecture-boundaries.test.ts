@@ -21,15 +21,9 @@ describe('architecture and tenant boundaries', () => {
     expect(tenantSource).toBeDefined();
 
     const exportedNames = [...tenantSource!.matchAll(/export const (\w+)/g)].map((match) => match[1]!);
-    expect(exportedNames).toEqual([
-      'TENANT_ACCOUNT_KEY',
-      'ALLOWED_INBOX_IDS',
-      'EXPECTED_CHAT_ACCOUNT_ID',
-      'TENANT_SERVICE_NAME',
-    ]);
+    expect(exportedNames).toEqual(['TENANT_ACCOUNT_KEY', 'ALLOWED_INBOX_IDS', 'TENANT_SERVICE_NAME']);
     expect(tenant.TENANT_ACCOUNT_KEY).toBe('elotenant');
     expect(tenant.ALLOWED_INBOX_IDS).toEqual([4101, 4102]);
-    expect(tenant.EXPECTED_CHAT_ACCOUNT_ID).toBe('7001');
     expect(tenant.TENANT_SERVICE_NAME).toBe('elo-agendor-mcp');
 
     const otherSrcEntries = Object.entries(srcFiles).filter(([file]) => file !== tenantKey);
