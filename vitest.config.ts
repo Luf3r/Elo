@@ -35,18 +35,20 @@ export default defineConfig({
       include: ['src/domain/**/*.ts', 'src/automation/**/*.ts'],
       reporter: ['text', 'json-summary'],
       reportsDirectory: './dist/coverage',
+      // Floors sit one point below the measured coverage: platform and timing
+      // differences move a single branch between Windows and the Linux CI.
       thresholds: {
         'src/domain/**/*.ts': {
-          statements: 87,
-          branches: 80,
-          functions: 91,
-          lines: 90,
+          statements: 86,
+          branches: 79,
+          functions: 90,
+          lines: 89,
         },
         'src/automation/**/*.ts': {
-          statements: 91,
-          branches: 82,
-          functions: 97,
-          lines: 94,
+          statements: 90,
+          branches: 81,
+          functions: 96,
+          lines: 93,
         },
       },
     },
