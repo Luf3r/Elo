@@ -38,7 +38,11 @@ export async function readDuplicateCandidates(
       try {
         result = await crm.searchPeople({ ...filter, page, perPage: 100 });
       } catch (error) {
-        if (error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED')) throw error;
+        if (
+          error instanceof SafeError &&
+          (error.retryable || error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED')
+        )
+          throw error;
         return { ...base, status: 'query_failed' };
       }
       if (result.pageInfo.page !== page || result.items.length > 100) return { ...base, status: 'query_failed' };

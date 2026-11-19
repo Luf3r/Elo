@@ -119,7 +119,7 @@ export async function prepareWork(
     const policy = await ctx.policy();
     const current = authorizePreparation(policy, request);
     if (pending && discoverySettings(ctx.env, policy, [pending.inboxId]).reason)
-      throw new SafeError('MCP_UNAUTHORIZED', 'Pending activity scope is no longer authorized.', false, 403);
+      throw new SafeError('POLICY_BLOCKED', 'Pending activity scope is no longer authorized.', false, 403);
     if (state.conversationIds.length > current.limits.maxConversations)
       unavailable('Too many conversations for the current policy; select an explicit conversation.');
     enforceInboxPolicy(evidence, { allowedInboxIds: current.inboxIds });

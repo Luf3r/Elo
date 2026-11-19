@@ -3510,7 +3510,7 @@ exports[`characterization snapshots for automation apply flows and planner > cap
     "applyAfterRetention": {
       "body": {
         "error": {
-          "code": "INVALID_INPUT",
+          "code": "WORK_STALE",
           "message": "Work is unavailable or stale; prepare again.",
           "retryable": false,
           "status": 409,

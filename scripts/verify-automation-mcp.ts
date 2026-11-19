@@ -8,6 +8,10 @@ import { assertNoSecrets, collectKnownSecrets } from './lib/redaction.ts';
 const MAX_BYTES = 512 * 1024;
 const KNOWN_CODES = new Set([
   'MCP_UNAUTHORIZED',
+  'POLICY_BLOCKED',
+  'WORK_STALE',
+  'CONFLICT',
+  'CONTEXT_STALE',
   'INVALID_INPUT',
   'UPSTREAM_TIMEOUT',
   'UPSTREAM_RATE_LIMITED',

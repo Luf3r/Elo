@@ -22,7 +22,7 @@ exports[`characterization snapshots for automation preview flows and planner > c
   "prepareDenied": {
     "body": {
       "error": {
-        "code": "MCP_UNAUTHORIZED",
+        "code": "POLICY_BLOCKED",
         "message": "Conversation inbox is not authorized.",
         "retryable": false,
         "status": 403,
@@ -699,7 +699,7 @@ exports[`characterization snapshots for automation preview flows and planner > c
   "applyPreviewError": {
     "body": {
       "error": {
-        "code": "MCP_UNAUTHORIZED",
+        "code": "POLICY_BLOCKED",
         "message": "The current policy does not authorize plan application.",
         "retryable": false,
         "status": 403,
@@ -1056,7 +1056,7 @@ exports[`characterization snapshots for automation preview flows and planner > c
   "applyPreviewError": {
     "body": {
       "error": {
-        "code": "MCP_UNAUTHORIZED",
+        "code": "POLICY_BLOCKED",
         "message": "The current policy does not authorize plan application.",
         "retryable": false,
         "status": 403,
@@ -1708,7 +1708,7 @@ exports[`characterization snapshots for automation preview flows and planner > c
   "applyPreviewError": {
     "body": {
       "error": {
-        "code": "MCP_UNAUTHORIZED",
+        "code": "POLICY_BLOCKED",
         "message": "The current policy does not authorize plan application.",
         "retryable": false,
         "status": 403,

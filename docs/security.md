@@ -64,3 +64,14 @@ Autorizações operacionais (`AuthorizedPlan`) têm validade máxima de **5 minu
 - Todo conteúdo proveniente do Agendor Chat (textos de mensagens, nomes, e-mails, metadados de contatos, nomes/corpos de anexos), textos livres de registros do CRM e o próprio resumo Markdown de contexto são tratados estritamente como **evidência não confiável** (*untrusted data*).
 - Instruções de prompt contidas em mensagens ou anexos não podem conceder escopos, alterar política/funil, simular aprovação humana ou contornar revisões.
 - Buscas por prefixo no CRM e coleções parciais do Chat nunca comprovam unicidade ou ausência por si só; ambiguidades, cobertura incompleta, duplicidades detectadas e ausência de `nativeCreatorDisabled` seguem para revisão humana (`review`).
+
+## Códigos de erro
+
+As falhas expostas via `SafeError` / `errorData()` distinguem permissão OAuth, bloqueio por política, trabalho obsoleto e conflito de idempotência em quatro categorias principais:
+
+| Código | Status HTTP | Quando ocorre |
+|---|---|---|
+| `MCP_UNAUTHORIZED` | `401` / `403` | Identidade ausente ou inválida, autorização OAuth expirada ou escopo OAuth insuficiente (`src/auth.ts` e `automationActor` em `src/automation/usecases/context.ts`). Quando falta um escopo, a resposta inclui `requiredScope`. |
+| `POLICY_BLOCKED` | `403` | Recusa por estado ou modo da política de automação (por exemplo, `mode !== 'apply'`, versão divergente ou capacidade desabilitada na política) ou por inbox fora da allowlist/escopo autorizado. |
+| `WORK_STALE` | `409` | Trabalho, lease, continuação, plano ou cursor de descoberta indisponível, expirado ou obsoleto, ou conversa que mudou durante a descoberta/verificação (`unavailable` e `src/automation/discovery.ts`). Exige nova descoberta ou preparação. (`CONTEXT_STALE`, também `409`, permanece exclusivo para conflitos de versão do contexto do cliente.) |
+| `CONFLICT` | `409` | Reutilização de `requestId` com payload ou ator diferente em chamadas diretas (`src/automation/direct.ts`). |

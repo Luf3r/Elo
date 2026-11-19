@@ -74,7 +74,7 @@ describe('direct coordinated CRM tools', () => {
     await expect(executeDirectCommand(env, actor, 'crm_create_person', input)).resolves.toEqual(result);
     await expect(
       executeDirectCommand(env, actor, 'crm_create_person', { ...input, record: { name: 'Another' } }),
-    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it('does not redispatch a POST after an uncertain transport outcome', async () => {

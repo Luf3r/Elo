@@ -193,7 +193,8 @@ export async function createQueueExecutionDeps(payload: AutomationQueuePayload, 
         try {
           assertInboxAllowed(await chat.getConversation(conversationId), policy);
         } catch (error) {
-          if (error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED') return ['INBOX_NOT_AUTHORIZED'];
+          if (error instanceof SafeError && (error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED'))
+            return ['INBOX_NOT_AUTHORIZED'];
           throw error;
         }
       }

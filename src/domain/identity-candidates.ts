@@ -110,7 +110,11 @@ export async function readCustomerCandidates(
       try {
         response = await load(page);
       } catch (error) {
-        if (error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED')) throw error;
+        if (
+          error instanceof SafeError &&
+          (error.retryable || error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED')
+        )
+          throw error;
         return finish(false, 'candidate_query_failed');
       }
       result.coverage.pagesRead++;
@@ -154,7 +158,10 @@ export async function readCustomerCandidates(
         }
       }
     } catch (error) {
-      if (error instanceof BudgetDeferredError || (error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED'))
+      if (
+        error instanceof BudgetDeferredError ||
+        (error instanceof SafeError && (error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED'))
+      )
         throw error;
       if (error instanceof SafeError && error.code === 'UPSTREAM_NOT_FOUND') result.crmContactLink.status = 'stale';
       else {

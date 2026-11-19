@@ -60,7 +60,11 @@ export async function readConversationBatch<
     try {
       current = await load(batch === 0 && start === 1 ? undefined : page);
     } catch (error) {
-      if (!result || (error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED')) throw error;
+      if (
+        !result ||
+        (error instanceof SafeError && (error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED'))
+      )
+        throw error;
       if (error instanceof SafeError && error.retryable) {
         reasons.add('conversation_read_deferred');
         if (probing) {

@@ -14,5 +14,5 @@ export function assertInboxAllowed(
   policy?: { allowedInboxIds: readonly number[] },
 ): void {
   if (!isInboxAllowed(conversation.inboxId, policy))
-    throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not authorized.', false, 403);
+    throw new SafeError('POLICY_BLOCKED', 'Conversation inbox is not authorized.', false, 403);
 }

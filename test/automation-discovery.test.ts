@@ -91,13 +91,13 @@ it('bounds each page, binds continuation to actor, scope and policy, and stops r
   expect(first).toMatchObject({ state: 'continue', page: 1, cursor: expect.any(String) });
   expect(fetch).toHaveBeenCalledTimes(2);
   if (first.state !== 'continue') throw Error('Expected cursor');
-  await expect(service.discover({ cursor: first.cursor })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  await expect(service.discover({ cursor: first.cursor })).rejects.toMatchObject({ code: 'WORK_STALE' });
   await expect(
     createAutomationService(env, { ...auth, clientId: 'other-client' }).discover({
       cursor: first.cursor,
       inboxIds: [4101],
     }),
-  ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  ).rejects.toMatchObject({ code: 'WORK_STALE' });
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(await service.discover({ cursor: first.cursor, inboxIds: [4101] })).toMatchObject({
     state: 'end',
@@ -107,7 +107,7 @@ it('bounds each page, binds continuation to actor, scope and policy, and stops r
   });
   await service.updatePolicy({ expectedVersion: 2, patch: { mode: 'preview', allowedInboxIds: [4101] } });
   await expect(service.discover({ cursor: first.cursor, inboxIds: [4101] })).rejects.toMatchObject({
-    code: 'INVALID_INPUT',
+    code: 'WORK_STALE',
   });
   expect(fetch).toHaveBeenCalledTimes(4);
 });

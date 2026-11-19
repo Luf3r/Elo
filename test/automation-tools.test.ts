@@ -297,7 +297,7 @@ describe('agent workflow MCP boundary', () => {
       ['automation:process', 'crm:read', 'chat:read'],
     );
     expect(data.result?.isError).toBe(true);
-    expect(JSON.parse(data.result.content[0].text).error.code).toBe('INVALID_INPUT');
+    expect(JSON.parse(data.result.content[0].text).error.code).toBe('WORK_STALE');
     expect(fetch).not.toHaveBeenCalled();
     expect(budgetMock(env)).not.toHaveBeenCalled();
   });
@@ -381,7 +381,7 @@ it('revalidates the canonical inbox before returning a completed replay', async 
   expect((await service.prepare(input)).state).toBe('ready');
 
   fetch.mockClear().mockResolvedValueOnce(Response.json({ id: 101, inbox_id: 9999 }));
-  await expect(service.prepare(input)).rejects.toMatchObject({ code: 'MCP_UNAUTHORIZED' });
+  await expect(service.prepare(input)).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
@@ -457,7 +457,7 @@ it('revalidates a CRM-only continuation before reading another catalog page', as
   const stub = accountState(env);
   await evictDurableObject(env.AUTOMATION_STATE.get(stub.id));
   fetch.mockClear().mockResolvedValueOnce(Response.json({ id: 101, inbox_id: 4102 }));
-  await expect(createAutomationService(env, actor).prepare(resume)).rejects.toMatchObject({ code: 'MCP_UNAUTHORIZED' });
+  await expect(createAutomationService(env, actor).prepare(resume)).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(new URL(fetch.mock.calls[0]![0].url).pathname).toBe('/api/v1/accounts/123/conversations/101');
 });
@@ -493,7 +493,7 @@ it('renews an expired preparation with a new snapshot and rejects the old token 
     expectedSnapshotVersion: first.work.snapshotVersion,
     analysis: plannerAnalysis(),
   });
-  await expect(service.submit(stale)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  await expect(service.submit(stale)).rejects.toMatchObject({ code: 'WORK_STALE' });
   await expect(
     service.submit({ ...stale, leaseToken: first.work.leaseToken, expectedSnapshotVersion: next.work.snapshotVersion }),
   ).rejects.toThrow();
@@ -527,7 +527,7 @@ it('verifies all customer conversation IDs before reading any of their content',
       target: { kind: 'customer', customerId: 'customer-synthetic' },
       mode: 'preview',
     }),
-  ).rejects.toMatchObject({ code: 'MCP_UNAUTHORIZED' });
+  ).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
   expect(fetch.mock.calls.map(([req]) => new URL(req.url).pathname)).toEqual([
     '/api/v1/accounts/123/conversations/101',
     '/api/v1/accounts/123/conversations/102',

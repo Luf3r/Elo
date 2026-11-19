@@ -55,7 +55,7 @@ export function authorizePreparation(policy: AutomationPolicy, input: Preparatio
   if (input.target.kind === 'pending')
     unavailable('Use automation_discover_pending to find work, then prepare a returned conversation.');
   if (settings.reason)
-    throw new SafeError('MCP_UNAUTHORIZED', 'Requested preparation scope or mode is not authorized.', false, 403);
+    throw new SafeError('POLICY_BLOCKED', 'Requested preparation scope or mode is not authorized.', false, 403);
   return settings;
 }
 

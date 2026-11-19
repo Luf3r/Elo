@@ -86,7 +86,7 @@ export class DiscoveryRepository {
   savePendingPage(entries: PendingActivity[], policyVersion: number, next?: DiscoveryCursor) {
     return this.storage.transactionSync(() => {
       if (this.getExecutionPolicy()?.version !== policyVersion)
-        throw new SafeError('MCP_UNAUTHORIZED', 'Discovery policy changed; start a new scan.', false, 403);
+        throw new SafeError('POLICY_BLOCKED', 'Discovery policy changed; start a new scan.', false, 403);
       const now = Date.now();
       const pending = entries.filter((entry) => {
         const prior = this.getPendingActivity(entry.eventId);

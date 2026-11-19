@@ -32,7 +32,7 @@ export function createWorkflowContext(env: Env, auth: AuthContext, signal?: Abor
 }
 
 export const unavailable = (message = 'Work is unavailable or stale; prepare again.'): never => {
-  throw new SafeError('INVALID_INPUT', message, false, 409);
+  throw new SafeError('WORK_STALE', message, false, 409);
 };
 
 export function automationActor(auth: AuthContext) {
@@ -102,7 +102,7 @@ export async function loadPendingActivity(ctx: WorkflowContext, id: string, requ
   )
     return unavailable('Pending activity is unavailable or outside the requested scope.');
   if (discoverySettings(ctx.env, await ctx.policy(), [event.inboxId]).reason)
-    throw new SafeError('MCP_UNAUTHORIZED', 'Pending activity scope is not authorized.', false, 403);
+    throw new SafeError('POLICY_BLOCKED', 'Pending activity scope is not authorized.', false, 403);
   return event;
 }
 

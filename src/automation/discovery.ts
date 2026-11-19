@@ -75,7 +75,7 @@ export async function discoverPending(
     ? await repository.getPendingCursor(input.cursor)
     : { scope, inboxIndex: 0, page: 1, seen: [], startedAt: now };
   if (!cursor || cursor.scope !== scope || cursor.startedAt + discoveryCursorMs <= now)
-    throw new SafeError('INVALID_INPUT', 'Discovery cursor is unavailable, expired or outside this scope.', false, 409);
+    throw new SafeError('WORK_STALE', 'Discovery cursor is unavailable, expired or outside this scope.', false, 409);
   const inboxId = inboxes[cursor.inboxIndex]!;
   const chat = createAgendorChatClient(env, { signal });
   const inventory = await chat.listInboxInventory();
@@ -101,7 +101,7 @@ export async function discoverPending(
   throwIfCancelled(signal);
   const current = await currentPolicy();
   if (current.version !== policy.version || discoverySettings(env, current, inboxes).reason)
-    throw new SafeError('MCP_UNAUTHORIZED', 'Discovery scope changed; start a new scan.', false, 403);
+    throw new SafeError('POLICY_BLOCKED', 'Discovery scope changed; start a new scan.', false, 403);
   const signature = await payloadDigest(page.rows.map((row) => row.id).sort((a, b) => a - b));
   const repeated = cursor.seen.includes(signature);
   const entries: PendingActivity[] = [];
@@ -172,6 +172,6 @@ export async function verifyPendingActivity(chat: ReturnType<typeof createAgendo
   const page = await chat.listScopedActivity(event.inboxId, event.page);
   const row = page.rows.find((row) => row.id === event.conversationId && row.inboxId === event.inboxId);
   if (!row || timestampMs(row) !== event.timestamp || row.status !== event.status)
-    throw new SafeError('INVALID_INPUT', 'Conversation moved or changed; restart discovery.', false, 409);
+    throw new SafeError('WORK_STALE', 'Conversation moved or changed; restart discovery.', false, 409);
   return row;
 }

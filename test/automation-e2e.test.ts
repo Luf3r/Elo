@@ -376,7 +376,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
           planVersion: plan.version,
           requestId: 'forbidden-preview',
         }),
-      ).rejects.toMatchObject({ code: 'MCP_UNAUTHORIZED' });
+      ).rejects.toMatchObject({ code: 'POLICY_BLOCKED' });
       expect(f.write).not.toHaveBeenCalled();
       expect(f.network).not.toHaveBeenCalled();
     } finally {
@@ -399,7 +399,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
         scope: { inboxIds: [4102] },
       });
       await expect(f.tool('automation_prepare_sync', { ...input, requestId: 'phase-b-denied' })).rejects.toThrow(
-        'MCP_UNAUTHORIZED',
+        'POLICY_BLOCKED',
       );
       f.moveInbox(4102);
       const prepared = await f.tool<{ work: PreparedWork }>('automation_prepare_sync', {
@@ -452,7 +452,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
             planVersion: plan.version,
             requestId: 'forbidden-preview',
           }),
-        ).rejects.toThrow('MCP_UNAUTHORIZED');
+        ).rejects.toThrow('POLICY_BLOCKED');
         expect(f.write).not.toHaveBeenCalled();
         expect(f.network).not.toHaveBeenCalled();
       } finally {

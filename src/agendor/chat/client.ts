@@ -100,7 +100,7 @@ export function createAgendorChatClient(
     },
     async listScopedActivity(inboxId: number, page: number) {
       if (!inboxGuard.isAllowed(inboxId))
-        throw new SafeError('MCP_UNAUTHORIZED', 'Conversation inbox is not authorized.', false, 403);
+        throw new SafeError('POLICY_BLOCKED', 'Conversation inbox is not authorized.', false, 403);
       chatConversationPageInput.parse({ page });
       const path = `/accounts/${account}/conversations`;
       const query = new URLSearchParams({

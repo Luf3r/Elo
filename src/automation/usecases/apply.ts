@@ -17,7 +17,7 @@ export async function apply(ctx: WorkflowContext, raw: unknown): Promise<Operati
   const input = parseInput(applyInputSchema, raw);
   const policy = await ctx.policy();
   if (policy.mode !== 'apply')
-    throw new SafeError('MCP_UNAUTHORIZED', 'The current policy does not authorize plan application.', false, 403);
+    throw new SafeError('POLICY_BLOCKED', 'The current policy does not authorize plan application.', false, 403);
   // Context publication invalidates the source plan. An exact completed
   // replay still returns its receipt without reauthorizing any dispatch.
   const prior = await ctx.repository.getOperationByRequest(input.requestId);

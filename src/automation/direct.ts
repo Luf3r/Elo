@@ -104,7 +104,7 @@ export async function executeDirectCommand(
       existing.input.authorization.actor.userId !== caller.userId ||
       existing.input.authorization.actor.clientId !== caller.clientId
     )
-      throw new SafeError('INVALID_INPUT', 'requestId already belongs to another payload or actor.', false, 409);
+      throw new SafeError('CONFLICT', 'requestId already belongs to another payload or actor.', false, 409);
     if (existing.status.state === 'queued')
       await enqueueOperation(existing.operationId, {
         repository: repo,
@@ -180,8 +180,7 @@ export async function executeDirectCommand(
   };
   const previous = await readWorkflow(repo, lease.workId);
   if (previous) {
-    if (previous.direct?.digest !== digest)
-      throw new SafeError('INVALID_INPUT', 'Conflicting request payload.', false, 409);
+    if (previous.direct?.digest !== digest) throw new SafeError('CONFLICT', 'Conflicting request payload.', false, 409);
     state.revision = previous.revision;
   }
   await persistWorkflow(repo, state);

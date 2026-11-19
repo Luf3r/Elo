@@ -86,7 +86,11 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
             },
           };
         } catch (error) {
-          if (error instanceof SafeError && (error.retryable || error.code === 'MCP_UNAUTHORIZED')) throw error;
+          if (
+            error instanceof SafeError &&
+            (error.retryable || error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED')
+          )
+            throw error;
         }
       }
       if (
@@ -218,7 +222,11 @@ export function createConversationReader(deps: ConversationReaderDependencies) {
         try {
           page = await deps.listMessages(conversation.id, { after });
         } catch (error) {
-          if (!messages.size || (error instanceof SafeError && error.code === 'MCP_UNAUTHORIZED')) throw error;
+          if (
+            !messages.size ||
+            (error instanceof SafeError && (error.code === 'MCP_UNAUTHORIZED' || error.code === 'POLICY_BLOCKED'))
+          )
+            throw error;
           reasons.add(error instanceof SafeError && error.retryable ? 'history_read_deferred' : 'history_query_failed');
           return finish();
         }

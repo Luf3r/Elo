@@ -58,7 +58,7 @@ const commandCapability = {
 } as const satisfies Record<MutationCommand['kind'], Capability>;
 
 function deny(message: string): never {
-  throw new SafeError('MCP_UNAUTHORIZED', message, false, 403);
+  throw new SafeError('POLICY_BLOCKED', message, false, 403);
 }
 
 /** Only a server-loaded plan and current policy may cross this boundary.
