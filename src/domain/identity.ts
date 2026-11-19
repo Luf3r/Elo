@@ -4,6 +4,7 @@ import type { AgentAnalysis } from './schemas/analysis';
 import type { CustomerResolution } from './schemas/planning';
 import type { CustomerCandidate, CustomerCandidates } from './schemas/snapshot';
 import { normalizedPhone, sameEntity, uniqueSources } from './identity-candidates';
+import { normalizeDocument, normalizeEmail, normalizeName } from './normalize';
 
 export { readDuplicateCandidates } from './identity-duplicates';
 export {
@@ -14,10 +15,6 @@ export {
   candidateLookupLinks,
   type CandidateCrmReader,
 } from './identity-candidates';
-
-const name = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
-const email = (value: string) => value.trim().toLowerCase();
-const document = (value: string) => value.replace(/\D/g, '');
 
 /** Agent selection is a claim checked against server-read evidence, never authority. */
 export function resolveCustomer(
@@ -101,12 +98,12 @@ export function resolveCustomer(
   if (
     entity === 'organization' &&
     typeof doc === 'string' &&
-    (document(doc).length !== 14 ||
+    (normalizeDocument(doc).length !== 14 ||
       !candidates.identifierCoverage?.some(
         (lookup) =>
           lookup.entity === entity &&
           lookup.field === 'cnpj' &&
-          lookup.value === document(doc) &&
+          lookup.value === normalizeDocument(doc) &&
           lookup.coverage.complete &&
           !lookup.coverage.missingReasons.length &&
           lookup.coverage.pagesRead > 0,
@@ -114,15 +111,17 @@ export function resolveCustomer(
   )
     return review('IDENTIFIER_COVERAGE_INCOMPLETE');
   const docMatches =
-    typeof doc === 'string' && document(doc).length === 14
-      ? pool.filter((c) => c.document && document(c.document) === document(doc))
+    typeof doc === 'string' && normalizeDocument(doc).length === 14
+      ? pool.filter((c) => c.document && normalizeDocument(c.document) === normalizeDocument(doc))
       : [];
-  const mailMatches = typeof mail === 'string' ? pool.filter((c) => c.email && email(c.email) === email(mail)) : [];
+  const mailMatches =
+    typeof mail === 'string' ? pool.filter((c) => c.email && normalizeEmail(c.email) === normalizeEmail(mail)) : [];
   const phoneMatches =
     typeof phone === 'string' && normalizedPhone(phone)
       ? pool.filter((c) => c.phone && normalizedPhone(c.phone) === normalizedPhone(phone))
       : [];
-  const names = typeof customerName === 'string' ? pool.filter((c) => name(c.name) === name(customerName)) : [];
+  const names =
+    typeof customerName === 'string' ? pool.filter((c) => normalizeName(c.name) === normalizeName(customerName)) : [];
   const tiers = [linked, docMatches, mailMatches, phoneMatches];
   if (tiers.some((tier) => tier.length > 1)) return review('DUPLICATE_IDENTITY');
   const winners = tiers.flat();
@@ -132,7 +131,7 @@ export function resolveCustomer(
     if (selection.kind === 'new' || !sameEntity(selection, winner.ref)) return review('CUSTOMER_SELECTION_CONFLICT');
     if (!linked.length && !docMatches.length && !names.some((c) => sameEntity(c.ref, winner.ref)))
       return review('CONTACT_CONTEXT_REQUIRED');
-    if (typeof doc === 'string' && winner.document && document(doc) !== document(winner.document))
+    if (typeof doc === 'string' && winner.document && normalizeDocument(doc) !== normalizeDocument(winner.document))
       return review('IDENTITY_EVIDENCE_CONFLICT');
     const organization = value('organization');
     if (entity === 'person' && typeof organization === 'number' && !winner.organizationIds.includes(organization))
@@ -146,7 +145,7 @@ export function resolveCustomer(
     };
   }
   if (selection.kind !== 'new' || names.length) return review('CUSTOMER_IDENTITY_UNPROVEN');
-  if (typeof customerName !== 'string' || name(selection.record.name) !== name(customerName))
+  if (typeof customerName !== 'string' || normalizeName(selection.record.name) !== normalizeName(customerName))
     return review('CUSTOMER_NAME_REQUIRED');
   const record = {
     name: customerName.trim(),

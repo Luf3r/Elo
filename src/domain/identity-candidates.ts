@@ -4,6 +4,7 @@ import type { ChatContact } from '../shared/contracts/chat';
 import type { AgentAnalysis } from './schemas/analysis';
 import type { EntityRef, SourceRef } from './schemas/common';
 import type { CustomerCandidate, CustomerCandidates } from './schemas/snapshot';
+import { normalizeDocument, normalizeEmail } from './normalize';
 
 export interface CandidateCrmReader {
   getPerson(id: number): Promise<unknown>;
@@ -17,8 +18,6 @@ export function uniqueSources(refs: readonly SourceRef[]): SourceRef[] {
     ...new Map(refs.map((ref) => [JSON.stringify([ref.kind, ref.id, ref.revision, ref.field]), ref])).values(),
   ].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
-const email = (value: string) => value.trim().toLowerCase();
-const document = (value: string) => value.replace(/\D/g, '');
 // Require an explicit international prefix; a local number never gains a country/DDD.
 export const normalizedPhone = (value: string): string | undefined => {
   const clean = value.trim().replace(/[\s().-]/g, '');
@@ -181,7 +180,7 @@ export async function readCustomerCandidates(
   const filters = [
     contact.phoneNumber ? { phone: contact.phoneNumber } : undefined,
     contact.email ? { email: contact.email } : undefined,
-    typeof cpf === 'string' && document(cpf).length === 11 ? { cpf: document(cpf) } : undefined,
+    typeof cpf === 'string' && normalizeDocument(cpf).length === 11 ? { cpf: normalizeDocument(cpf) } : undefined,
     contact.name ? { query: contact.name } : undefined,
   ].filter((v): v is { email: string } | { phone: string } | { query: string } | { cpf: string } => v !== undefined);
   const documents = [
@@ -194,7 +193,7 @@ export async function readCustomerCandidates(
             f.certainty === 'confirmed' &&
             typeof f.value === 'string',
         )
-        .map((f) => document(f.value as string)),
+        .map((f) => normalizeDocument(f.value as string)),
     ),
   ];
   if (!filters.length && !documents.length) reasons.add('contact_identity_unavailable');
@@ -222,8 +221,10 @@ export async function readCustomerCandidates(
     normalizedPhone(c.phone) === normalizedPhone(contact.phoneNumber)
       ? ['exact_phone']
       : []),
-    ...(contact.email && c.email && email(c.email) === email(contact.email) ? ['exact_email'] : []),
-    ...(typeof cpf === 'string' && c.document && document(cpf) === document(c.document) ? ['exact_cpf'] : []),
+    ...(contact.email && c.email && normalizeEmail(c.email) === normalizeEmail(contact.email) ? ['exact_email'] : []),
+    ...(typeof cpf === 'string' && c.document && normalizeDocument(cpf) === normalizeDocument(c.document)
+      ? ['exact_cpf']
+      : []),
   ];
   const strong = people.filter((c) => matched(c).length);
   result.candidateRead = reasons.size
