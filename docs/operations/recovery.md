@@ -47,3 +47,13 @@ Procedimentos operacionais vigentes para pausar a automação, reconciliar opera
 1. Antes de reverter para uma versão anterior no Wrangler, pause escritores/automação (`mode: "disabled"`), reconcilie operações `queued`/`uncertain` pendentes e verifique compatibilidade da versão alvo com o schema atual de `schema_migrations` (versões 1–8) e o formato da fila.
 2. **Nunca** remova a classe `AutomationAccount` nem suas migrações DO em `wrangler.jsonc`, e **nunca** recrie `OAUTH_KV` como rollback.
 3. Rollback de código não desfaz empresas, pessoas, negócios ou tarefas já criados no Agendor CRM; correções comerciais exigem ação explícita separada.
+
+## 6. Logs estruturados
+
+- O módulo `src/shared/logger.ts` centraliza a emissão de eventos operacionais com `logEvent(level, event, fields)` (níveis `'info'`, `'warn'` e `'error'`) e `errorFields(error)`.
+- **Formato indexável pelo Workers Logs**: cada chamada invoca `console.info`, `console.warn` ou `console.error` com um **único objeto** `{ event, ...campos }` (nunca uma string JSON serializada), permitindo que o Workers Logs indexe campos escalares como `event`, `requestId`, `operationId`, `code` e `errorType`. `observability.logs.invocation_logs` permanece `false`.
+- **Regras de redação e omissão**:
+  - **Por nome de campo**: qualquer campo cujo nome contenha `token`, `secret`, `authorization`, `password`, `cookie`, `email`, `phone`, `telefone`, `cpf` ou `cnpj` (sem diferenciar maiúsculas/minúsculas) é substituído por `'[redacted]'`.
+  - **Por conteúdo de texto**: valores `string` que contenham endereços de e-mail, tokens `Bearer` ou sequências de 11 ou mais dígitos têm esses trechos substituídos por `'[redacted]'`.
+  - **Estruturas aninhadas**: objetos e arrays aninhados não são registrados e são substituídos por `'[omitted]'`.
+  - **Erros sem mensagem**: `errorFields(error)` devolve apenas `{ errorType, code? }` — onde `errorType` preserva `error.name` quando casa `/^[A-Za-z]+Error$/` (ou `'Error'` nos demais casos) e `code` é incluído somente para instâncias de `SafeError` — omitindo `error.message` para evitar vazamento de PII ou payloads upstream.

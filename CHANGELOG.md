@@ -28,6 +28,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 - **Fase 1 — Formatação e lint (`a0b4ad3`, `062b4d7`, `f4431fb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
 - **Fase 5.1 — Remoção do token fixo (`61c9fae`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
 - **Fase 2 — Documentação**: gerador `scripts/docs-tools.mjs` (`npm run docs:tools`) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
+- **Fase 4.2 (parte 1) — Logger estruturado**: adicionado `src/shared/logger.ts` (`logEvent` e `errorFields`) emitindo um único objeto indexável pelo Workers Logs com redação automática de campos sensíveis e padrões de PII/token, omissão de objetos/arrays aninhados e extração de erros sem mensagem.
 
 ## [0.1.7] — 2026-11-10
 
