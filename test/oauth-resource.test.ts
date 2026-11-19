@@ -1,11 +1,9 @@
-import { budgetMock } from './helpers';
+import { budgetMock, context } from './helpers';
+import { readResponseJson, readToolJson, type ToolErrorBody } from './helpers/json';
 import { describe, expect, it, vi } from 'vitest';
-import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
 import worker from '../src/index';
-import { oauthOptions } from '../src/oauth/provider';
 import { ORIGIN, RESOURCE } from '../src/oauth/config';
-import { context } from './helpers';
-import { oauthEnv, sha256 } from './oauth-helper';
+import { oauthEnv } from './oauth-helper';
 import { issueTestToken } from './oauth-token';
 import { callTool } from './mcp-helper';
 
@@ -84,8 +82,8 @@ describe('OAuth resource integration', () => {
       fetch = vi.spyOn(globalThis, 'fetch');
     const { data, response } = await callTool('crm_search_deals', {}, env, ['chat:read']);
     expect(response.status).toBe(200);
-    expect(data.result.isError).toBe(true);
-    expect(JSON.parse(data.result.content[0].text).error.code).toBe('MCP_UNAUTHORIZED');
+    expect(data.result?.isError).toBe(true);
+    expect(readToolJson<ToolErrorBody>(data).error.code).toBe('MCP_UNAUTHORIZED');
     expect(fetch).not.toHaveBeenCalled();
   });
   it('does not silently expand an empty scope grant to CRM access', async () => {
@@ -93,8 +91,8 @@ describe('OAuth resource integration', () => {
       fetch = vi.spyOn(globalThis, 'fetch');
     const { data, response } = await callTool('crm_search_deals', {}, env, []);
     expect(response.status).toBe(200);
-    expect(data.result.isError).toBe(true);
-    expect(JSON.parse(data.result.content[0].text).error.code).toBe('MCP_UNAUTHORIZED');
+    expect(data.result?.isError).toBe(true);
+    expect(readToolJson<ToolErrorBody>(data).error.code).toBe('MCP_UNAUTHORIZED');
     expect(fetch).not.toHaveBeenCalled();
   });
   it.each(['OAUTH_KV', 'OAUTH_RATE_LIMITER', 'ACCESS_CLIENT_SECRET'] as const)(
@@ -128,13 +126,13 @@ describe('OAuth resource integration', () => {
       context(),
     );
     expect(refreshed.status).toBe(200);
-    const next = (await refreshed.json()) as { access_token: string };
+    const next = await readResponseJson<{ access_token: string }>(refreshed);
     const discovery = await worker.fetch(
       new Request(`${ORIGIN}/.well-known/oauth-authorization-server`),
       env,
       context(),
     );
-    const metadata = (await discovery.json()) as { revocation_endpoint: string };
+    const metadata = await readResponseJson<{ revocation_endpoint: string }>(discovery);
     const revoked = await worker.fetch(
       new Request(metadata.revocation_endpoint, {
         method: 'POST',
@@ -187,7 +185,8 @@ describe('OAuth resource integration', () => {
   it.each([undefined, '   '])(
     'rejects OAuth route requests without CF-Connecting-IP (%s) with 429',
     async (headerValue) => {
-      const env = oauthEnv();
+      const limit = vi.fn(async () => ({ success: true }));
+      const env = oauthEnv({ OAUTH_RATE_LIMITER: { limit } });
       const headers = headerValue !== undefined ? { 'CF-Connecting-IP': headerValue } : undefined;
       const r = await worker.fetch(
         new Request(`${ORIGIN}/register`, { method: 'POST', headers, body: '{}' }),
@@ -198,7 +197,7 @@ describe('OAuth resource integration', () => {
       expect(r.headers.get('retry-after')).toBe('10');
       expect(r.headers.get('cache-control')).toBe('no-store');
       expect(await r.json()).toEqual({ error: 'temporarily_unavailable' });
-      expect(env.OAUTH_RATE_LIMITER.limit).not.toHaveBeenCalled();
+      expect(limit).not.toHaveBeenCalled();
     },
   );
 });

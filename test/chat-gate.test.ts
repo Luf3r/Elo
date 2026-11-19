@@ -1,15 +1,17 @@
 import { expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
 import { testEnv, expandedCrmToolNames } from './helpers';
+import type { ToolListResult } from './helpers/json';
 
 it('keeps Chat tools disabled even when a Chat token is supplied', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch');
-  const { data } = await rpc('tools/list', {}, testEnv({ AGENDOR_CHAT_TOKEN: 'unverified-token' }));
-  expect(data.result.tools.some((t: { name: string }) => t.name.startsWith('chat_'))).toBe(false);
+  const { data } = await rpc<ToolListResult>('tools/list', {}, testEnv({ AGENDOR_CHAT_TOKEN: 'unverified-token' }));
+  const tools = data.result?.tools ?? [];
+  expect(tools.some((t) => t.name.startsWith('chat_'))).toBe(false);
   expect(
-    data.result.tools
-      .filter((t: { name: string }) => t.name.startsWith('crm_'))
-      .map((t: { name: string }) => t.name)
+    tools
+      .filter((t) => t.name.startsWith('crm_'))
+      .map((t) => t.name)
       .sort(),
   ).toEqual(
     [

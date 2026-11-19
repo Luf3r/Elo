@@ -108,7 +108,10 @@ describe('conservative customer resolution', () => {
         }),
         catalogFixture,
       ),
-    ).toMatchObject({ kind: 'review', reviewReasons: expect.arrayContaining(['CANDIDATE_COVERAGE_INCOMPLETE']) });
+    ).toMatchObject({
+      kind: 'review',
+      reviewReasons: expect.arrayContaining(['CANDIDATE_COVERAGE_INCOMPLETE']) as string[],
+    });
 
     expect(
       identity.resolveCustomer(

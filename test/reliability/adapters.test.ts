@@ -320,7 +320,7 @@ describe('independent duplicate diagnostics', () => {
       status: 'possible_duplicate',
       currentPersonId: 2458,
       candidatePersonIds: [1001],
-      reasons: expect.arrayContaining(['same_normalized_name', 'same_organization']),
+      reasons: expect.arrayContaining(['same_normalized_name', 'same_organization']) as string[],
     });
   });
   it('does not treat a shared name alone as proof of duplication', async () => {

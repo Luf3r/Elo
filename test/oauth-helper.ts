@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import type { Env } from '../src/env';
 import { ORIGIN, RESOURCE } from '../src/oauth/config';
 import { testEnv } from './helpers';
+import { readResponseJson } from './helpers/json';
 
 export function oauthEnv(overrides: Partial<Env> = {}): Env {
   return {
@@ -77,7 +78,7 @@ export async function startAuthorization(
     }),
   });
   if (registered.status !== 201) throw new Error('Test client registration failed: ' + (await registered.text()));
-  const raw = (await registered.json()) as { client_id: string };
+  const raw = await readResponseJson<{ client_id: string }>(registered);
   const client = { clientId: raw.client_id };
   const verifier = 'unit-verifier-01234567890123456789012345678901234567890';
   const query = new URLSearchParams({
@@ -90,7 +91,7 @@ export async function startAuthorization(
     code_challenge: await sha256(verifier),
     code_challenge_method: 'S256',
   });
-  const response = await providerFetch(provider, env, '/authorize?' + query);
+  const response = await providerFetch(provider, env, '/authorize?' + query.toString());
   const html = await response.text();
   const handle = /name="handle" value="([^"]+)"/.exec(html)?.[1];
   return { client, verifier, response, html, handle };
@@ -112,7 +113,7 @@ export async function simulateAccess(nonce: string, overrides: Record<string, un
     .setProtectedHeader({ alg: 'RS256', kid: 'login-key' })
     .sign(keys.privateKey);
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : String(input);
     if (url.endsWith('/token')) return Response.json({ id_token: token, access_token: 'upstream-not-for-client' });
     if (url.endsWith('/jwks')) return Response.json({ keys: [jwk] });
     throw new Error('Unexpected upstream call');

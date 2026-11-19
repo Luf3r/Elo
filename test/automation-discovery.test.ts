@@ -10,7 +10,7 @@ const actor = () =>
     scopes: ['automation:process', 'automation:manage', 'chat:read', 'crm:read'],
     expiresAt: Date.now() + 600_000,
   }) as AuthContext;
-async function setup(enabled = true) {
+async function setup(_enabled = true) {
   const env = testEnv({ AGENDOR_CHAT_TOKEN: 'synthetic-chat', AGENDOR_CHAT_ACCOUNT_ID: '123' });
   budgetMock(env).mockResolvedValue({ allowed: true, reservationId: 'test' });
   const auth = actor();
@@ -88,7 +88,7 @@ it('bounds each page, binds continuation to actor, scope and policy, and stops r
   });
   vi.stubGlobal('fetch', fetch);
   const first = await service.discover({ inboxIds: [4101] });
-  expect(first).toMatchObject({ state: 'continue', page: 1, cursor: expect.any(String) });
+  expect(first).toMatchObject({ state: 'continue', page: 1, cursor: expect.any(String) as string });
   expect(fetch).toHaveBeenCalledTimes(2);
   if (first.state !== 'continue') throw Error('Expected cursor');
   await expect(service.discover({ cursor: first.cursor })).rejects.toMatchObject({ code: 'WORK_STALE' });
@@ -131,7 +131,7 @@ it('returns the same cursor on a transient failure and resumes at the failed pag
   expect(await service.discover(next)).toMatchObject({
     state: 'deferred',
     cursor: first.cursor,
-    retryAt: expect.any(String),
+    retryAt: expect.any(String) as string,
   });
   expect(await service.discover(next)).toMatchObject({ state: 'end', page: 2, candidates: [] });
   expect(calls).toEqual(['1', '2', '2']);
@@ -169,7 +169,12 @@ it('accepts the live payload-only List all inboxes shape below the page ceiling'
   });
   vi.stubGlobal('fetch', fetch);
   const first = await service.discover({ inboxIds: [4101, 4102] });
-  expect(first).toMatchObject({ state: 'continue', candidates: [], inboxId: 4101, cursor: expect.any(String) });
+  expect(first).toMatchObject({
+    state: 'continue',
+    candidates: [],
+    inboxId: 4101,
+    cursor: expect.any(String) as string,
+  });
   if (first.state !== 'continue') throw Error('Expected cursor to the second authorized inbox');
   expect(await service.discover({ inboxIds: [4101, 4102], cursor: first.cursor })).toMatchObject({
     state: 'end',

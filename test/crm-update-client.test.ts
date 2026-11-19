@@ -24,7 +24,7 @@ describe('bounded CRM update client', () => {
   it('rejects arbitrary deal properties before making a request', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch');
     const client = createAgendorCrmClient({ AGENDOR_CRM_TOKEN: 'test-token' }, { budgetGate: allowBudget });
-    await expect(client.updateDeal(42, { title: 'Renewal', ownerUser: 1 } as never)).rejects.toMatchObject({
+    await expect(client.updateDeal(42, { title: 'Renewal', ownerUser: 1 })).rejects.toMatchObject({
       code: 'INVALID_INPUT',
     });
     expect(fetch).not.toHaveBeenCalled();

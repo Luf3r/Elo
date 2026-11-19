@@ -67,7 +67,7 @@ describe('CRM extended read contracts', () => {
     await client().searchOrganizations({ email });
     expect(new URL(requests[0]!.url).searchParams.get('email')).toBe(email);
     const result = await callTool('crm_search_organizations', { email });
-    expect(result.data.result.isError).not.toBe(true);
+    expect(result.data.result?.isError).not.toBe(true);
     expect(new URL(requests[1]!.url).searchParams.get('email')).toBe(email);
   });
   it.each(['', '   ', 'x'.repeat(301)])(
@@ -236,9 +236,9 @@ describe('bounded CRM catalog', () => {
   ])('exposes %s with crm:read and rejects other scopes', async (name, input, body) => {
     const requests = upstream(body);
     const allowed = await callTool(name, input);
-    expect(allowed.data.result.isError).not.toBe(true);
+    expect(allowed.data.result?.isError).not.toBe(true);
     const denied = await callTool(name, input, undefined, ['chat:read']);
-    expect(denied.data.result.isError).toBe(true);
+    expect(denied.data.result?.isError).toBe(true);
     expect(requests).toHaveLength(1);
   });
 });

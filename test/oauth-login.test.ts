@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { loginHandler } from '../src/oauth/handler';
 import { oauthFailureDiagnostic } from '../src/oauth/diagnostics';
+import { readResponseJson } from './helpers/json';
 import { baseOptions, oauthEnv, providerFetch, startAuthorization, cookies, simulateAccess } from './oauth-helper';
 
 const provider = () =>
@@ -27,7 +28,7 @@ describe('owner-only browser login', () => {
       }),
     });
     expect(registered.status).toBe(201);
-    const client = (await registered.json()) as { client_id: string };
+    const client = await readResponseJson<{ client_id: string }>(registered);
     const response = await providerFetch(
       p,
       env,
@@ -38,7 +39,7 @@ describe('owner-only browser login', () => {
           redirect_uri: 'https://client.example/callback',
           resource: 'https://elo-agendor-mcp.example.workers.dev/mcp',
           scope: 'crm:read',
-        }),
+        }).toString(),
     );
     expect(response.status).toBe(400);
     expect(response.headers.get('location')).toBeNull();
@@ -100,7 +101,7 @@ describe('owner-only browser login', () => {
       wrongEmail ? { email: 'attacker@example.com' } : {},
     );
     const callback =
-      '/callback?' + new URLSearchParams({ code: 'access-code', state: access.searchParams.get('state')! });
+      '/callback?' + new URLSearchParams({ code: 'access-code', state: access.searchParams.get('state')! }).toString();
     expect((await providerFetch(p, env, callback)).status).toBe(400);
     const result = await providerFetch(p, env, callback, { headers: { Cookie: cookies(start.response, approved) } });
     if (wrongEmail) {
@@ -142,7 +143,7 @@ describe('owner-only browser login', () => {
       code_challenge: 'private-challenge-value',
     });
     try {
-      const response = await providerFetch(provider(), oauthEnv(), '/authorize?' + query);
+      const response = await providerFetch(provider(), oauthEnv(), '/authorize?' + query.toString());
       expect(response.status).toBe(400);
       expect(warn).toHaveBeenCalledWith(
         expect.objectContaining({

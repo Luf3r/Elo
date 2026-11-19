@@ -12,7 +12,6 @@ import {
   buildReserveWorkInput,
   buildSnapshotManifest,
 } from './fixtures/builders';
-import type { Env } from '../src/env';
 import { defaultAutomationPolicy } from '../src/automation/service';
 import { durableFailure } from './helpers';
 
@@ -123,12 +122,12 @@ it('publishes a pending customer projection after queued confirmation, once only
     retry: vi.fn(),
   };
 
-  await handleAutomationQueue({ messages: [message] }, env as Env, () => f.deps);
+  await handleAutomationQueue({ messages: [message] }, env, () => f.deps);
   const context = await f.stub.getContext('customer-1');
   expect(context.version).toBe(1);
   expect(context.markdown).toContain('company-create');
 
-  await handleAutomationQueue({ messages: [message] }, env as Env, () => f.deps);
+  await handleAutomationQueue({ messages: [message] }, env, () => f.deps);
   expect((await f.stub.getContext('customer-1')).version).toBe(1);
 });
 

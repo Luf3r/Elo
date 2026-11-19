@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
 import { testEnv } from './helpers';
+import { readToolJson, type ToolErrorBody, type ToolListResult } from './helpers/json';
 import { executeDirectCommand } from '../src/automation/direct';
 import { createAutomationService } from '../src/automation/service';
 import { runInDurableObject } from 'cloudflare:test';
@@ -28,18 +29,18 @@ describe('direct coordinated CRM tools', () => {
       ['crm:write'],
     );
     expect(data.result?.isError).toBe(true);
-    expect(JSON.parse(data.result.content[0].text).error.requiredScope).toBe('crm:create');
+    expect(readToolJson<ToolErrorBody>(data).error.requiredScope).toBe('crm:create');
     expect(fetch).not.toHaveBeenCalled();
   });
   it('publishes closed inputs and separate direct capabilities', async () => {
-    const { data } = await rpc('tools/list');
+    const { data } = await rpc<ToolListResult>('tools/list');
     for (const name of [...createNames, ...enrichNames]) {
-      const tool = data.result.tools.find((t: { name: string }) => t.name === name);
+      const tool = data.result?.tools.find((t) => t.name === name);
       expect(tool, name).toBeDefined();
-      expect(tool.inputSchema.additionalProperties).toBe(false);
-      expect(tool.inputSchema.required).toContain('requestId');
-      expect(tool.annotations.readOnlyHint).toBe(false);
-      expect(tool._meta.securitySchemes).toEqual([
+      expect(tool?.inputSchema?.additionalProperties).toBe(false);
+      expect(tool?.inputSchema?.required).toContain('requestId');
+      expect(tool?.annotations?.readOnlyHint).toBe(false);
+      expect(tool?._meta?.securitySchemes).toEqual([
         { type: 'oauth2', scopes: [createNames.includes(name) ? 'crm:create' : 'crm:enrich'] },
       ]);
     }
@@ -63,7 +64,7 @@ describe('direct coordinated CRM tools', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
   it('reserves one command, reads back the ID, and rejects conflicting request reuse', async () => {
-    const fetch = vi.fn(async (request: Request) => Response.json({ data: { id: 99, name: 'Synthetic Contact' } }));
+    const fetch = vi.fn(async (_request: Request) => Response.json({ data: { id: 99, name: 'Synthetic Contact' } }));
     vi.stubGlobal('fetch', fetch);
     const env = testEnv();
     const input = { requestId, record: { name: 'Synthetic Contact' } };
@@ -96,16 +97,16 @@ describe('direct coordinated CRM tools', () => {
     const { data } = await callTool('crm_update_deal', { id: 42, patch: { title: 'Synthetic' } }, testEnv(), [
       'crm:write',
     ]);
-    expect(data.result.isError).not.toBe(true);
-    expect(JSON.parse(data.result.content[0].text)).toEqual({ id: 42, updatedFields: ['title'] });
-    expect(fetch.mock.calls.map(([r]) => (r as Request).method)).toEqual(['PUT', 'GET']);
+    expect(data.result?.isError).not.toBe(true);
+    expect(readToolJson(data)).toEqual({ id: 42, updatedFields: ['title'] });
+    expect(fetch.mock.calls.map(([r]) => r.method)).toEqual(['PUT', 'GET']);
   });
   it('releases a confirmed direct target for the next explicit update', async () => {
     let current = 'First';
     vi.stubGlobal(
       'fetch',
       vi.fn(async (request: Request) => {
-        if (request.method === 'PUT') current = ((await request.json()) as { name: string }).name;
+        if (request.method === 'PUT') current = (await request.json<{ name: string }>()).name;
         return Response.json({ data: { id: 42, name: current } });
       }),
     );
@@ -169,11 +170,12 @@ describe('direct coordinated CRM tools', () => {
     });
     vi.stubGlobal('fetch', fetch);
     const env = testEnv();
-    const send = vi.fn(async (_body: unknown) => undefined);
+    const send = vi.fn(async (_body: unknown): Promise<void> => undefined);
     env.AUTOMATION_QUEUE = new Proxy(env.AUTOMATION_QUEUE, {
       get(target, prop) {
         if (prop === 'send') return send;
-        return Reflect.get(target, prop);
+        const value: unknown = Reflect.get(target, prop);
+        return value;
       },
     });
     const input = { requestId, record: { name: 'Synthetic Contact' } };

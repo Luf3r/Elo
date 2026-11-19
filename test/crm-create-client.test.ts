@@ -36,7 +36,7 @@ describe('bounded CRM creation', () => {
     { organization: 2_147_483_648 },
   ])('rejects caller-selected IDs, routing, credentials or protected fields %j', async (extra) => {
     const { mutationClient, upstreamFetch } = setup();
-    await expect(mutationClient.createPerson({ ...personFixture, ...extra } as never)).rejects.toMatchObject({
+    await expect(mutationClient.createPerson({ ...personFixture, ...extra })).rejects.toMatchObject({
       code: 'INVALID_INPUT',
     });
     expect(upstreamFetch).not.toHaveBeenCalled();
@@ -59,7 +59,7 @@ describe('bounded CRM creation', () => {
         ref: { kind, id: 42 },
         returnedFields: { name: 'Synthetic Person' },
       });
-      const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+      const request = upstreamFetch.mock.calls[0]![0];
       expect(request.url).toBe(`https://api.agendor.com.br/v3${path}`);
       expect(request.method).toBe('POST');
       expect(request.headers.get('Authorization')).toBe('Token unit-secret');
@@ -81,7 +81,7 @@ describe('bounded CRM creation', () => {
         ref: { kind: 'deal', id: 73 },
         returnedFields: { title: 'Synthetic request' },
       });
-      const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+      const request = upstreamFetch.mock.calls[0]![0];
       expect(request.url).toBe(
         `https://api.agendor.com.br/v3/${kind === 'person' ? 'people' : 'organizations'}/11/deals`,
       );
@@ -134,7 +134,7 @@ describe('bounded CRM creation', () => {
       ...personFixture,
       customFields: [{ id: 'cf-text', value: 'Synthetic value' }],
     });
-    const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+    const request = upstreamFetch.mock.calls[0]![0];
     expect(await request.json()).toEqual({ name: 'Synthetic Person', customFields: { 'cf-text': 'Synthetic value' } });
   });
   it.each([
@@ -177,7 +177,7 @@ describe('bounded CRM creation', () => {
         state: 'confirmed',
         ref: { kind: 'task', id: 81 },
       });
-      const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+      const request = upstreamFetch.mock.calls[0]![0];
       expect(request.url).toBe(`https://api.agendor.com.br/v3/${kind === 'person' ? 'people' : `${kind}s`}/11/tasks`);
       expect(await request.json()).toEqual(record);
     },

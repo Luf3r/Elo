@@ -25,7 +25,7 @@ describe('safe upstream HTTP', () => {
       'fetch',
       vi.fn(async () => new Response('secret upstream body', { status: Number(status) })),
     );
-    const error = await fetchJson(request()).catch((e) => e);
+    const error = await fetchJson(request()).catch((e: unknown) => e);
     expect(error).toMatchObject({ code, retryable, status });
     expect((error as Error).message).not.toContain('secret upstream body');
   });
@@ -42,7 +42,11 @@ describe('safe upstream HTTP', () => {
       vi.fn(
         (r: Request) =>
           new Promise((_resolve, reject) => {
-            r.signal.addEventListener('abort', () => reject(r.signal.reason), { once: true });
+            r.signal.addEventListener(
+              'abort',
+              () => reject(r.signal.reason instanceof Error ? r.signal.reason : new Error(String(r.signal.reason))),
+              { once: true },
+            );
           }),
       ),
     );
@@ -100,7 +104,11 @@ describe('safe upstream HTTP', () => {
       'fetch',
       vi.fn((r: Request) =>
         phase === 'fetch'
-          ? new Promise((_resolve, reject) => r.signal.addEventListener('abort', () => reject(r.signal.reason)))
+          ? new Promise((_resolve, reject) =>
+              r.signal.addEventListener('abort', () =>
+                reject(r.signal.reason instanceof Error ? r.signal.reason : new Error(String(r.signal.reason))),
+              ),
+            )
           : Promise.resolve(
               new Response(
                 new ReadableStream({
@@ -156,9 +164,9 @@ describe('safe upstream HTTP', () => {
   ])('sanitizes Retry-After %s', async (header, expected) => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('secret', { status: 429, headers: { 'Retry-After': header as string } })),
+      vi.fn(async () => new Response('secret', { status: 429, headers: { 'Retry-After': header } })),
     );
-    const error = await fetchJson(request()).catch((e) => e);
+    const error = await fetchJson(request()).catch((e: unknown) => e);
     expect(error).toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
     expect(error).toBeInstanceOf(SafeError);
     expect((error as SafeError).retryAfterSeconds).toBe(expected);

@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { executeRead } from '../src/mcp/tools/read';
 import { testEnv, budgetMock } from './helpers';
+import { readToolJson, type ToolErrorBody } from './helpers/json';
 
 const auth = { clientId: 'test', scopes: ['crm:read'] };
 
@@ -39,7 +40,7 @@ it('combines transport cancellation with tool cancellation through the CRM adapt
         new Promise((_resolve, reject) => {
           r.signal.addEventListener('abort', () => {
             observed();
-            reject(r.signal.reason);
+            reject(r.signal.reason instanceof Error ? r.signal.reason : new Error(String(r.signal.reason)));
           });
           controller.abort();
         }),
@@ -55,5 +56,5 @@ it('combines transport cancellation with tool cancellation through the CRM adapt
   );
   expect(result.isError).toBe(true);
   expect(observed).toHaveBeenCalledOnce();
-  expect(JSON.parse(result.content[0]!.text).error.retryable).toBe(false);
+  expect(readToolJson<ToolErrorBody>(result).error.retryable).toBe(false);
 });

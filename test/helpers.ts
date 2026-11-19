@@ -33,9 +33,11 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
   const stub = new Proxy(realStub, {
     get(target, prop) {
       if (prop === 'takeBudget') return takeBudget;
-      const value = Reflect.get(target, prop);
+      const value: unknown = Reflect.get(target, prop);
       if (NON_RPC_STUB_KEYS.has(prop) || typeof prop === 'symbol' || typeof value !== 'function') {
-        return typeof value === 'function' ? value.bind(target) : value;
+        if (typeof value !== 'function') return value;
+        const bound: unknown = value.bind(target);
+        return bound;
       }
       return (...args: unknown[]) => invokeInDurableObject(realStub, prop, args);
     },
@@ -45,8 +47,10 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     AUTOMATION_STATE: new Proxy(namespace, {
       get(target, prop) {
         if (prop === 'getByName') return () => stub;
-        const value = Reflect.get(target, prop);
-        return typeof value === 'function' ? value.bind(target) : value;
+        const value: unknown = Reflect.get(target, prop);
+        if (typeof value !== 'function') return value;
+        const bound: unknown = value.bind(target);
+        return bound;
       },
     }),
     AGENDOR_CRM_TOKEN: 'unit-crm-token',

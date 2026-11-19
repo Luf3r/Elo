@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
 import { testEnv, budgetMock } from './helpers';
+import { readToolJson, readToolText, type ToolErrorBody, type ToolListResult } from './helpers/json';
 
 const conversation = {
   id: 456,
@@ -38,8 +39,8 @@ describe('read-only Agendor Chat tools', () => {
   it('registers read tools only and requires the independent chat scope', async () => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
     const fetch = mockChat();
-    const { data } = await rpc('tools/list', {}, env, {}, ['crm:read']);
-    const names = data.result.tools.map((tool: { name: string }) => tool.name);
+    const { data } = await rpc<ToolListResult>('tools/list', {}, env, {}, ['crm:read']);
+    const names = (data.result?.tools ?? []).map((tool) => tool.name);
     expect(names).toContain('chat_list_conversations');
     expect(names).toContain('chat_get_conversation');
     expect(names).toContain('chat_list_messages');
@@ -51,9 +52,9 @@ describe('read-only Agendor Chat tools', () => {
       'chat_get_attachment',
     ])
       expect(names).toContain(name);
-    expect(names.filter((name: string) => name.startsWith('chat_'))).toHaveLength(8);
+    expect(names.filter((name) => name.startsWith('chat_'))).toHaveLength(8);
     const denied = await callTool('chat_list_conversations', {}, env, ['crm:read']);
-    expect(denied.data.result.isError).toBe(true);
+    expect(denied.data.result?.isError).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -61,7 +62,7 @@ describe('read-only Agendor Chat tools', () => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
     const fetch = mockChat();
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
-    const text = data.result.content[0].text;
+    const text = readToolText(data);
     expect(text).toContain('Última mensagem privada');
     expect(text).toContain('Cliente');
     expect(text).not.toContain('phone_number');
@@ -81,9 +82,9 @@ describe('read-only Agendor Chat tools', () => {
     const fetch = mockChat();
     const detail = await callTool('chat_get_conversation', { conversationId: 456 }, env, ['chat:read']);
     const messages = await callTool('chat_list_messages', { conversationId: 456 }, env, ['chat:read']);
-    expect(detail.data.result.content[0].text).toContain('Cliente');
-    expect(detail.data.result.content[0].text).not.toContain('phone_number');
-    expect(messages.data.result.content[0].text).toContain('Texto da mensagem');
+    expect(readToolText(detail.data)).toContain('Cliente');
+    expect(readToolText(detail.data)).not.toContain('phone_number');
+    expect(readToolText(messages.data)).toContain('Texto da mensagem');
     expect(fetch.mock.calls.every(([request]) => (request as Request).method === 'GET')).toBe(true);
   });
 
@@ -100,8 +101,8 @@ describe('read-only Agendor Chat tools', () => {
       ['chat_get_attachment', { conversationId: 200, attachmentId: 400 }],
     ] as const) {
       const result = await callTool(tool, input, env, ['crm:read']);
-      expect(result.data.result.isError).toBe(true);
-      expect(JSON.parse(result.data.result.content[0].text).error.requiredScope).toBe('chat:read');
+      expect(result.data.result?.isError).toBe(true);
+      expect(readToolJson<ToolErrorBody>(result.data).error.requiredScope).toBe('chat:read');
     }
     const rejected = await callTool(
       'chat_get_attachment',
@@ -128,14 +129,14 @@ describe('read-only Agendor Chat tools', () => {
       throw new Error('Unexpected synthetic request');
     });
     const messages = await callTool('chat_list_messages', { conversationId: 200, after: 10 }, env, ['chat:read']);
-    expect(messages.data.result.isError).toBeUndefined();
-    expect(JSON.parse(messages.data.result.content[0].text).coverage.missingReasons).toContain(
+    expect(messages.data.result?.isError).toBeUndefined();
+    expect(readToolJson<{ coverage: { missingReasons: string[] } }>(messages.data).coverage.missingReasons).toContain(
       'history_start_not_reached',
     );
     const attachment = await callTool('chat_get_attachment', { conversationId: 200, attachmentId: 400 }, env, [
       'chat:read',
     ]);
-    expect(attachment.data.result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    expect(attachment.data.result?.content?.[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
     expect(handled).toEqual([
       '/api/v1/accounts/100/conversations/200/messages?after=10',
       '/api/v1/accounts/100/conversations/200/attachments',
@@ -160,8 +161,8 @@ describe('read-only Agendor Chat tools', () => {
         'chat:read',
       ]);
       expect(new TextEncoder().encode(JSON.stringify(data.result)).byteLength).toBeLessThan(524_288);
-      expect(data.result.content).toHaveLength(2);
-      expect(JSON.parse(data.result.content[0].text)).toMatchObject({
+      expect(data.result?.content).toHaveLength(2);
+      expect(readToolJson<Record<string, unknown>>(data)).toMatchObject({
         conversationId: 200,
         attachmentId: 400,
         status: 'available',
@@ -169,7 +170,7 @@ describe('read-only Agendor Chat tools', () => {
         nextOffset: 196608,
         contentComplete: false,
       });
-      expect(data.result.content[1].type).toBe('resource');
+      expect(data.result?.content?.[1]?.type).toBe('resource');
     },
   );
   it('fails closed on the dedicated Chat rate limiter before upstream access', async () => {
@@ -177,8 +178,8 @@ describe('read-only Agendor Chat tools', () => {
     const env = testEnv({ AGENDOR_CHAT_TOKEN: 'chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
     budgetMock(env).mockResolvedValue({ allowed: false, retryAt: Date.now() + 10_000 });
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
-    expect(data.result.isError).toBe(true);
-    expect(data.result.content[0].text).toContain('UPSTREAM_RATE_LIMITED');
+    expect(data.result?.isError).toBe(true);
+    expect(readToolText(data)).toContain('UPSTREAM_RATE_LIMITED');
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -193,8 +194,8 @@ describe('read-only Agendor Chat tools', () => {
       }),
     );
     const { data } = await callTool('chat_list_conversations', {}, env, ['chat:read']);
-    expect(data.result.isError).toBeUndefined();
-    expect(JSON.parse(data.result.content[0].text)).toMatchObject({
+    expect(data.result?.isError).toBeUndefined();
+    expect(readToolJson<Record<string, unknown>>(data)).toMatchObject({
       conversations: [{ id: 456 }],
       counts: { all_count: 1 },
       coverage: { complete: false },
@@ -206,7 +207,7 @@ describe('read-only Agendor Chat tools', () => {
       Response.json({ data: { payload: [{ id: 'not-numeric', secret: 'customer data' }] } }),
     );
     const malformed = await callTool('chat_list_conversations', {}, env, ['chat:read']);
-    expect(malformed.data.result.isError).toBe(true);
+    expect(malformed.data.result?.isError).toBe(true);
     expect(JSON.stringify(malformed.data)).not.toContain('customer data');
     const fetch = vi.mocked(globalThis.fetch);
     fetch.mockClear();

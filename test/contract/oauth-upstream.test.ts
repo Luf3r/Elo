@@ -3,12 +3,13 @@ import { it, expect } from 'vitest';
 import { generateKeyPair, SignJWT } from 'jose';
 import { verifyAccessIdentity } from '../../src/oauth/identity';
 import { readOAuthConfig } from '../../src/oauth/config';
+import { readResponseJson } from '../helpers/json';
 it.skipIf(!env.ACCESS_CLIENT_SECRET)(
   'the production verifier reaches Access public JWKS using Workers-supported fetch options',
   async () => {
     const response = await fetch(env.ACCESS_JWKS_URL, { redirect: 'manual', signal: AbortSignal.timeout(10000) });
     expect(response.status).toBe(200);
-    const data = (await response.json()) as { keys: { kid: string }[] };
+    const data = await readResponseJson<{ keys: { kid: string }[] }>(response);
     expect(data.keys.length).toBeGreaterThan(0);
     const { privateKey } = await generateKeyPair('RS256');
     const token = await new SignJWT({ sub: 'probe', email: 'owner@elo.example', nonce: 'probe-nonce' })

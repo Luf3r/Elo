@@ -42,7 +42,7 @@ describe('bounded CRM enrichment', () => {
           ? await client.enrichPerson(42, { description: 'Saved' })
           : await client.enrichDeal(42, { description: 'Saved' });
     expect(outcome).toEqual({ state: 'confirmed', ref: { kind, id: 42 }, returnedFields: { description: 'Saved' } });
-    const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+    const request = upstreamFetch.mock.calls[0]![0];
     expect(request.url).toBe(`https://api.agendor.com.br/v3${path}`);
     expect(request.method).toBe('PUT');
     expect(await request.json()).toEqual({ description: 'Saved' });
@@ -112,7 +112,7 @@ describe('bounded CRM enrichment', () => {
       ref: { kind: 'task', id: 42 },
       returnedFields: { text: 'New text' },
     });
-    const request = upstreamFetch.mock.calls[0]![0] as unknown as Request;
+    const request = upstreamFetch.mock.calls[0]![0];
     expect(request.url).toBe('https://api.agendor.com.br/v3/tasks/42');
     expect(await request.json()).toEqual({ text: 'New text' });
     expect(await client.updateTask(42, { assigned_users: [1] })).toEqual({

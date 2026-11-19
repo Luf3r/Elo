@@ -5,6 +5,7 @@ import { accountState } from '../src/automation/state/budget';
 import { createAutomationService } from '../src/automation/service';
 import { buildActor } from './fixtures/builders';
 import { budgetMock, testEnv } from './helpers';
+import { readToolJson, type JsonRpcEnvelope, type ToolCallResult } from './helpers/json';
 import { callTool } from './mcp-helper';
 
 const srcFiles = import.meta.glob<string>('../src/**/*.ts', {
@@ -44,12 +45,12 @@ function extractSafeErrorCalls(source: string): string[] {
 
 const configured = () => testEnv({ AGENDOR_CHAT_TOKEN: 'unit-chat-token', AGENDOR_CHAT_ACCOUNT_ID: '123' });
 
-function parseToolBody(data: { result?: { isError?: boolean; content: Array<{ text: string }> } }) {
-  return JSON.parse(data.result!.content[0]!.text) as {
+function parseToolBody(data: JsonRpcEnvelope<ToolCallResult>) {
+  return readToolJson<{
     state?: string;
     cursor?: string;
     error?: { code: string; status?: number; requiredScope?: string };
-  };
+  }>(data);
 }
 
 afterEach(() => vi.unstubAllGlobals());

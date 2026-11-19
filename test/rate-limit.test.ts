@@ -7,9 +7,10 @@ import { RESOURCE } from '../src/oauth/config';
 
 describe('native rate limiting', () => {
   it('allows requests with a stable non-secret client key', async () => {
-    const env = testEnv();
+    const limit = vi.fn(async () => ({ success: true }));
+    const env = testEnv({ MCP_RATE_LIMITER: { limit } });
     await enforceRateLimit(env, { clientId: 'test', scopes: [] });
-    expect(env.MCP_RATE_LIMITER.limit).toHaveBeenCalledWith({ key: 'mcp:test' });
+    expect(limit).toHaveBeenCalledWith({ key: 'mcp:test' });
   });
   it('rejects quota exhaustion', async () => {
     const env = testEnv({ MCP_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
@@ -27,9 +28,10 @@ describe('native rate limiting', () => {
     expect(r.headers.get('retry-after')).toBe('10');
   });
   it('authenticates before spending rate limit quota', async () => {
-    const env = testEnv();
+    const limit = vi.fn(async () => ({ success: true }));
+    const env = testEnv({ MCP_RATE_LIMITER: { limit } });
     expect((await worker.fetch(new Request('https://example.com/mcp'), env, context())).status).toBe(401);
-    expect(env.MCP_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    expect(limit).not.toHaveBeenCalled();
   });
   it('fails closed if native limiter is absent or unavailable', async () => {
     for (const binding of [

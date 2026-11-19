@@ -190,7 +190,7 @@ describe('authorized Chat attachments', () => {
       budgetGate: allowBudget,
       request: async () => new Response(new ReadableStream()),
     });
-    const result = client.listAttachments(200).catch((error) => error);
+    const result = client.listAttachments(200).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(10_001);
     const outcome = await Promise.race([result, Promise.resolve('still_pending')]);
     expect(outcome).toMatchObject({ code: 'UPSTREAM_TIMEOUT' });

@@ -3,6 +3,7 @@ import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { oauthOptions } from '../src/oauth/provider';
 import { RESOURCE } from '../src/oauth/config';
 import { cookies, oauthEnv, providerFetch, simulateAccess, startAuthorization } from './oauth-helper';
+import { readResponseJson } from './helpers/json';
 import { issueTestToken } from './oauth-token';
 
 const DAY = 24 * 60 * 60;
@@ -31,7 +32,7 @@ describe('renewable MCP connections', () => {
         new URLSearchParams({
           code: 'identity-code',
           state: upstream.searchParams.get('state')!,
-        }),
+        }).toString(),
       { headers: { Cookie: cookies(start.response, approved) } },
     );
     expect(callback.status).toBe(302);
@@ -48,7 +49,7 @@ describe('renewable MCP connections', () => {
       }),
     });
     expect(exchanged.status).toBe(200);
-    const first = (await exchanged.json()) as Token;
+    const first = await readResponseJson<Token>(exchanged);
     expect(first.expires_in).toBe(DAY);
     expect(first.refresh_token).toBeTypeOf('string');
     expect(first.scope.split(' ').sort()).toEqual(['crm:read', 'offline_access']);
@@ -72,7 +73,7 @@ describe('renewable MCP connections', () => {
         }),
       });
       expect(renewed.status).toBe(200);
-      const next = (await renewed.json()) as Token;
+      const next = await readResponseJson<Token>(renewed);
       expect(next.expires_in).toBe(DAY);
       expect(next.refresh_token).toBeTypeOf('string');
       expect(next.refresh_token).not.toBe(first.refresh_token);
@@ -98,7 +99,7 @@ describe('renewable MCP connections', () => {
         }),
       });
       expect(again.status).toBe(200);
-      expect(((await again.json()) as Token).expires_in).toBe(DAY);
+      expect((await readResponseJson<Token>(again)).expires_in).toBe(DAY);
       expect(identity.mock.calls.length).toBe(identityCalls);
     } finally {
       clock.mockRestore();

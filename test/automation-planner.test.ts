@@ -68,7 +68,7 @@ describe('pure CRM planner', () => {
     const analysis = plannerAnalysis();
     expect(planDemand(analysis, plannerWork(), plannerResolution, plannerPolicy, 'request-a')).toMatchObject({
       canCreateDeal: true,
-      pendingFields: expect.arrayContaining(['value']),
+      pendingFields: expect.arrayContaining(['value']) as string[],
     });
 
     const plan = buildSyncPlan(analysis, plannerWork(), plannerResolution, plannerPolicy);

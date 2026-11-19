@@ -1,7 +1,7 @@
 import { testEnv, budgetMock } from './helpers';
+import { readToolJson, type ToolErrorBody } from './helpers/json';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { executeWrite } from '../src/mcp/tools/read';
-import type { Env } from '../src/env';
 import type { AuthContext } from '../src/auth';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,10 +18,10 @@ describe('CRM write authorization boundary', () => {
       client.updateDeal(42, { title: 'Test' }),
     );
     expect(result.isError).toBe(true);
-    expect(JSON.parse(result.content[0]!.text).error.code).toBe('MCP_UNAUTHORIZED');
-    expect(JSON.parse(result.content[0]!.text).error.requiredScope).toBe('crm:write');
+    expect(readToolJson<ToolErrorBody>(result).error.code).toBe('MCP_UNAUTHORIZED');
+    expect(readToolJson<ToolErrorBody>(result).error.requiredScope).toBe('crm:write');
     expect(result._meta).toEqual({
-      'mcp/www_authenticate': ['Bearer error=\"insufficient_scope\", scope=\"crm:write\"'],
+      'mcp/www_authenticate': ['Bearer error="insufficient_scope", scope="crm:write"'],
     });
     expect(budgetMock(bindings)).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();

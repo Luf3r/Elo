@@ -7,6 +7,7 @@ import { validCommand } from './fixtures/automation';
 import { buildCreateOrganizationCommand, buildPageInfo } from './fixtures/builders';
 import { executionFixture } from './fixtures/execution';
 import { durableFailure } from './helpers';
+import { parseJson } from './helpers/json';
 
 describe('recoverable plan execution', () => {
   it('reserves before dispatch, reads back the receipt, and replays without another POST', async () => {
@@ -19,7 +20,7 @@ describe('recoverable plan execution', () => {
 
     expect(await runPlan(f.authorization, f.deps)).toMatchObject({
       state: 'applied',
-      receipts: [{ state: 'confirmed', crmRef: { id: 99 }, checkedAt: expect.any(String) }],
+      receipts: [{ state: 'confirmed', crmRef: { id: 99 }, checkedAt: expect.any(String) as string }],
     });
 
     await evictDurableObject(f.stub);
@@ -127,7 +128,7 @@ describe('recoverable plan execution', () => {
       payload: { name: 'Synthetic person' },
     };
     const f = await executionFixture([validCommand, child]);
-    f.deps.mutations.createPerson = vi.fn(async (record) => {
+    f.deps.mutations.createPerson = vi.fn(async (record: Record<string, unknown>) => {
       expect(record.organization).toBe(99);
       return { state: 'confirmed' as const, ref: { kind: 'person' as const, id: 100 }, returnedFields: {} };
     });
@@ -145,7 +146,7 @@ describe('recoverable plan execution', () => {
     await runInDurableObject(f.stub, (_instance, ctx) => {
       ctx.storage.sql.exec('UPDATE execution_commands SET next_attempt_at = 0');
       const row = ctx.storage.sql.exec<{ data: string }>('SELECT data FROM execution_operations').one();
-      const stored = JSON.parse(row.data);
+      const stored = parseJson<{ input: { authorization: { validUntil: string } } }>(row.data);
       stored.input.authorization.validUntil = new Date(0).toISOString();
       ctx.storage.sql.exec('UPDATE execution_operations SET data = ?', JSON.stringify(stored));
     });
@@ -166,7 +167,7 @@ describe('recoverable plan execution', () => {
     const op = await runPlan(f.authorization, { ...f.deps, defer: true });
     await runInDurableObject(f.stub, (_instance, ctx) => {
       const row = ctx.storage.sql.exec<{ data: string }>('SELECT data FROM execution_operations').one();
-      const stored = JSON.parse(row.data);
+      const stored = parseJson<{ input: { authorization: { validUntil: string } } }>(row.data);
       stored.input.authorization.validUntil = new Date(0).toISOString();
       ctx.storage.sql.exec('UPDATE execution_operations SET data = ?', JSON.stringify(stored));
     });

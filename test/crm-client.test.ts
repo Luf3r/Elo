@@ -14,7 +14,7 @@ describe('CRM request contract', () => {
   it('encodes people email and pagination with Token auth, timeout and GET only', async () => {
     const fetch = mockFetch();
     await client().searchPeople({ email: 'a+b@example.com', page: 2, perPage: 100 });
-    const r = fetch.mock.calls[0]![0] as Request;
+    const r = fetch.mock.calls[0]![0];
     expect(r.url).toBe('https://api.agendor.com.br/v3/people?page=2&per_page=100&email=a%2Bb%40example.com');
     expect(r.method).toBe('GET');
     expect(r.headers.get('Authorization')).toBe('Token unit-crm-token');
@@ -25,7 +25,7 @@ describe('CRM request contract', () => {
   it('maps only documented deal filters', async () => {
     const fetch = mockFetch();
     await client().searchDeals({ query: 'Água & Cia', organizationId: 2, personId: 3, ownerId: 4, status: '1' });
-    const u = new URL((fetch.mock.calls[0]![0] as Request).url);
+    const u = new URL(fetch.mock.calls[0]![0].url);
     expect(Object.fromEntries(u.searchParams)).toEqual({
       page: '1',
       per_page: '20',
@@ -39,8 +39,8 @@ describe('CRM request contract', () => {
   it('maps organization query and omits undefined filters', async () => {
     const fetch = mockFetch();
     await client().searchOrganizations({ query: 'Elo' });
-    expect(new URL((fetch.mock.calls[0]![0] as Request).url).searchParams.get('name')).toBe('Elo');
-    expect((fetch.mock.calls[0]![0] as Request).url).not.toContain('undefined');
+    expect(new URL(fetch.mock.calls[0]![0].url).searchParams.get('name')).toBe('Elo');
+    expect(fetch.mock.calls[0]![0].url).not.toContain('undefined');
   });
   it.each([
     ['dealId', 'deals'],
@@ -49,13 +49,13 @@ describe('CRM request contract', () => {
   ])('maps tasks %s to documented scoped route', async (field, type) => {
     const fetch = mockFetch();
     await client().listTasks({ [field]: 12, updatedDateGt: recentDate });
-    const u = new URL((fetch.mock.calls[0]![0] as Request).url);
+    const u = new URL(fetch.mock.calls[0]![0].url);
     expect(u.pathname).toBe(`/v3/${type}/12/tasks`);
   });
   it('supports generic task listing with an explicit documented lower date bound', async () => {
     const fetch = mockFetch();
     await client().listTasks({ updatedDateGt: recentDate });
-    const url = new URL((fetch.mock.calls[0]![0] as Request).url);
+    const url = new URL(fetch.mock.calls[0]![0].url);
     expect(url.pathname).toBe('/v3/tasks');
     expect(url.searchParams.get('updatedDateGt')).toBe(recentDate);
   });
@@ -76,7 +76,7 @@ describe('CRM request contract', () => {
     const fetch = mockFetch({ data: { id: 7, contact: null, description: null } });
     expect(await client().getOrganization(7)).toEqual({ id: 7, contact: null, description: null });
     await client().getDeal(7);
-    expect((fetch.mock.calls[1]![0] as Request).url).toBe('https://api.agendor.com.br/v3/deals/7');
+    expect(fetch.mock.calls[1]![0].url).toBe('https://api.agendor.com.br/v3/deals/7');
   });
   it('rejects invalid IDs, ambiguous filters, status and pagination before fetching', async () => {
     const fetch = mockFetch();

@@ -5,6 +5,27 @@ import importX from 'eslint-plugin-import-x';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const strictTypeRules = {
+  '@typescript-eslint/no-unsafe-argument': 'error',
+  '@typescript-eslint/no-unsafe-assignment': 'error',
+  '@typescript-eslint/no-unsafe-call': 'error',
+  '@typescript-eslint/no-unsafe-member-access': 'error',
+  '@typescript-eslint/no-unsafe-return': 'error',
+  '@typescript-eslint/no-unsafe-enum-comparison': 'error',
+  '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+  '@typescript-eslint/no-unused-vars': [
+    'error',
+    { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+  ],
+  '@typescript-eslint/restrict-plus-operands': 'error',
+  '@typescript-eslint/prefer-promise-reject-errors': 'error',
+  '@typescript-eslint/unbound-method': 'error',
+  '@typescript-eslint/no-base-to-string': 'error',
+  'no-useless-escape': 'error',
+  'no-empty': 'error',
+  'preserve-caught-error': 'error',
+};
+
 export default tseslint.config(
   {
     ignores: ['docs/**', 'dist/**', '.wrangler/**', 'package-lock.json', '.agent-runs/**', '.tooling/**', '.superpowers/**'],
@@ -267,25 +288,17 @@ export default tseslint.config(
   },
   {
     files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    rules: strictTypeRules,
+  },
+  {
+    files: ['test/**/*.ts'],
+    rules: strictTypeRules,
+  },
+  {
+    files: ['test/**'],
     rules: {
-      '@typescript-eslint/no-unsafe-argument': 'error',
-      '@typescript-eslint/no-unsafe-assignment': 'error',
-      '@typescript-eslint/no-unsafe-call': 'error',
-      '@typescript-eslint/no-unsafe-member-access': 'error',
-      '@typescript-eslint/no-unsafe-return': 'error',
-      '@typescript-eslint/no-unsafe-enum-comparison': 'error',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/restrict-plus-operands': 'error',
-      '@typescript-eslint/prefer-promise-reject-errors': 'error',
-      '@typescript-eslint/unbound-method': 'error',
-      '@typescript-eslint/no-base-to-string': 'error',
-      'no-useless-escape': 'error',
-      'no-empty': 'error',
-      'preserve-caught-error': 'error',
+      // Arquivos de teste longos são aceitos; o limite de 400 linhas continua como erro em src/.
+      'max-lines': 'off',
     },
   },
   {

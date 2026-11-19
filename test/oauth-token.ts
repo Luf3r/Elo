@@ -3,6 +3,7 @@ import worker from '../src/index';
 import { oauthOptions } from '../src/oauth/provider';
 import { ORIGIN, RESOURCE } from '../src/oauth/config';
 import { context, testEnv } from './helpers';
+import { readResponseJson } from './helpers/json';
 import { sha256 } from './oauth-helper';
 
 export async function issueTestToken(
@@ -30,7 +31,7 @@ export async function issueTestToken(
           scope: scopes.join(' '),
           code_challenge: await sha256(verifier),
           code_challenge_method: 'S256',
-        }),
+        }).toString(),
     ),
   );
   const { redirectTo } = await api.completeAuthorization({
@@ -59,7 +60,7 @@ export async function issueTestToken(
   );
   if (response.status !== 200) throw new Error('Test token issuance failed: ' + (await response.text()));
   return {
-    ...((await response.json()) as { access_token: string; refresh_token?: string }),
+    ...(await readResponseJson<{ access_token: string; refresh_token?: string }>(response)),
     clientId: client.clientId,
   };
 }

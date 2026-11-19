@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callTool, rpc } from './mcp-helper';
-import { testEnv } from './helpers';
+import { budgetMock, testEnv } from './helpers';
+import { readToolJson, type ToolErrorBody, type ToolListResult } from './helpers/json';
 import { createAutomationService } from '../src/automation/service';
-import { budgetMock } from './helpers';
 import { plannerAnalysis } from './fixtures/planner';
 import { buildActor, buildAnalysisInput, buildCoverage } from './fixtures/builders';
 import { jsonToolResult } from '../src/mcp/result';
@@ -60,14 +60,15 @@ const automationNames = [
 
 describe('agent workflow MCP boundary', () => {
   it('publishes exactly 44 tools when both products are configured', async () => {
-    const { data } = await rpc('tools/list', {}, configured());
-    expect(data.result.tools).toHaveLength(44);
+    const { data } = await rpc<ToolListResult>('tools/list', {}, configured());
+    const tools = data.result?.tools ?? [];
+    expect(tools).toHaveLength(44);
     for (const name of automationNames) {
-      const tool = data.result.tools.find((t: { name: string }) => t.name === name);
+      const tool = tools.find((t) => t.name === name);
       expect(tool, name).toBeDefined();
-      expect(tool.description.length).toBeGreaterThan(40);
-      expect(tool._meta.securitySchemes[0].type).toBe('oauth2');
-      expect(tool.annotations.readOnlyHint).toBe(
+      expect(tool?.description?.length).toBeGreaterThan(40);
+      expect(tool?._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
+      expect(tool?.annotations?.readOnlyHint).toBe(
         name.includes('_get_') || name.includes('_list_') || name === 'automation_preflight_sync',
       );
     }
@@ -84,7 +85,7 @@ describe('agent workflow MCP boundary', () => {
         scopes,
       );
       expect(data.result?.isError).toBe(true);
-      expect(JSON.parse(data.result.content[0].text).error.code).toBe('MCP_UNAUTHORIZED');
+      expect(readToolJson<ToolErrorBody>(data).error.code).toBe('MCP_UNAUTHORIZED');
     }
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -95,14 +96,14 @@ describe('agent workflow MCP boundary', () => {
     const env = configured();
     const { data } = await callTool('automation_get_status', {}, env, ['automation:read']);
     expect(data.result?.isError).not.toBe(true);
-    expect(JSON.parse(data.result.content[0].text)).toMatchObject({
+    expect(readToolJson<Record<string, unknown>>(data)).toMatchObject({
       mode: 'disabled',
       policyVersion: 1,
       pendingReviews: 0,
       pendingOperations: 0,
     });
     const reviews = await callTool('automation_list_reviews', {}, env, ['automation:read', 'chat:read', 'crm:read']);
-    expect(JSON.parse(reviews.data.result.content[0].text)).toMatchObject({ reviews: [] });
+    expect(readToolJson<Record<string, unknown>>(reviews.data)).toMatchObject({ reviews: [] });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -297,7 +298,7 @@ describe('agent workflow MCP boundary', () => {
       ['automation:process', 'crm:read', 'chat:read'],
     );
     expect(data.result?.isError).toBe(true);
-    expect(JSON.parse(data.result.content[0].text).error.code).toBe('WORK_STALE');
+    expect(readToolJson<ToolErrorBody>(data).error.code).toBe('WORK_STALE');
     expect(fetch).not.toHaveBeenCalled();
     expect(budgetMock(env)).not.toHaveBeenCalled();
   });
@@ -315,9 +316,9 @@ it('diagnoses the effective allowlist and storage without upstream calls or work
 
   const target = { kind: 'conversation', conversationId: 101 };
   const scopes = ['automation:process', 'chat:read', 'crm:read'];
-  const diagnose = async (args: object, runtime = env) => {
+  const diagnose = async (args: object, runtime = env): Promise<Record<string, unknown>> => {
     const { data } = await callTool('automation_preflight_sync', { target, mode: 'preview', ...args }, runtime, scopes);
-    return JSON.parse(data.result.content[0].text);
+    return readToolJson<Record<string, unknown>>(data);
   };
 
   expect(await diagnose({ inboxIds: [4101], limits: { maxMessagePages: 1, maxAttachmentPages: 0 } })).toMatchObject({
@@ -325,7 +326,7 @@ it('diagnoses the effective allowlist and storage without upstream calls or work
     effectiveMode: 'preview',
     policyVersion: 2,
     allowedInboxIds: [4101],
-    identity: { userId: expect.any(String), clientId: expect.any(String) },
+    identity: { userId: expect.any(String) as string, clientId: expect.any(String) as string },
     scope: { target, inboxIds: [4101], conversationVerification: 'required_at_prepare' },
     limits: { maxConversations: 1, maxMessagePages: 1, maxAttachmentPages: 0 },
     persistence: { available: true },
@@ -420,7 +421,7 @@ it('enforces page caps and refuses a mode or inbox expansion', async () => {
     work: {
       coverage: {
         complete: false,
-        missingReasons: expect.arrayContaining(['message_page_limit', 'attachment_page_limit']),
+        missingReasons: expect.arrayContaining(['message_page_limit', 'attachment_page_limit']) as string[],
       },
     },
   });
@@ -548,13 +549,15 @@ it('recovers the same preparation after a simulated SQLite snapshot persistence 
           return real.installSnapshot(...args);
         };
       }
-      return Reflect.get(target, property);
+      const value: unknown = Reflect.get(target, property);
+      return value;
     },
   });
   const namespace = new Proxy(env.AUTOMATION_STATE, {
     get(target, property) {
       if (property === 'getByName') return () => wrapped;
-      return Reflect.get(target, property);
+      const value: unknown = Reflect.get(target, property);
+      return value;
     },
   });
 

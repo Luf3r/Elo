@@ -1,16 +1,17 @@
 import worker from '../src/index';
 import { context, testEnv } from './helpers';
+import { parseJson, type JsonRpcEnvelope, type ToolCallResult } from './helpers/json';
 import type { Env } from '../src/env';
 import { issueTestToken } from './oauth-token';
 import { RESOURCE, ORIGIN } from '../src/oauth/config';
 
-export async function rpc(
+export async function rpc<TResult = unknown>(
   method: string,
   params: Record<string, unknown> = {},
   env: Env = testEnv(),
   extraHeaders: Record<string, string> = {},
   scopes = ['crm:read', 'offline_access'],
-) {
+): Promise<{ response: Response; data: JsonRpcEnvelope<TResult> }> {
   const token = await issueTestToken(env, undefined, scopes);
   const response = await worker.fetch(
     new Request(RESOURCE, {
@@ -30,14 +31,19 @@ export async function rpc(
   );
   const text = await response.text();
   const data = response.headers.get('Content-Type')?.includes('text/event-stream')
-    ? JSON.parse(
+    ? parseJson<JsonRpcEnvelope<TResult>>(
         text
           .split('\n')
           .find((line) => line.startsWith('data: '))!
           .slice(6),
       )
-    : JSON.parse(text);
+    : parseJson<JsonRpcEnvelope<TResult>>(text);
   return { response, data };
 }
-export const callTool = (name: string, args: Record<string, unknown> = {}, env?: Env, scopes?: string[]) =>
-  rpc('tools/call', { name, arguments: args }, env, {}, scopes);
+export const callTool = (
+  name: string,
+  args: Record<string, unknown> = {},
+  env?: Env,
+  scopes?: string[],
+): Promise<{ response: Response; data: JsonRpcEnvelope<ToolCallResult> }> =>
+  rpc<ToolCallResult>('tools/call', { name, arguments: args }, env, {}, scopes);

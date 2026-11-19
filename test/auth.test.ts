@@ -4,6 +4,7 @@ import worker from '../src/index';
 import { context, testEnv } from './helpers';
 import { RESOURCE } from '../src/oauth/config';
 import { callTool } from './mcp-helper';
+import { readToolJson, type ToolErrorBody } from './helpers/json';
 
 describe('OAuth authentication', () => {
   it.each([
@@ -46,8 +47,8 @@ describe('OAuth authentication', () => {
       const env = testEnv({ AGENDOR_CRM_TOKEN: token as string });
       const { response, data } = await callTool('crm_get_deal', { id: 1 }, env);
       expect(response.status).toBe(200);
-      expect(data.result.isError).toBe(true);
-      expect(JSON.parse(data.result.content[0].text).error.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(data.result?.isError).toBe(true);
+      expect(readToolJson<ToolErrorBody>(data).error.code).toBe('UPSTREAM_UNAVAILABLE');
     },
   );
 });

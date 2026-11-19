@@ -37,7 +37,7 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
   expect(result).toMatchObject({
     state: 'deferred',
     reason: 'UPSTREAM_RATE_LIMITED',
-    progress: expect.objectContaining({ stage: expect.any(String) }),
+    progress: expect.objectContaining({ stage: expect.any(String) as string }) as Record<string, unknown>,
   });
   if (result.state !== 'deferred') throw Error('Expected deferred');
 
@@ -68,7 +68,11 @@ it('reports and bounds repeated budget deferrals without durable progress', asyn
     });
   }
 
-  expect(result).toMatchObject({ state: 'blocked', reason: 'PREPARATION_NO_PROGRESS', progress: expect.any(Object) });
+  expect(result).toMatchObject({
+    state: 'blocked',
+    reason: 'PREPARATION_NO_PROGRESS',
+    progress: expect.any(Object) as Record<string, unknown>,
+  });
   const audit = await service.getAudit({ limit: 100 });
   expect(audit.entries.map((e) => e.action)).toEqual(
     expect.arrayContaining([
@@ -236,7 +240,7 @@ it('resets the no-progress counter when a later retry reaches a new durable stag
     state: 'ready',
     work: {
       workId: first.workId,
-      coverage: { complete: false, missingReasons: expect.arrayContaining(['attachment_page_limit']) },
+      coverage: { complete: false, missingReasons: expect.arrayContaining(['attachment_page_limit']) as string[] },
     },
   });
 });
