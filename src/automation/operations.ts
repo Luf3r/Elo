@@ -19,7 +19,7 @@ import type {
 
 export const operationInputSchema = z.strictObject({
   requestId: z.string().min(1).max(200),
-  accountKey: z.literal(TENANT_ACCOUNT_KEY),
+  accountKey: z.string().refine((value) => value === TENANT_ACCOUNT_KEY),
   authorization: authorizedPlanSchema,
   basis: planBasisSchema,
   catalogJson: z.string().min(2).max(1_048_576),

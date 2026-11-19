@@ -1,8 +1,9 @@
+import { DEPLOYMENT } from '../app/config/deployment';
 import type { Env } from '../env';
 
-export const ORIGIN = 'https://elo-agendor-mcp.example.workers.dev';
+export const ORIGIN = DEPLOYMENT.origin;
 export const RESOURCE = `${ORIGIN}/mcp`;
-export const OWNER_EMAIL = 'owner@elo.example';
+export const OWNER_EMAIL = DEPLOYMENT.ownerEmail;
 export const READ_SCOPE = 'crm:read';
 export const CHAT_READ_SCOPE = 'chat:read';
 export const WRITE_SCOPE = 'crm:write';

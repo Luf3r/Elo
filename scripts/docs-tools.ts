@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
-import { isEntrypoint } from './lib/args.ts';
+import { isEntrypoint, readJsoncFile } from './lib/args.ts';
 
 const ROOT_DIR = resolve(import.meta.dirname, '..');
 const DOCS_TOOLS_PATH = resolve(ROOT_DIR, 'docs/tools.md');
@@ -72,6 +72,14 @@ async function loadToolsRunner(): Promise<ToolsRunner> {
         '}',
       ].join('\n');
 
+      const wranglerConfig = readJsoncFile<{ define?: { __ELO_DEPLOYMENT__?: unknown } }>(
+        resolve(ROOT_DIR, 'wrangler.jsonc'),
+      );
+      const deploymentDefine = wranglerConfig.define?.__ELO_DEPLOYMENT__;
+      if (typeof deploymentDefine !== 'string' || deploymentDefine.length === 0) {
+        throw new Error('Missing __ELO_DEPLOYMENT__ define in wrangler.jsonc.');
+      }
+
       const result = await build({
         stdin: {
           contents: entry,
@@ -86,6 +94,7 @@ async function loadToolsRunner(): Promise<ToolsRunner> {
         target: 'node22',
         define: {
           __BUILD_COMMIT__: JSON.stringify('unknown'),
+          __ELO_DEPLOYMENT__: deploymentDefine,
         },
       });
 

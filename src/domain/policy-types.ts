@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import { crmIdSchema } from '../shared/contracts/crm-mutations';
 export const capabilitySchema = z.enum([
   'crm:read',
@@ -17,7 +18,7 @@ export const automationPolicySchema = z.strictObject({
   mode: z.enum(['disabled', 'preview', 'apply']),
   allowedInboxIds: z.array(crmIdSchema).max(100),
   capabilities: z.array(capabilitySchema).max(8),
-  funnelMapping: z.strictObject({ client: crmIdSchema.optional(), elotenant: crmIdSchema.optional() }),
+  funnelMapping: z.strictObject({ client: crmIdSchema.optional(), [TENANT_ACCOUNT_KEY]: crmIdSchema.optional() }),
   stageMapping: z
     .array(z.strictObject({ funnelId: crmIdSchema, stage: stageKeySchema, stageId: crmIdSchema }))
     .max(100),

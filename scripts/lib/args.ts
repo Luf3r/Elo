@@ -71,7 +71,74 @@ export function loadLocalDevVars(filePath = '.dev.vars'): void {
   }
 }
 
+/** Strip line/block comments and trailing commas outside string literals, then parse JSON. */
+export function parseJsonc<T = unknown>(text: string): T {
+  let withoutComments = '';
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!;
+    const next = text[i + 1];
+    if (inString) {
+      withoutComments += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      withoutComments += ch;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      if (i < text.length) withoutComments += '\n';
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++;
+      i++;
+      continue;
+    }
+    withoutComments += ch;
+  }
+
+  let cleaned = '';
+  inString = false;
+  escaped = false;
+  for (let i = 0; i < withoutComments.length; i++) {
+    const ch = withoutComments[i]!;
+    if (inString) {
+      cleaned += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      cleaned += ch;
+      continue;
+    }
+    if (ch === ',') {
+      let j = i + 1;
+      while (j < withoutComments.length && /\s/.test(withoutComments[j]!)) j++;
+      if (withoutComments[j] === '}' || withoutComments[j] === ']') continue;
+    }
+    cleaned += ch;
+  }
+
+  return JSON.parse(cleaned) as T;
+}
+
 /** Read and parse a UTF-8 JSON file from disk. */
 export function readJsonFile<T = unknown>(filePath: string): T {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
+}
+
+/** Read and parse a UTF-8 JSONC file from disk. */
+export function readJsoncFile<T = unknown>(filePath: string): T {
+  return parseJsonc<T>(readFileSync(filePath, 'utf8'));
 }

@@ -192,76 +192,10 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/app/config/tenant.ts'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector:
-            'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',
-          message: 'Use readJson(schema, text) from src/shared/json.ts instead of JSON.parse(...) as T.',
-        },
-      ],
-    },
-  },
-  {
     files: ['src/**/*.ts'],
-    ignores: ['src/app/config/tenant.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            'Literal[value=4101], Literal[value="4101"], Literal[value=4102], Literal[value="4102"], TemplateElement[value.raw=/^(?:4101|4102)$/]',
-          message: 'Use ALLOWED_INBOX_IDS from src/app/config/tenant.ts instead of hardcoding inbox IDs.',
-        },
-        {
-          selector: 'Literal[value=7001], Literal[value="7001"], TemplateElement[value.raw="7001"]',
-          message: 'Use EXPECTED_CHAT_ACCOUNT_ID from src/app/config/tenant.ts instead of hardcoding the Chat account ID.',
-        },
-        {
-          selector: 'Literal[value="elo-agendor-mcp"], TemplateElement[value.raw="elo-agendor-mcp"]',
-          message: 'Use TENANT_SERVICE_NAME from src/app/config/tenant.ts instead of hardcoding the service name.',
-        },
-        {
-          selector:
-            'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',
-          message: 'Use readJson(schema, text) from src/shared/json.ts instead of JSON.parse(...) as T.',
-        },
-      ],
-    },
-  },
-  {
-    files: ['src/**/*.ts'],
-    // domain/schemas/{analysis,planning}.ts, domain/planner.ts and domain/stages.ts use 'elotenant' as a domain actor/approach enum literal, not the tenant account key.
-    ignores: [
-      'src/app/config/tenant.ts',
-      'src/domain/schemas/analysis.ts',
-      'src/domain/schemas/planning.ts',
-      'src/domain/planner.ts',
-      'src/domain/planner-demand.ts',
-      'src/domain/stages.ts',
-    ],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector:
-            'Literal[value=4101], Literal[value="4101"], Literal[value=4102], Literal[value="4102"], TemplateElement[value.raw=/^(?:4101|4102)$/]',
-          message: 'Use ALLOWED_INBOX_IDS from src/app/config/tenant.ts instead of hardcoding inbox IDs.',
-        },
-        {
-          selector: 'Literal[value=7001], Literal[value="7001"], TemplateElement[value.raw="7001"]',
-          message: 'Use EXPECTED_CHAT_ACCOUNT_ID from src/app/config/tenant.ts instead of hardcoding the Chat account ID.',
-        },
-        {
-          selector: 'Literal[value="elo-agendor-mcp"], TemplateElement[value.raw="elo-agendor-mcp"]',
-          message: 'Use TENANT_SERVICE_NAME from src/app/config/tenant.ts instead of hardcoding the service name.',
-        },
-        {
-          selector: 'Literal[value="elotenant"], TemplateElement[value.raw="elotenant"]',
-          message: 'Use TENANT_ACCOUNT_KEY from src/app/config/tenant.ts instead of hardcoding "elotenant".',
-        },
         {
           selector:
             'TSAsExpression[expression.callee.object.name="JSON"][expression.callee.property.name="parse"], TSTypeAssertion[expression.callee.object.name="JSON"][expression.callee.property.name="parse"]',

@@ -1,8 +1,34 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { parseJsonc, readJsoncFile } from './args.ts';
 
-export const origin = 'https://elo-agendor-mcp.example.workers.dev';
+interface WranglerDeploymentConfig {
+  define?: {
+    __ELO_DEPLOYMENT__?: unknown;
+  };
+}
+
+function readConfiguredOrigin(): string {
+  const wranglerPath = resolve(import.meta.dirname, '../../wrangler.jsonc');
+  const config = readJsoncFile<WranglerDeploymentConfig>(wranglerPath);
+  const rawDefine = config.define?.__ELO_DEPLOYMENT__;
+  const deployment = typeof rawDefine === 'string' ? parseJsonc<unknown>(rawDefine) : rawDefine;
+  assert(
+    deployment !== null && typeof deployment === 'object' && !Array.isArray(deployment) && 'origin' in deployment,
+    'Missing __ELO_DEPLOYMENT__.origin in wrangler.jsonc.',
+  );
+  const candidate = (deployment as { origin?: unknown }).origin;
+  assert(typeof candidate === 'string' && candidate.length > 0, 'Invalid __ELO_DEPLOYMENT__.origin in wrangler.jsonc.');
+  const parsed = new URL(candidate);
+  assert(
+    parsed.protocol === 'https:' && parsed.pathname === '/' && !parsed.search && !parsed.hash && !parsed.port,
+    'Invalid __ELO_DEPLOYMENT__.origin in wrangler.jsonc.',
+  );
+  return parsed.origin;
+}
+
+export const origin = readConfiguredOrigin();
 export const resource = `${origin}/mcp`;
 export const sessionPath = '.tooling/oauth-session.json';
 export const loginUrlPath = '.tooling/oauth-login-url.txt';

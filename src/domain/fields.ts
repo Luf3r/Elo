@@ -1,11 +1,12 @@
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import { createMutationSchemas, customFieldMatchesCatalog } from '../shared/contracts/crm-mutations';
 import type { CatalogSnapshot } from '../shared/contracts/crm';
 import { uniqueSources } from './identity';
 import type { Fact } from './schemas/common';
 import { fieldPatchInputSchema, type FieldPatchDecision, type FieldPatchInput } from './schemas/planning';
 
-const START = '<!-- elotenant:auto:start -->';
-const END = '<!-- elotenant:auto:end -->';
+const START = `<!-- ${TENANT_ACCOUNT_KEY}:auto:start -->`;
+const END = `<!-- ${TENANT_ACCOUNT_KEY}:auto:end -->`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 export function isActiveUser(catalog: CatalogSnapshot, id: unknown): id is number {
   const matches = catalog.users.filter((user) => user.id === id);

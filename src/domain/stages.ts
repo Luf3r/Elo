@@ -1,3 +1,4 @@
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import type { StageKey } from './schemas/common';
 import type { DealSnapshot } from './schemas/snapshot';
 import { stageEvidenceSchemaForDecision, type StageDecision, type StageEvidence } from './schemas/planning';
@@ -40,7 +41,7 @@ export function decideStage(evidence: StageEvidence, current: DealSnapshot): Sta
       : evidence.observations?.some(
           (o) =>
             o.demandId === evidence.demandId &&
-            o.actor === 'elotenant' &&
+            o.actor === TENANT_ACCOUNT_KEY &&
             events[evidence.requested].includes(o.event) &&
             (evidence.requested !== 'proposal_sent' || o.direction === 'outgoing') &&
             o.sources.every((ref) =>

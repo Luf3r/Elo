@@ -1,3 +1,4 @@
+import { TENANT_ACCOUNT_KEY } from '../app/config/tenant';
 import { createDealRecordSchema, createTaskRecordSchema } from '../shared/contracts/crm-mutations';
 import type { AutomationPolicy } from './policy-types';
 import type { AgentAnalysis } from './schemas/analysis';
@@ -168,7 +169,7 @@ export function decideDemand(
   };
   // An incoming message cannot become an internal team event by an actor claim.
   evidence.observations = evidence.observations?.filter(
-    (o) => o.actor !== 'elotenant' || o.direction === 'outgoing' || o.direction === 'activity',
+    (o) => o.actor !== TENANT_ACCOUNT_KEY || o.direction === 'outgoing' || o.direction === 'activity',
   );
   let unassignedStageId = 1;
   while (work.snapshot.catalog.stages.some((stage) => stage.id === unassignedStageId)) unassignedStageId++;

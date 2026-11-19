@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
 import {
   changeStageSchema,
   createDealRecordSchema,
@@ -253,7 +254,7 @@ export const stageEvidenceSchemaForDecision = z.strictObject({
   demandId: key,
   requested: stageKeySchema,
   sourceRefs: internalSources.min(1),
-  approach: z.enum(['client', 'elotenant', 'unknown']),
+  approach: z.enum(['client', TENANT_ACCOUNT_KEY, 'unknown'] as const),
   explicitRequest: z.boolean(),
   funnelMapping: automationPolicySchema.shape.funnelMapping.optional(),
   mapping: automationPolicySchema.shape.stageMapping.optional(),

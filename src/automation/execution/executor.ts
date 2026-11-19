@@ -3,7 +3,6 @@ import type { AuthorizedPlan, MutationCommand, OperationReceipt, OperationStatus
 import type { AsyncRepository, ExecutionCommand, ExecutionOperation } from '../operations';
 import { authorizedPlanSchema } from '../schemas';
 import { checkedReceipt, reconcileCommand, resolvedTarget, type ReconciliationReads } from './reconciliation';
-import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
 import { safeError } from '../../shared/errors';
 
 export interface ExecutionDeps {
@@ -14,7 +13,7 @@ export interface ExecutionDeps {
   repository: AsyncRepository;
   basis: PlanBasis;
   requestId: string;
-  accountKey: typeof TENANT_ACCOUNT_KEY;
+  accountKey: string;
   catalog: CatalogSnapshot;
   mutations: CrmMutationClient;
   reads: ReconciliationReads;

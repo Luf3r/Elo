@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
 import type { CatalogSnapshot } from '../../shared/contracts/crm';
 import {
   createOrganizationSchema,
@@ -32,7 +33,7 @@ export const selectionSchema = z.union([
   z.strictObject({ kind: z.literal('new'), entity: z.literal('organization'), record: createOrganizationSchema }),
   z.strictObject({ kind: z.literal('new'), entity: z.literal('person'), record: createPersonSchema }),
 ]);
-const approachSchema = z.strictObject({ value: z.enum(['client', 'elotenant', 'unknown']), sources });
+const approachSchema = z.strictObject({ value: z.enum(['client', TENANT_ACCOUNT_KEY, 'unknown'] as const), sources });
 export const stageEvent = z.enum([
   'request',
   'preparation',
@@ -43,7 +44,7 @@ export const stageEvent = z.enum([
   'client_approval',
   'proposal_received',
 ]);
-export const stageActor = z.enum(['elotenant', 'client', 'third_party', 'unknown']);
+export const stageActor = z.enum([TENANT_ACCOUNT_KEY, 'client', 'third_party', 'unknown'] as const);
 const stageObservation = z.strictObject({ demandKey: key, event: stageEvent, actor: stageActor, sources });
 const stageEvidenceSchema = z.strictObject({
   value: stageKeySchema,

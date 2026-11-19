@@ -20,7 +20,7 @@ import { catalogSnapshotSchema } from '../schemas';
 import { workflowStateSchema } from '../service-state';
 
 export const automationQueuePayloadSchema = z.strictObject({
-  accountKey: z.literal(TENANT_ACCOUNT_KEY),
+  accountKey: z.string().refine((value) => value === TENANT_ACCOUNT_KEY),
   operationId: z.string().min(1).max(200),
   version: z.number().int().positive(),
 });
