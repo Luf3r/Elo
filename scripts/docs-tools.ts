@@ -110,7 +110,6 @@ function makeSyntheticEnv(overrides: Record<string, string> = {}): Record<string
     AGENDOR_CRM_TOKEN: '',
     AGENDOR_CHAT_TOKEN: '',
     AGENDOR_CHAT_ACCOUNT_ID: '',
-    AUTOMATION_CHAT_HINTS_ENABLED: 'false',
     ACCESS_CLIENT_ID: 'synthetic-client',
     ACCESS_CLIENT_SECRET: 'synthetic-secret',
     ACCESS_ISSUER: 'https://synthetic.cloudflareaccess.com',

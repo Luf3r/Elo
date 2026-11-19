@@ -119,9 +119,6 @@ export class AccountRepository {
   listAudit(input: { cursor?: string; limit: number }, owner: WorkLease['owner']) {
     return this.audit.listAudit(input, owner);
   }
-  recordChatHint(key: string, fingerprint: string, conversationId: number, now: number) {
-    return this.discovery.recordChatHint(key, fingerprint, conversationId, now);
-  }
   acknowledgeChatHints(conversationId: number) {
     return this.discovery.acknowledgeChatHints(conversationId);
   }

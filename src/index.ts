@@ -4,7 +4,6 @@ import { oauthProvider } from './oauth/provider';
 import { readOAuthConfig } from './oauth/config';
 import { COMMIT, VERSION } from './version';
 import { handleAutomationQueue } from './automation/execution/queue';
-import { acceptChatHint } from './automation/ingress';
 import { automationDomainHooks } from './automation/resolution';
 import { AutomationAccount as BaseAutomationAccount } from './automation/state/account';
 import { accountState } from './automation/state/budget';
@@ -27,7 +26,6 @@ export default {
       return Response.json({ status: 'ok', service: TENANT_SERVICE_NAME, version: VERSION, commit: COMMIT });
     }
     const path = new URL(request.url).pathname;
-    if (path === '/automation/chat-events') return acceptChatHint(request, env);
     const known = [
       '/mcp',
       '/authorize',
@@ -45,8 +43,8 @@ export default {
       readOAuthConfig(env);
       if (!env.OAUTH_KV || !env.OAUTH_RATE_LIMITER) throw new Error('Missing OAuth binding.');
       if (!path.startsWith('/.well-known/') && path !== '/mcp') {
-        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-        if (!(await env.OAUTH_RATE_LIMITER.limit({ key: `oauth:${ip}` })).success)
+        const ip = request.headers.get('CF-Connecting-IP')?.trim();
+        if (!ip || !(await env.OAUTH_RATE_LIMITER.limit({ key: `oauth:${ip}` })).success)
           return Response.json(
             { error: 'temporarily_unavailable' },
             { status: 429, headers: { 'Retry-After': '10', 'Cache-Control': 'no-store' } },

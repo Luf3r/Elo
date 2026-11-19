@@ -10,7 +10,7 @@ import {
 import type { AutomationPolicy } from '../../types';
 import { EVIDENCE_RETENTION_MS } from './audit';
 
-/** Persists chat hints, pending activity discoveries and bounded discovery cursors. */
+/** Persists pending activity discoveries, bounded discovery cursors and chat hint acknowledgements. */
 export class DiscoveryRepository {
   constructor(
     private readonly storage: DurableObjectStorage,
@@ -19,40 +19,6 @@ export class DiscoveryRepository {
 
   private get sql() {
     return this.storage.sql;
-  }
-
-  recordChatHint(
-    key: string,
-    fingerprint: string,
-    conversationId: number,
-    now: number,
-  ): 'accepted' | 'duplicate' | 'conflict' | 'limited' {
-    if (
-      !/^[a-f0-9]{64}$/.test(key) ||
-      !/^[a-f0-9]{64}$/.test(fingerprint) ||
-      !Number.isSafeInteger(conversationId) ||
-      conversationId <= 0 ||
-      !Number.isSafeInteger(now) ||
-      now < 0
-    )
-      throw Error('INVALID_HINT');
-    return this.storage.transactionSync(() => {
-      const prior = this.sql
-        .exec<{ digest: string }>('SELECT digest FROM chat_hints WHERE hint_key = ?', key)
-        .toArray()[0];
-      if (prior) return prior.digest === fingerprint ? 'duplicate' : 'conflict';
-      if (
-        this.sql
-          .exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE received_at > ?', now - 60_000)
-          .one().count >= 30 ||
-        this.sql
-          .exec<{ count: number }>('SELECT COUNT(*) AS count FROM chat_hints WHERE conversation_id IS NOT NULL')
-          .one().count >= 1000
-      )
-        return 'limited';
-      this.sql.exec('INSERT INTO chat_hints VALUES (?, ?, ?, ?)', key, conversationId, now, fingerprint);
-      return 'accepted';
-    });
   }
 
   acknowledgeChatHints(conversationId: number): void {

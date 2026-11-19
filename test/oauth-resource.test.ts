@@ -116,6 +116,7 @@ describe('OAuth resource integration', () => {
     const refreshed = await worker.fetch(
       new Request(`${ORIGIN}/token`, {
         method: 'POST',
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           client_id: first.clientId,
@@ -137,6 +138,7 @@ describe('OAuth resource integration', () => {
     const revoked = await worker.fetch(
       new Request(metadata.revocation_endpoint, {
         method: 'POST',
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
         body: new URLSearchParams({ client_id: first.clientId, token: next.access_token }),
       }),
       env,
@@ -170,8 +172,33 @@ describe('OAuth resource integration', () => {
   });
   it('fails closed when OAuth quota is exhausted and does not consume CRM budget', async () => {
     const env = oauthEnv({ OAUTH_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) } });
-    const r = await worker.fetch(new Request(`${ORIGIN}/register`, { method: 'POST', body: '{}' }), env, context());
+    const r = await worker.fetch(
+      new Request(`${ORIGIN}/register`, {
+        method: 'POST',
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
+        body: '{}',
+      }),
+      env,
+      context(),
+    );
     expect(r.status).toBe(429);
     expect(budgetMock(env)).not.toHaveBeenCalled();
   });
+  it.each([undefined, '   '])(
+    'rejects OAuth route requests without CF-Connecting-IP (%s) with 429',
+    async (headerValue) => {
+      const env = oauthEnv();
+      const headers = headerValue !== undefined ? { 'CF-Connecting-IP': headerValue } : undefined;
+      const r = await worker.fetch(
+        new Request(`${ORIGIN}/register`, { method: 'POST', headers, body: '{}' }),
+        env,
+        context(),
+      );
+      expect(r.status).toBe(429);
+      expect(r.headers.get('retry-after')).toBe('10');
+      expect(r.headers.get('cache-control')).toBe('no-store');
+      expect(await r.json()).toEqual({ error: 'temporarily_unavailable' });
+      expect(env.OAUTH_RATE_LIMITER.limit).not.toHaveBeenCalled();
+    },
+  );
 });

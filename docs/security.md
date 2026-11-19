@@ -12,8 +12,8 @@ Este documento descreve o modelo de ameaça, os controles de autenticação e au
   - **Sem token fixo**: `MCP_TEST_TOKEN` foi removido permanentemente do código. Autenticação sem Bearer válido ou com token inválido retorna `401` com `WWW-Authenticate` apontando para os metadados do recurso protegido.
 - **Rate limiting por superfície**:
   - `MCP_RATE_LIMITER` (`1001`): 30 requisições por janela de 10 s por `clientId` autenticado.
-  - `OAUTH_RATE_LIMITER` (`1003`): 30 requisições por janela de 10 s por IP (`CF-Connecting-IP`) nas rotas OAuth (`/authorize`, `/callback`, `/token`, `/token/revoke`, `/register`).
-- **Ingresso opcional (`/automation/chat-events`)**: desabilitado (`404`) por padrão (`AUTOMATION_CHAT_HINTS_ENABLED="false"`) por não haver webhook assinado comprovado do Agendor. Mesmo quando habilitado deliberadamente, aceita apenas envelope JSON mínimo (`eventId`, `accountId === AGENDOR_CHAT_ACCOUNT_ID`, `conversationId` positivo) até 8 KiB, máximo de 30 dicas novas/minuto e 1.000 pendentes, nunca cria snapshot/cliente/demanda e não aciona CRM/Chat.
+  - `OAUTH_RATE_LIMITER` (`1003`): 30 requisições por janela de 10 s por IP (`CF-Connecting-IP`) nas rotas OAuth (`/authorize`, `/callback`, `/token`, `/token/revoke`, `/register`). Requisições sem `CF-Connecting-IP` são recusadas imediatamente com `429` (`Retry-After: 10`), sem fallback para chave compartilhada.
+- **Ingresso de webhook do Chat**: o endpoint público sem assinatura foi removido (`404`); esse ingresso só voltará com webhook assinado do Agendor.
 - **Egress e downloads seguros**:
   - O Worker utiliza a flag `global_fetch_strictly_public`.
   - Origens permitidas no código: API Agendor CRM (`api.agendor.com.br`), API Agendor Chat (`chat.agendor.com.br`), emissor Cloudflare Access (`*.cloudflareaccess.com`) e o origin S3 exato observado para anexos do Chat (`agendor-chat-sa-production.s3.sa-east-1.amazonaws.com`).

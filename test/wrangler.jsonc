@@ -6,7 +6,6 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
   "vars": {
-    "AUTOMATION_CHAT_HINTS_ENABLED": "false",
     "AGENDOR_CHAT_ACCOUNT_ID": "",
     "AGENDOR_CRM_TOKEN": "unit-crm-token",
     "AGENDOR_CHAT_TOKEN": "",

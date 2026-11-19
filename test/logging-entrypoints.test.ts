@@ -21,7 +21,9 @@ describe('HTTP and MCP entrypoint logging', () => {
     });
 
     const response = await worker.fetch(
-      new Request('https://example.com/authorize?token=secret-query-token&email=owner@example.com&code=12345678901'),
+      new Request('https://example.com/authorize?token=secret-query-token&email=owner@example.com&code=12345678901', {
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
+      }),
       env,
       context(),
     );
@@ -53,7 +55,10 @@ describe('HTTP and MCP entrypoint logging', () => {
     const env = testEnv({ ACCESS_CLIENT_ID: '' });
 
     const response = await worker.fetch(
-      new Request('https://example.com/token?client_secret=hidden-secret', { method: 'POST' }),
+      new Request('https://example.com/token?client_secret=hidden-secret', {
+        method: 'POST',
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
+      }),
       env,
       context(),
     );

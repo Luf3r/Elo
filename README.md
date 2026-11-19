@@ -7,7 +7,6 @@ Worker TypeScript executado na Cloudflare Workers que expõe um servidor MCP rem
 - **Versão do pacote:** `0.1.7` (fonte única em [package.json](package.json) / [src/version.ts](src/version.ts)) — veja o histórico completo e a tabela de versões Cloudflare em [CHANGELOG.md](CHANGELOG.md).
 - **Política de automação:** armazenada e versionada no Durable Object `AutomationAccount` (consulte o modo e a versão vigentes em tempo de execução pela ferramenta `automation_get_status`; não existe manifesto estático de modo).
 - **Catálogo de ferramentas:** gerado diretamente a partir de `tools/list` do servidor em [docs/tools.md](docs/tools.md) (mantido em sincronia por teste automatizado).
-- **Ingresso opcional:** `POST /automation/chat-events` permanece desabilitado por padrão (`AUTOMATION_CHAT_HINTS_ENABLED="false"`).
 
 ## Início rápido
 

@@ -38,4 +38,16 @@ describe('routing and health', () => {
       (await worker.fetch(new Request(`https://example.com${path}`, { method: 'POST' }), testEnv(), context())).status,
     ).toBe(404);
   });
+  it('returns 404 for removed /automation/chat-events endpoint', async () => {
+    const response = await worker.fetch(
+      new Request('https://example.com/automation/chat-events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: 'event-1', accountId: '7001', conversationId: 101 }),
+      }),
+      testEnv(),
+      context(),
+    );
+    expect(response.status).toBe(404);
+  });
 });

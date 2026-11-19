@@ -6,7 +6,6 @@ ACCESS_CLIENT_SECRET="replace-me"
 # AGENDOR_CHAT_ACCOUNT_ID="7001"
 # Access public OIDC endpoints and infrastructure bindings are in wrangler.jsonc.
 # No OpenAI/LLM secret is required. Never put credentials in URLs or Wrangler vars.
-# AUTOMATION_CHAT_HINTS_ENABLED remains false (unsigned hint ingress is not a verified webhook).
 # Application mode/capabilities/mappings/inbox allowlist/native creator state live in
 # the versioned Durable Object policy, not environment variables. Initial policy is disabled.
 # docs/rollout-pilot.json is a non-authorizing, empty-target rollout manifest.

@@ -24,7 +24,6 @@ src/
     ├── usecases/            # Casos de uso (preflight, discover, prepare, prepare-steps, prepare-hydration, submit, apply, reviews, reprocess, audit, context, status, policy)
     ├── execution/           # Execução recuperável (executor, queue, reconciliation, verification-reader, maintenance)
     ├── discovery.ts         # Descoberta incremental de conversas pendentes (T01)
-    ├── ingress.ts           # Endpoint opcional /automation/chat-events (desabilitado por padrão)
     ├── context/             # Projeção e renderização Markdown do contexto do cliente
     └── state/               # Durable Object AutomationAccount, migrations SQLite, repository, agregados repositories/ e budget
 ```

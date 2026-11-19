@@ -73,9 +73,6 @@ export class AutomationAccount extends DurableObject<Env> {
   async publishOperationContext(id: string) {
     return this.repository.publishOperationContext(id, this.requireDomainHooks().renderContext);
   }
-  async recordChatHint(key: string, digest: string, id: number, now: number) {
-    return this.repository.recordChatHint(key, digest, id, now);
-  }
   async getPendingCursor(cursor: string) {
     return this.repository.getPendingCursor(cursor);
   }

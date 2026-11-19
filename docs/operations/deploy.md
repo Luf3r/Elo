@@ -13,7 +13,7 @@ Este guia descreve o procedimento vigente para publicar o Worker `elo-agendor-mc
 | Fila e DLQ | `AUTOMATION_QUEUE` → `elo-agendor-operations` (`max_batch_size: 1`, `max_concurrency: 1`, `max_retries: 4`); DLQ `elo-agendor-operations-dlq` |
 | Cron watchdog | `*/5 * * * *` |
 | Rate limiters | `MCP_RATE_LIMITER` (`1001`, 30/10s) e `OAUTH_RATE_LIMITER` (`1003`, 30/10s) |
-| Variáveis e flags | `AUTOMATION_CHAT_HINTS_ENABLED="false"`, `AGENDOR_CHAT_ACCOUNT_ID="7001"`, endpoints Cloudflare Access OIDC |
+| Variáveis e flags | `AGENDOR_CHAT_ACCOUNT_ID="7001"`, endpoints Cloudflare Access OIDC |
 | Observabilidade | `enabled: true`, `invocation_logs: false` (não habilite captura de payloads/headers) |
 | Secrets obrigatórios | `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET`; opcional para Chat/automação: `AGENDOR_CHAT_TOKEN` |
 

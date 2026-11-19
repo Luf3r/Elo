@@ -44,6 +44,7 @@ export async function issueTestToken(
   const response = await worker.fetch(
     new Request(`${ORIGIN}/token`, {
       method: 'POST',
+      headers: { 'CF-Connecting-IP': '198.51.100.10' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: client.clientId,
