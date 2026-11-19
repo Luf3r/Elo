@@ -42,6 +42,8 @@ const deploymentSchema = z.strictObject({
     .min(1)
     .max(50)
     .refine((ids) => new Set(ids).size === ids.length),
+  // Optional; staging sets true so no client can obtain CRM write or automation processing scopes.
+  readOnly: z.boolean().optional(),
 });
 
 export interface DeploymentConfig {
@@ -49,6 +51,7 @@ export interface DeploymentConfig {
   readonly ownerEmail: string;
   readonly tenantKey: string;
   readonly allowedInboxIds: readonly number[];
+  readonly readOnly: boolean;
 }
 
 function readRawDeployment(): unknown {
@@ -68,6 +71,7 @@ function parseDeployment(raw: unknown): DeploymentConfig {
     ownerEmail: parsed.data.ownerEmail,
     tenantKey: parsed.data.tenantKey,
     allowedInboxIds: Object.freeze([...parsed.data.allowedInboxIds]),
+    readOnly: parsed.data.readOnly ?? false,
   });
 }
 

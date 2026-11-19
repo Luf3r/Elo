@@ -112,6 +112,7 @@ describe('deployment configuration', () => {
       ownerEmail: 'owner@example.com',
       tenantKey: 'tenant-1',
       allowedInboxIds: [101, 202],
+      readOnly: false,
     });
     expect(Object.isFrozen(DEPLOYMENT)).toBe(true);
     expect(Object.isFrozen(DEPLOYMENT.allowedInboxIds)).toBe(true);

@@ -1,6 +1,6 @@
 import { SafeError } from './shared/errors';
 import type { OAuthResourceAuth } from '@cloudflare/workers-oauth-provider';
-import { OWNER_EMAIL, RESOURCE } from './oauth/config';
+import { OWNER_EMAIL, RESOURCE, SUPPORTED_SCOPES } from './oauth/config';
 export interface AuthContext {
   clientId: string;
   userId?: string;
@@ -37,7 +37,9 @@ export function authenticateClient(ctx: ExecutionContext): AuthContext {
   ) {
     throw new SafeError('MCP_UNAUTHORIZED', 'Unauthorized.', false, 401);
   }
-  const scopes = Array.isArray(auth.scope) ? auth.scope : [];
+  // Grants outside this deployment's supported scopes (for example write scopes on a
+  // read-only staging deployment) are dropped, so tools that need them fail closed.
+  const scopes = (Array.isArray(auth.scope) ? auth.scope : []).filter((scope) => SUPPORTED_SCOPES.includes(scope));
   return { clientId: auth.clientId, userId: auth.userId, scopes, ...(expiresAt === undefined ? {} : { expiresAt }) };
 }
 
