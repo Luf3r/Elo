@@ -3,7 +3,8 @@ import { createMcpHandler } from 'agents/mcp/server';
 import type { Env } from '../env';
 import { authenticateClient } from '../auth';
 import { enforceRateLimit } from '../shared/rate-limit';
-import { errorData, safeError } from '../shared/errors';
+import { errorData, SafeError, safeError } from '../shared/errors';
+import { errorFields, logEvent } from '../shared/logger';
 import { createServer } from '../mcp/server';
 import { ORIGIN, RESOURCE, OWNER_EMAIL, SUPPORTED_SCOPES } from './config';
 import { loginHandler } from './handler';
@@ -37,6 +38,9 @@ export const oauthOptions: OAuthProviderOptions<Env> = {
         response.headers.set('Cache-Control', 'no-store');
         return response;
       } catch (error) {
+        if (!(error instanceof SafeError)) {
+          logEvent('error', 'mcp_request_failed', errorFields(error));
+        }
         const safe = safeError(error);
         return Response.json(
           { error: errorData(safe) },

@@ -207,7 +207,12 @@ async function scenario(
     await handleAutomationQueue(
       {
         messages: [
-          { body: { accountKey: 'elotenant', operationId: op.operationId, version: 1 }, ack: vi.fn(), retry: vi.fn() },
+          {
+            body: { accountKey: 'elotenant', operationId: op.operationId, version: 1 },
+            attempts: 1,
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
         ],
       },
       env,
@@ -518,6 +523,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
       expect(queued.state).toBe('queued');
       const message = {
         body: { accountKey: 'elotenant', operationId: queued.operationId, version: 1 },
+        attempts: 1,
         ack: vi.fn(),
         retry: vi.fn(),
       };
@@ -580,6 +586,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
           messages: [
             {
               body: { accountKey: 'elotenant', operationId: operation.operationId, version: 1 },
+              attempts: 1,
               ack: vi.fn(),
               retry: vi.fn(),
             },
@@ -622,6 +629,7 @@ describe('synthetic agent over an authenticated MCP SDK connection', () => {
           messages: [
             {
               body: { accountKey: 'elotenant', operationId: updated.operationId, version: 1 },
+              attempts: 1,
               ack: vi.fn(),
               retry: vi.fn(),
             },
@@ -826,6 +834,7 @@ it('blocks a moved inbox after canonical reads were cached by a deferred verific
           messages: [
             {
               body: { accountKey: 'elotenant', operationId: operation.operationId, version: 1 },
+              attempts: 1,
               ack: vi.fn(),
               retry: vi.fn(),
             },

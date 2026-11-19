@@ -12,7 +12,12 @@ import { errorFields, logEvent } from './shared/logger';
 
 export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    await accountState(env).maintainAccount(Date.now());
+    try {
+      await accountState(env).maintainAccount(Date.now());
+    } catch (error) {
+      logEvent('error', 'watchdog_failed', errorFields(error));
+      throw error;
+    }
   },
   async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
     await handleAutomationQueue(batch, env);

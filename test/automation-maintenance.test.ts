@@ -118,6 +118,7 @@ it('publishes a pending customer projection after queued confirmation, once only
   const status = await runPlan(f.authorization, { ...f.deps, defer: true });
   const message = {
     body: { accountKey: 'elotenant', operationId: status.operationId, version: 1 },
+    attempts: 1,
     ack: vi.fn(),
     retry: vi.fn(),
   };

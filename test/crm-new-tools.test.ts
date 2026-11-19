@@ -188,7 +188,7 @@ describe('direct coordinated CRM tools', () => {
     );
     const ack = vi.fn();
     const retry = vi.fn();
-    const batch = { messages: [{ body: send.mock.calls[0]![0], ack, retry }] };
+    const batch = { messages: [{ body: send.mock.calls[0]![0], attempts: 1, ack, retry }] };
     await handleAutomationQueue(batch, env);
     await handleAutomationQueue(batch, env);
     expect((await accountState(env).getOperation(first.operationId))?.status.state).toBe('applied');

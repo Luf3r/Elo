@@ -15,7 +15,7 @@ it('queues reference-only payload after durable reservation and duplicate delive
   expect(send).toHaveBeenCalledWith({ accountKey: 'elotenant', operationId: operation.operationId, version: 1 });
   const ack = vi.fn();
   const retry = vi.fn();
-  const batch = { messages: [{ body: send.mock.calls[0]![0], ack, retry }] };
+  const batch = { messages: [{ body: send.mock.calls[0]![0], attempts: 1, ack, retry }] };
   await handleAutomationQueue(batch, env as Env, () => f.deps);
   await handleAutomationQueue(batch, env as Env, () => f.deps);
   expect(f.write).toHaveBeenCalledTimes(1);
@@ -34,7 +34,7 @@ it('rejects unreserved enqueue and malformed or foreign account messages', async
   ]) {
     const ack = vi.fn();
     const factory = vi.fn(() => f.deps);
-    await handleAutomationQueue({ messages: [{ body, ack, retry: vi.fn() }] }, env as Env, factory);
+    await handleAutomationQueue({ messages: [{ body, attempts: 1, ack, retry: vi.fn() }] }, env as Env, factory);
     expect(ack).toHaveBeenCalledOnce();
     expect(factory).not.toHaveBeenCalled();
   }

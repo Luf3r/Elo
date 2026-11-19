@@ -1,5 +1,6 @@
 import { TENANT_ACCOUNT_KEY } from '../../app/config/tenant';
 import { SafeError } from '../../shared/errors';
+import { errorFields, logEvent } from '../../shared/logger';
 import { readJson } from '../../shared/json';
 import { readVerificationSnapshot } from './verification-reader';
 import { assertInboxAllowed } from '../../domain/inbox-policy';
@@ -25,7 +26,12 @@ export const automationQueuePayloadSchema = z.strictObject({
 });
 export type AutomationQueuePayload = z.infer<typeof automationQueuePayloadSchema>;
 interface QueueBatch {
-  messages: readonly { body: unknown; ack(): void; retry(options?: { delaySeconds?: number }): void }[];
+  messages: readonly {
+    body: unknown;
+    attempts: number;
+    ack(): void;
+    retry(options?: { delaySeconds?: number }): void;
+  }[];
 }
 export async function enqueueOperation(
   operationId: string,
@@ -242,7 +248,13 @@ export async function handleAutomationQueue(
         const next = commands.reduce((deadline, c) => Math.max(deadline, c?.nextAttemptAt ?? 0), Date.now() + 10_000);
         message.retry({ delaySeconds: Math.min(43_200, Math.max(1, Math.ceil((next - Date.now()) / 1000))) });
       } else message.ack();
-    } catch {
+    } catch (error) {
+      const { attempts } = message;
+      if (attempts >= 4) {
+        logEvent('error', 'queue_message_dead_lettered', { attempts, ...errorFields(error) });
+      } else {
+        logEvent('warn', 'queue_message_retry', { attempts, ...errorFields(error) });
+      }
       message.retry({ delaySeconds: 10 });
     }
   }

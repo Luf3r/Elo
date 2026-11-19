@@ -339,7 +339,9 @@ export async function characterizationScenario(
   const deliver = async (operationId: string) => {
     await handleAutomationQueue(
       {
-        messages: [{ body: { accountKey: 'elotenant', operationId, version: 1 }, ack: vi.fn(), retry: vi.fn() }],
+        messages: [
+          { body: { accountKey: 'elotenant', operationId, version: 1 }, attempts: 1, ack: vi.fn(), retry: vi.fn() },
+        ],
       },
       env,
     );
