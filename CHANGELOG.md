@@ -8,28 +8,28 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 | Versão | Commit | ID de versão Cloudflare | Data | Resumo |
 |---|---|---|---|---|
-| `0.1.7` | `07473e3` | `816fc83d-752a-405d-87f9-b9cd2c6b0b67` | 2026-11-10 *(commit em 2026-11-17)* | Diagnóstico de `deferred`, trava SQLite por trabalho (`preparation_locks`), status e auditoria de preparação |
-| `0.1.6` | *(consolidado em `07473e3`)* | `198ce0f1-af14-48ed-986a-68ce04d7a323` | 2026-11-10 | Hotfix do parser de inboxes para coleções `payload`-only abaixo de 100 itens |
-| `0.1.5` | *(consolidado em `07473e3`)* | `1903e692-2212-4f91-8813-409ac2b2929f` | 2026-11-10 | Validação completa do inventário de inboxes no discovery antes de listar conversas |
-| `0.1.4` | *(consolidado em `07473e3`)* | `541d46f9-5ed0-477f-9a3e-edbb52eb01da` | 2026-11-10 | Preflight e descoberta incremental (`automation_preflight_sync`, `automation_discover_pending`) em `preview` |
+| `0.1.7` | `9dedbfd` | `816fc83d-752a-405d-87f9-b9cd2c6b0b67` | 2026-11-10 *(commit em 2026-11-17)* | Diagnóstico de `deferred`, trava SQLite por trabalho (`preparation_locks`), status e auditoria de preparação |
+| `0.1.6` | *(consolidado em `9dedbfd`)* | `198ce0f1-af14-48ed-986a-68ce04d7a323` | 2026-11-10 | Hotfix do parser de inboxes para coleções `payload`-only abaixo de 100 itens |
+| `0.1.5` | *(consolidado em `9dedbfd`)* | `1903e692-2212-4f91-8813-409ac2b2929f` | 2026-11-10 | Validação completa do inventário de inboxes no discovery antes de listar conversas |
+| `0.1.4` | *(consolidado em `9dedbfd`)* | `541d46f9-5ed0-477f-9a3e-edbb52eb01da` | 2026-11-10 | Preflight e descoberta incremental (`automation_preflight_sync`, `automation_discover_pending`) em `preview` |
 | `0.1.3` | — | *(sem publicação registrada)* | — | Versão intermediária local não publicada entre `0.1.2` e `0.1.4` |
-| `0.1.2` | `540d098` | `0f9e5f15-6a9b-43e4-a0b9-24aa250cab80` | 2026-11-06 *(commit em 2026-11-09)* | Renovação OAuth com validade de 24h (access) e 35 dias (`offline_access`) |
-| `0.1.2` | *(consolidado em `540d098`)* | `c53c5538-4cd5-4e09-af92-b6cfc39cb00f` | 2026-11-03 | Correção de schema de metadados de anexos em snapshots de automação |
-| `0.1.2` | *(consolidado em `540d098`)* | `2b260b00-f1af-4d3e-a4e6-08141ce8db24` | 2026-11-03 | Deploy com política remota `apply` v5 para inboxes `4101`/`4102` e `nativeCreatorDisabled=false` |
-| `0.1.2` | *(anterior a `540d098`)* | `45325820-bd85-4545-805f-3ae124e288ac` | 2026-10-28 | Confiabilidade Chat → CRM e allowlist exata de redirect S3 para anexos |
-| `0.1.2` | `0484034` / `ae860b8` | `4da0255e-db66-4a85-a19d-346cf60d2ea3` | 2026-10-27 | Rollout técnico da automação com Durable Object, filas e catálogo ampliado (modo `disabled`) |
-| `0.1.1` *(histórico 15 ferramentas)* | *(anterior a `fd77c9d`)* | `9a62a3b3-1750-484c-a811-6547efba2611` | Entre 2026-10-22 e 2026-10-26 | Adição das 3 ferramentas iniciais somente leitura do Agendor Chat (`chat:read`) |
-| `0.1.0` *(OAuth)* | `be859b5` / `27a1c17` | `48f65d8d-d1b9-4d83-8102-e2f46f5b36e6` | 2026-10-21 | OAuth 2.1 via Cloudflare Access OIDC (PKCE S256, `OAUTH_KV`, JWKS `redirect: manual`) |
-| `0.1.0` *(MVP)* | `dac8072` | `7e6bdf1d-9f39-4435-959d-b000e1c0674f` | 2026-10-21 | Publicação inicial com leituras CRM e autenticação por token de teste (descontinuada) |
+| `0.1.2` | `3bffd37` | `0f9e5f15-6a9b-43e4-a0b9-24aa250cab80` | 2026-11-06 *(commit em 2026-11-09)* | Renovação OAuth com validade de 24h (access) e 35 dias (`offline_access`) |
+| `0.1.2` | *(consolidado em `3bffd37`)* | `c53c5538-4cd5-4e09-af92-b6cfc39cb00f` | 2026-11-03 | Correção de schema de metadados de anexos em snapshots de automação |
+| `0.1.2` | *(consolidado em `3bffd37`)* | `2b260b00-f1af-4d3e-a4e6-08141ce8db24` | 2026-11-03 | Deploy com política remota `apply` v5 para inboxes `4101`/`4102` e `nativeCreatorDisabled=false` |
+| `0.1.2` | *(anterior a `3bffd37`)* | `45325820-bd85-4545-805f-3ae124e288ac` | 2026-10-28 | Confiabilidade Chat → CRM e allowlist exata de redirect S3 para anexos |
+| `0.1.2` | `1033c1b` / `56730e3` | `4da0255e-db66-4a85-a19d-346cf60d2ea3` | 2026-10-27 | Rollout técnico da automação com Durable Object, filas e catálogo ampliado (modo `disabled`) |
+| `0.1.1` *(histórico 15 ferramentas)* | *(anterior a `2e0e80d`)* | `9a62a3b3-1750-484c-a811-6547efba2611` | Entre 2026-10-22 e 2026-10-26 | Adição das 3 ferramentas iniciais somente leitura do Agendor Chat (`chat:read`) |
+| `0.1.0` *(OAuth)* | `d4efaa3` / `1a76ace` | `48f65d8d-d1b9-4d83-8102-e2f46f5b36e6` | 2026-10-21 | OAuth 2.1 via Cloudflare Access OIDC (PKCE S256, `OAUTH_KV`, JWKS `redirect: manual`) |
+| `0.1.0` *(MVP)* | `fa4b908` | `7e6bdf1d-9f39-4435-959d-b000e1c0674f` | 2026-10-21 | Publicação inicial com leituras CRM e autenticação por token de teste (descontinuada) |
 
 ## [Não publicado]
 
 - **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
 > **Próxima versão publicada: `0.2.0`** devido à **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4). A versão em `package.json` permanece `0.1.7` até o momento da preparação do release.
 
-- **Fase 0 — Rede de segurança (`c2f2518`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
-- **Fase 1 — Formatação e lint (`a0b4ad3`, `062b4d7`, `f4431fb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
-- **Fase 5.1 — Remoção do token fixo (`61c9fae`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
+- **Fase 0 — Rede de segurança (`803f5fa`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
+- **Fase 1 — Formatação e lint (`e30d911`, `2ff4995`, `eea14bb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
+- **Fase 5.1 — Remoção do token fixo (`1f767cc`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
 - **Fase 2 — Documentação**: gerador `scripts/docs-tools.mjs` (`npm run docs:tools`) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
 - **Fase 3 — Reestruturação**:
   - Camada de domínio pura extraída para `src/domain/` (identidade, demandas, planejador, campos, estágios, política, autorização e revisões), sem dependências de IO, `env`, `fetch` ou Durable Object.

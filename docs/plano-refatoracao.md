@@ -1,12 +1,12 @@
 # Plano de refatoração e correção — 2026-11-17
 
-Base: `main` em `07473e3` (0.1.7). Diagnóstico completo na seção 1; execução por fases na seção 3.
+Base: `main` em `9dedbfd` (0.1.7). Diagnóstico completo na seção 1; execução por fases na seção 3.
 
 ## Estado em 2026-11-19
 
 | Fase | Estado | Resumo do entregue e do que falta |
 |---|---|---|
-| Fase 0 — Rede de segurança | **Parcial** | Concluídos `0.2`, `0.3`, `0.4`, `0.5`, CI em `.github/workflows/ci.yml` (`0.6`) e `scripts/release.ts` + `commit` em `/health`/`server_status` (`0.7`). **Faltam**: `0.1` (criar remoto privado, push de `main`, confirmar `server_status` e tag `v0.1.7` em `07473e3`) e proteção de branch em `main` (`0.6`). |
+| Fase 0 — Rede de segurança | **Parcial** | Concluídos `0.2`, `0.3`, `0.4`, `0.5`, CI em `.github/workflows/ci.yml` (`0.6`) e `scripts/release.ts` + `commit` em `/health`/`server_status` (`0.7`). **Faltam**: `0.1` (criar remoto privado, push de `main`, confirmar `server_status` e tag `v0.1.7` em `9dedbfd`) e proteção de branch em `main` (`0.6`). |
 | Fase 1 — Formatação e lint | **Concluída** | Prettier + ESLint type-aware integrados ao `npm run check`, commit de formatação com `.git-blame-ignore-revs` e correção das promises flutuantes. |
 | Fase 2 — Documentação | **Concluída** | `npm run docs:tools` com teste de sincronia, `README.md` reescrito, documentação vigente em `docs/`, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`. |
 | Fase 3 — Reestruturação | **Concluída** | Testes de caracterização, `src/agendor/ports.ts`, `src/domain/` puro, repositórios por agregado em `src/automation/state/repositories/`, casos de uso em `src/automation/usecases/`, schemas separados, migrations declarativas, `readJson`, `src/app/config/tenant.ts` e regras de camada como erro no lint. |
@@ -109,7 +109,7 @@ Tamanho: **P** ≈ meio dia, **M** ≈ 1–2 dias, **G** ≈ 3–5 dias.
 
 ### Fase 0 — Rede de segurança (P–M) · bloqueia todas
 
-0.1 **Remoto privado** (GitHub) e push de `main`; tag `v0.1.7` em `07473e3` marcando o que está em produção (confirmar com `server_status`).
+0.1 **Remoto privado** (GitHub) e push de `main`; tag `v0.1.7` em `9dedbfd` marcando o que está em produção (confirmar com `server_status`).
 0.2 **Corrigir P4**: ajustar a expectativa do teste para o comportamento atual (rejeição por política, fail-closed). O código definitivo vem na Fase 4.
 0.3 **Corrigir P5**: localizar a promise sem `await`/`catch` no teste de concorrência de preparação e tratá-la; a suíte deve terminar sem `uncaught exception`.
 0.4 **Testes herméticos (P6)**: config de teste que não carrega `.dev.vars` (wrangler de teste dedicado ou caminho de vars vazio). Critério: a suíte passa com `.dev.vars` renomeado.
