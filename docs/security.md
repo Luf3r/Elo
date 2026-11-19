@@ -4,7 +4,7 @@ Este documento descreve o modelo de ameaça, os controles de autenticação e au
 
 ## Modelo de ameaça e autenticação
 
-- **Ator único autorizado**: somente a identidade do proprietário (`OWNER_EMAIL`, configurada em `src/oauth/config.ts`) pode autorizar clientes MCP. A verificação ocorre duas vezes: no callback OIDC e em `authenticateClient()` a cada chamada em `/mcp`.
+- **Ator único autorizado**: somente a identidade do proprietário (`OWNER_EMAIL`, carregada de `__ELO_DEPLOYMENT__.ownerEmail` em `src/app/config/deployment.ts` e reexportada por `src/oauth/config.ts`) pode autorizar clientes MCP. A verificação ocorre duas vezes: no callback OIDC e em `authenticateClient()` a cada chamada em `/mcp`.
 - **OAuth 2.1 + Cloudflare Access OIDC**:
   - O servidor utiliza `@cloudflare/workers-oauth-provider` com PKCE `S256` obrigatório, audiência estrita vinculada ao recurso canônico (`RESOURCE`) e registro dinâmico (`/register`, TTL de cliente de 90 dias; CIMD desabilitado).
   - A autenticação do usuário é delegada ao Cloudflare Access OIDC (One-time PIN por e-mail). Os tokens de identidade são verificados por assinatura `RS256` via JWKS (`ACCESS_JWKS_URL`) com `redirect: 'manual'` (rejeitando redirecionamentos e exigindo HTTP 200), validando `issuer`, `audience`, `nonce`, `iat`, `exp` e `email`.
@@ -44,10 +44,11 @@ Autorizações operacionais (`AuthorizedPlan`) têm validade máxima de **5 minu
 
 ## Allowlist de inbox
 
-- A lista autorizada de caixas de entrada é fixa em código em `src/automation/inbox-policy.ts`: `allowedInboxIds = [4101, 4102]`.
+- A lista autorizada de caixas de entrada é fixa no build via `__ELO_DEPLOYMENT__.allowedInboxIds` (validada e congelada em `src/app/config/deployment.ts` e exposta por `src/app/config/tenant.ts` e `src/domain/inbox-policy.ts`, ex.: `allowedInboxIds = [101, 102]`), sendo imutável em tempo de execução.
+- Nenhuma ferramenta MCP pode alterar ou ampliar essa allowlist de implantação. Se `__ELO_DEPLOYMENT__` estiver ausente ou inválido, o Worker falha na inicialização (*fail-closed*).
 - A política armazenada no DO pode apenas restringir esse conjunto (`allowedInboxIds ∩ policy.allowedInboxIds`). Lista vazia nega todas as caixas (fail-closed).
 - **Pontos de verificação obrigatórios**:
-  1. **Descoberta (`automation_discover_pending`)**: consulta o inventário completo de inboxes da conta e bloqueia a chamada se houver paginação restante, duplicatas ou qualquer ID diferente de `4101` e `4102`.
+  1. **Descoberta (`automation_discover_pending`)**: consulta o inventário completo de inboxes da conta e bloqueia a chamada se houver paginação restante, duplicatas ou qualquer divergência em relação ao conjunto exato definido em `allowedInboxIds`.
   2. **Preparação e retomada (`automation_prepare_sync`)**: valida `inboxId` canônico do detalhe da conversa antes de ler mensagens, anexos ou CRM — inclusive em replay pronto ou retomada CRM.
   3. **Execução em fila (`createQueueExecutionDeps.verify`)**: revalida o inbox canônico de todas as conversas associadas antes e depois do despacho da mutação.
 

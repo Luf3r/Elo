@@ -19,6 +19,22 @@ Este guia descreve o procedimento vigente para publicar o Worker `elo-agendor-mc
 
 Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets); nunca crie outra conta, Worker ou namespace como fallback.
 
+## Configuração de implantação
+
+O `wrangler.jsonc` real de cada implantação fica fora do Git e parte de `wrangler.example.jsonc`. Além do nome do Worker (`name`), dos bindings de `OAUTH_KV` e `AUTOMATION_STATE` (classe SQLite `AutomationAccount`, migração `automation-v1`), das filas (`AUTOMATION_QUEUE` e DLQ) e dos rate limiters (`MCP_RATE_LIMITER` e `OAUTH_RATE_LIMITER`), ele deve preencher:
+
+- **Variáveis (`vars`)**: `AGENDOR_CHAT_ACCOUNT_ID` (ID numérico da conta no Agendor Chat) e os parâmetros Cloudflare Access OIDC (`ACCESS_CLIENT_ID`, `ACCESS_ISSUER`, `ACCESS_AUTHORIZATION_URL`, `ACCESS_TOKEN_URL`, `ACCESS_JWKS_URL`, todos em `https://*.cloudflareaccess.com` consistentes com o emissor e `ACCESS_CLIENT_ID`).
+- **Configuração injetada no build (`define.__ELO_DEPLOYMENT__`)**: objeto JSON serializado validado de forma estrita (`z.strictObject`) em `src/app/config/deployment.ts`, exigindo exatamente quatro campos (ex.: `{"origin":"https://elo.example.workers.dev","ownerEmail":"owner@example.com","tenantKey":"acme","allowedInboxIds":[101,102]}`):
+  - `origin`: URL `https://` válida, sem espaços, porta explícita, credenciais, path além de `/`, query string ou fragmento (normalizada para `origin`).
+  - `ownerEmail`: endereço de e-mail válido do proprietário autorizado para OAuth/Access.
+  - `tenantKey`: identificador do tenant casando com `^[a-z][a-z0-9-]{0,31}$` (1 a 32 caracteres).
+  - `allowedInboxIds`: lista de 1 a 50 inteiros positivos seguros, sem duplicatas, imutável em tempo de execução.
+
+Configuração ausente, com chaves extras ou inválida derruba o Worker na inicialização (*fail-closed*).
+
+> [!WARNING]
+> **Nunca altere `name` (nome do Worker) nem `tenantKey` em uma implantação existente.** Mudar qualquer um deles cria outro Worker ou outra instância do Durable Object (`env.AUTOMATION_STATE.getByName(tenantKey)`), deixando todo o estado atual (política, leases, operações, contexto e auditoria) órfão. Além disso, `tenantKey` é gravado nos marcadores HTML do CRM (`<!-- <tenantKey>:auto:start -->` / `<!-- <tenantKey>:auto:end -->`) e compõe os valores aceitos de `approach` e `actor` nos schemas e ferramentas de automação.
+
 ## Fluxo de release rastreável
 
 1. Verifique que a árvore Git está limpa, que `package.json` possui a versão `X.Y.Z` desejada e que a tag anotada/leve `vX.Y.Z` aponta exatamente para o `HEAD`:

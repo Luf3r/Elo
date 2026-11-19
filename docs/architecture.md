@@ -7,7 +7,9 @@
 ```text
 src/
 ├── index.ts                 # Entrada do Worker (fetch, queue, scheduled) e rate limit OAuth
-├── app/config/tenant.ts     # Constantes centralizadas de tenant (conta 'elotenant', inboxes 4101/4102, Chat account '7001', serviço)
+├── app/config/
+│   ├── deployment.ts        # Validação Zod (fail-closed) e congelamento de __ELO_DEPLOYMENT__ (origin, ownerEmail, tenantKey, allowedInboxIds)
+│   └── tenant.ts            # Constantes centralizadas de tenant derivadas de DEPLOYMENT (TENANT_ACCOUNT_KEY, ALLOWED_INBOX_IDS, TENANT_SERVICE_NAME)
 ├── shared/                  # Utilitários transversais (errors, http, cancellation, rate-limit, canonical, json) e contratos puros em contracts/
 ├── oauth/                   # OAuth 2.1 (@cloudflare/workers-oauth-provider) + Access OIDC JWKS
 ├── auth.ts                  # Contexto OAuth verificado e escopos
