@@ -24,7 +24,7 @@ const text = (value: unknown) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/\r?\n/g, ' ↵ ')
-    .replace(/[\\`*_{}\[\]()#+.!|~]/g, '\\$&');
+    .replace(/[\\`*_{}[\]()#+.!|~]/g, '\\$&');
 const sorted = <T>(items: readonly T[]) => [...items].sort((a, b) => compare(contextValue(a), contextValue(b)));
 const refs = (sources: SourceRef[]) =>
   sorted(sources)

@@ -8,10 +8,13 @@ export interface UpstreamRequestOptions {
 const MAX_RESPONSE_BYTES = 1_048_576;
 function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason);
+    const abort = () => {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Preserve original AbortSignal.reason (typed as any in DOM/Workers libs).
+      reject(signal.reason);
+    };
     promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
     if (signal.aborted) {
-      reject(signal.reason);
+      abort();
       return;
     }
     signal.addEventListener('abort', abort, { once: true });
@@ -75,13 +78,22 @@ export async function fetchJson(request: Request, options: UpstreamRequestOption
     }
     if (!response.body)
       throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Upstream returned an empty response.', false, response.status);
-    const reader = response.body.getReader();
+    const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
       while (true) {
         const { done, value } = await untilAborted(reader.read(), signal);
         if (done) break;
+        if (!(value instanceof Uint8Array)) {
+          void reader.cancel().catch(() => {});
+          throw new SafeError(
+            'UPSTREAM_INVALID_RESPONSE',
+            'Upstream returned a non-binary response chunk.',
+            false,
+            response.status,
+          );
+        }
         size += value.byteLength;
         if (size > MAX_RESPONSE_BYTES) {
           void reader.cancel().catch(() => {});

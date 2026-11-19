@@ -30,7 +30,7 @@ export function errorToolResult(error: unknown) {
   if (error instanceof SafeError && error.requiredScope)
     return {
       ...result,
-      _meta: { 'mcp/www_authenticate': [`Bearer error=\"insufficient_scope\", scope=\"${error.requiredScope}\"`] },
+      _meta: { 'mcp/www_authenticate': [`Bearer error="insufficient_scope", scope="${error.requiredScope}"`] },
     };
   return result;
 }

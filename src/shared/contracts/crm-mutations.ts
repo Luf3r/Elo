@@ -6,7 +6,7 @@ const safeKey = z
   .string()
   .min(1)
   .max(150)
-  .refine((v) => !v.split(/[.\[\]]/).some((p) => ['__proto__', 'prototype', 'constructor'].includes(p)));
+  .refine((v) => !v.split(/[.[\]]/).some((p) => ['__proto__', 'prototype', 'constructor'].includes(p)));
 const customFieldCatalogIdSchema = z.union([safeKey, crmIdSchema]);
 const text = (max: number) => z.string().trim().max(max);
 const contact = z
@@ -135,11 +135,7 @@ export function customFieldMatchesCatalog(
   if (entries.length !== 1) return false;
   const entry = entries[0]!;
   const optionIds = (entry.options ?? []).flatMap((o) =>
-    typeof o === 'string' || typeof o === 'number'
-      ? [o]
-      : o && typeof o === 'object' && 'id' in o
-        ? [(o as { id: unknown }).id]
-        : [],
+    typeof o === 'string' || typeof o === 'number' ? [o] : o && typeof o === 'object' && 'id' in o ? [o.id] : [],
   );
   switch (entry.type) {
     case 'text':

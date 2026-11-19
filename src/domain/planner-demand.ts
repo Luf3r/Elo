@@ -2,7 +2,7 @@ import { createDealRecordSchema, createTaskRecordSchema } from '../shared/contra
 import type { AutomationPolicy } from './policy-types';
 import type { AgentAnalysis } from './schemas/analysis';
 import type { Fact, SourceRef } from './schemas/common';
-import type { MutationCommand, PlannerDecision, ResolutionBundle, StageEvidence } from './schemas/planning';
+import type { PlannerDecision, ResolutionBundle, StageEvidence } from './schemas/planning';
 import type { DealSnapshot, PreparedWork } from './schemas/snapshot';
 import { buildFieldPatch, isActiveUser } from './fields';
 import { decideStage } from './stages';

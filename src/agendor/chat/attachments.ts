@@ -120,13 +120,17 @@ export async function downloadAttachment(
       return unavailable('unsupported_format');
     }
     if (!response.body) return unavailable('empty_attachment');
-    const reader = response.body.getReader();
+    const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
       while (true) {
         const { value, done } = await awaitChatRead(reader.read(), signal);
         if (done) break;
+        if (!(value instanceof Uint8Array)) {
+          await awaitChatRead(reader.cancel(), signal);
+          return unavailable('download_unavailable');
+        }
         size += value.byteLength;
         if (size > maxBytes) {
           await awaitChatRead(reader.cancel(), signal);

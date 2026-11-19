@@ -112,7 +112,7 @@ export const contactDetailSchema = z
       ? (v.payload as z.infer<typeof contactSchema>)
       : 'data' in v
         ? (v.data as z.infer<typeof contactSchema>)
-        : (v as z.infer<typeof contactSchema>),
+        : v,
   );
 export const contactConversationsEnvelopeSchema = collection(conversationSchema);
 export const attachmentsEnvelopeSchema = collection(z.object({ id: positiveId }).passthrough());

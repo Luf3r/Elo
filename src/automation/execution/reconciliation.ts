@@ -119,7 +119,7 @@ export async function reconcileCommand(commandKey: string, deps: ReconciliationD
         command.kind === 'create_organization' && strongCnpj && deps.reads.searchOrganizations
           ? (page: number) => deps.reads.searchOrganizations!({ cnpj: desired.cnpj as string, page, perPage: 100 })
           : command.kind === 'create_person' && strongEmail && deps.reads.searchPeople
-            ? (page: number) => deps.reads.searchPeople!({ email: email as string, page, perPage: 100 })
+            ? (page: number) => deps.reads.searchPeople!({ email, page, perPage: 100 })
             : undefined;
       const matches: CrmMutationRef[] = [];
       let complete = false;

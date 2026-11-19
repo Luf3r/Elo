@@ -66,7 +66,7 @@ export function readOAuthConfig(env: Env): OAuthConfig {
   return {
     clientId,
     clientSecret: env.ACCESS_CLIENT_SECRET,
-    issuer: env.ACCESS_ISSUER!,
+    issuer: env.ACCESS_ISSUER,
     authorizationUrl: endpoint(env.ACCESS_AUTHORIZATION_URL, 'authorization'),
     tokenUrl: endpoint(env.ACCESS_TOKEN_URL, 'token'),
     jwksUrl: endpoint(env.ACCESS_JWKS_URL, 'jwks'),

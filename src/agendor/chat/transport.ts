@@ -81,13 +81,17 @@ export function createChatTransport(options: ChatTransportOptions) {
         throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
       }
       if (!response.body) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned an empty response.', false);
-      const reader = response.body.getReader();
+      const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;
       try {
         while (true) {
           const { value, done } = await awaitChatRead(reader.read(), signal);
           if (done) break;
+          if (!(value instanceof Uint8Array)) {
+            await awaitChatRead(reader.cancel(), signal);
+            throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned a non-binary response chunk.', false);
+          }
           size += value.byteLength;
           if (size > CHAT_MAX_RESPONSE_BYTES) {
             await awaitChatRead(reader.cancel(), signal);

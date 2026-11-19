@@ -116,7 +116,8 @@ function changedFacts(commands: MutationCommand[], resolution: ResolutionBundle)
           ? 'demand'
           : undefined;
     if (!entity) continue;
-    const record = 'payload' in command ? command.payload : 'patch' in command ? command.patch : {};
+    const record: Record<string, unknown> =
+      'payload' in command ? command.payload : 'patch' in command ? command.patch : {};
     const demand =
       entity === 'demand'
         ? resolution.demands.demands.find(
@@ -136,8 +137,10 @@ function changedFacts(commands: MutationCommand[], resolution: ResolutionBundle)
     };
     for (const [field, value] of Object.entries(record)) {
       if (field === 'contact' && value && typeof value === 'object') {
-        for (const [key, item] of Object.entries(value))
-          if (key === 'email' || key === 'mobile') add(key === 'mobile' ? 'phone' : 'email', item);
+        for (const key of Object.keys(value)) {
+          if (key === 'email' && 'email' in value) add('email', value.email);
+          else if (key === 'mobile' && 'mobile' in value) add('phone', value.mobile);
+        }
       } else add(field, value);
     }
   }
@@ -177,7 +180,7 @@ export function buildSyncPlan(
           ...meta(`customer:${customer.customerId}`, fields.sourceRefs, 'crm:create'),
           kind: proposal.entity === 'organization' ? 'create_organization' : 'create_person',
           payload: record.data,
-        } as MutationCommand);
+        });
       reviewReasons.push(...fields.reviewReasons);
     } else {
       const snapshot = work.snapshot.records?.find((record) => sameRef(record.ref, customer.ref));

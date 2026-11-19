@@ -50,7 +50,7 @@ export function createAgendorChatClient(
   }
   const { inboxGuard } = options;
   const { reserve, get } = createChatTransport({
-    token: env.AGENDOR_CHAT_TOKEN!,
+    token: env.AGENDOR_CHAT_TOKEN,
     budgetGate: options.budgetGate,
     signal: options.signal,
     request: options.request,
@@ -109,7 +109,7 @@ export function createAgendorChatClient(
         sort_order: 'latest_first',
         page: String(page),
       });
-      const raw = await get(path + '?' + query);
+      const raw = await get(`${path}?${query.toString()}`);
       const rows = parse(conversationsEnvelopeSchema, raw).data.payload;
       if (
         rows.some((row) => verifiedConversationInbox(row) !== inboxId) ||

@@ -48,8 +48,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'warn',
       '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
       // Regras restantes que exigem refatoração ou limpeza em massa viram 'warn' na Fase 1.
-      // Métodos async sem await em mocks de teste que implementam interfaces Promise.
-      '@typescript-eslint/require-await': 'warn',
+      // A regra só acusa funções async sem await, que aqui implementam interfaces que devolvem Promise; tirar o async trocaria rejeição por exceção síncrona, e promessas esquecidas já são pegas por no-floating-promises e no-misused-promises.
+      '@typescript-eslint/require-await': 'off',
       // Type assertions redundantes legadas em src/ e test/, pendentes de limpeza na Fase 3.
       '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
       // Imports/variáveis não usados legados em test/; prefixo _ já ignorado por convenção.
@@ -263,6 +263,29 @@ export default tseslint.config(
       'no-empty': 'warn',
       // Omissão intencional de `cause` em erros sanitizados (ex.: scripts/verify-chat-contract.ts) para não vazar transporte/headers.
       'preserve-caught-error': 'warn',
+    },
+  },
+  {
+    files: ['src/**/*.ts', 'scripts/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-argument': 'error',
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+      '@typescript-eslint/no-unsafe-call': 'error',
+      '@typescript-eslint/no-unsafe-member-access': 'error',
+      '@typescript-eslint/no-unsafe-return': 'error',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/restrict-plus-operands': 'error',
+      '@typescript-eslint/prefer-promise-reject-errors': 'error',
+      '@typescript-eslint/unbound-method': 'error',
+      '@typescript-eslint/no-base-to-string': 'error',
+      'no-useless-escape': 'error',
+      'no-empty': 'error',
+      'preserve-caught-error': 'error',
     },
   },
   {
