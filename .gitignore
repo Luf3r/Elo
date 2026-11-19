@@ -12,3 +12,6 @@ dist/
 *.tgz
 agendor-docs.html
 agendor-api.apib
+
+# Real deployment config stays local; start from wrangler.example.jsonc.
+wrangler.jsonc

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { isEntrypoint, loadLocalDevVars, readJsoncFile } from './lib/args.ts';
 import { collectKnownSecrets, redactSecrets } from './lib/redaction.ts';
+import { wranglerConfigPath } from './lib/wrangler-config.ts';
 
 interface WranglerConfig {
   name?: string;
@@ -13,7 +14,7 @@ interface WranglerConfig {
 /** Stage `ACCESS_CLIENT_SECRET` via Wrangler stdin without exposing secrets in argv or output. */
 export function stageOauthSecret(): number {
   loadLocalDevVars();
-  const config = readJsoncFile<WranglerConfig>('wrangler.jsonc');
+  const config = readJsoncFile<WranglerConfig>(wranglerConfigPath());
   assert(typeof config.name === 'string' && config.name.trim().length > 0, 'Missing Worker name in wrangler.jsonc.');
   assert.equal(config.vars?.ACCESS_CLIENT_ID, 'example-client-id');
   const value = process.env.ACCESS_CLIENT_SECRET;

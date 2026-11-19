@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import { parseJsonc, readJsoncFile } from './args.ts';
+import { wranglerConfigPath } from './wrangler-config.ts';
 
 interface WranglerDeploymentConfig {
   define?: {
@@ -10,8 +11,7 @@ interface WranglerDeploymentConfig {
 }
 
 function readConfiguredOrigin(): string {
-  const wranglerPath = resolve(import.meta.dirname, '../../wrangler.jsonc');
-  const config = readJsoncFile<WranglerDeploymentConfig>(wranglerPath);
+  const config = readJsoncFile<WranglerDeploymentConfig>(wranglerConfigPath());
   const rawDefine = config.define?.__ELO_DEPLOYMENT__;
   const deployment = typeof rawDefine === 'string' ? parseJsonc<unknown>(rawDefine) : rawDefine;
   assert(

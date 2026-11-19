@@ -1,11 +1,12 @@
 import { unstable_dev } from 'wrangler';
 import { isEntrypoint } from './lib/args.ts';
+import { wranglerConfigPath } from './lib/wrangler-config.ts';
 
 /** Start a local ephemeral Wrangler dev worker without persistent SQLite state. */
 export async function startEphemeralDev(): Promise<void> {
   // Windows fallback for workerd SQLite persistence failures; production is unchanged.
   const worker = await unstable_dev('src/index.ts', {
-    config: 'wrangler.jsonc',
+    config: wranglerConfigPath(),
     local: true,
     ip: '127.0.0.1',
     port: 8787,

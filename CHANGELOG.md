@@ -24,6 +24,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
+- **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
 > **Próxima versão publicada: `0.2.0`** devido à **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4). A versão em `package.json` permanece `0.1.7` até o momento da preparação do release.
 
 - **Fase 0 — Rede de segurança (`c2f2518`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.

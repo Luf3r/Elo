@@ -73,11 +73,11 @@ async function loadToolsRunner(): Promise<ToolsRunner> {
       ].join('\n');
 
       const wranglerConfig = readJsoncFile<{ define?: { __ELO_DEPLOYMENT__?: unknown } }>(
-        resolve(ROOT_DIR, 'wrangler.jsonc'),
+        resolve(ROOT_DIR, 'test/wrangler.jsonc'),
       );
       const deploymentDefine = wranglerConfig.define?.__ELO_DEPLOYMENT__;
       if (typeof deploymentDefine !== 'string' || deploymentDefine.length === 0) {
-        throw new Error('Missing __ELO_DEPLOYMENT__ define in wrangler.jsonc.');
+        throw new Error('Missing __ELO_DEPLOYMENT__ define in test/wrangler.jsonc.');
       }
 
       const result = await build({

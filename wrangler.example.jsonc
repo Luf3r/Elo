@@ -1,3 +1,7 @@
+// Example deployment configuration. Copy to wrangler.jsonc (ignored by Git) and
+// replace every placeholder before deploying. See docs/operations/deploy.md.
+// Never change "name" or __ELO_DEPLOYMENT__.tenantKey of an existing deployment:
+// that creates another Worker and another Durable Object.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "elo-agendor-mcp",
@@ -7,7 +11,7 @@
   "secrets": { "required": ["AGENDOR_CRM_TOKEN", "ACCESS_CLIENT_SECRET"] },
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
   "vars": {
-    "AGENDOR_CHAT_ACCOUNT_ID": "7001",
+    "AGENDOR_CHAT_ACCOUNT_ID": "1000",
     "ACCESS_CLIENT_ID": "example-client-id",
     "ACCESS_ISSUER": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id",
     "ACCESS_AUTHORIZATION_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/authorization",
@@ -16,7 +20,7 @@
   },
   "define": {
     "__BUILD_COMMIT__": "\"unknown\"",
-    "__ELO_DEPLOYMENT__": "{\"origin\":\"https://elo-agendor-mcp.example.workers.dev\",\"ownerEmail\":\"owner@elo.example\",\"tenantKey\":\"elotenant\",\"allowedInboxIds\":[4101,4102]}"
+    "__ELO_DEPLOYMENT__": "{\"origin\":\"https://elo-agendor-mcp.example.workers.dev\",\"ownerEmail\":\"owner@example.com\",\"tenantKey\":\"acme\",\"allowedInboxIds\":[101,102]}"
   },
   "durable_objects": { "bindings": [{ "name": "AUTOMATION_STATE", "class_name": "AutomationAccount" }] },
   "triggers": { "crons": ["*/5 * * * *"] },
