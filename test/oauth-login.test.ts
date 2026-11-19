@@ -93,9 +93,7 @@ describe('owner-only browser login', () => {
     const access = new URL(approved.headers.get('location')!);
     expect(access.hostname).toBe('elo-unit.cloudflareaccess.com');
     expect(access.searchParams.get('code_challenge_method')).toBe('S256');
-    expect(access.searchParams.get('redirect_uri')).toBe(
-      'https://elo-agendor-mcp.example.workers.dev/callback',
-    );
+    expect(access.searchParams.get('redirect_uri')).toBe('https://elo-agendor-mcp.example.workers.dev/callback');
     const mock = await simulateAccess(
       access.searchParams.get('nonce')!,
       wrongEmail ? { email: 'attacker@example.com' } : {},

@@ -8,8 +8,7 @@ const fixture = {
   ACCESS_CLIENT_ID: 'unit-client',
   ACCESS_CLIENT_SECRET: 'unit-secret',
   ACCESS_ISSUER: 'https://elo-unit.cloudflareaccess.com',
-  ACCESS_AUTHORIZATION_URL:
-    'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/authorization',
+  ACCESS_AUTHORIZATION_URL: 'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/authorization',
   ACCESS_TOKEN_URL: 'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/token',
   ACCESS_JWKS_URL: 'https://elo-unit.cloudflareaccess.com/cdn-cgi/access/sso/oidc/unit-client/jwks',
 };
