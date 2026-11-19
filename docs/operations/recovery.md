@@ -57,3 +57,7 @@ Procedimentos operacionais vigentes para pausar a automação, reconciliar opera
   - **Por conteúdo de texto**: valores `string` que contenham endereços de e-mail, tokens `Bearer` ou sequências de 11 ou mais dígitos têm esses trechos substituídos por `'[redacted]'`.
   - **Estruturas aninhadas**: objetos e arrays aninhados não são registrados e são substituídos por `'[omitted]'`.
   - **Erros sem mensagem**: `errorFields(error)` devolve apenas `{ errorType, code? }` — onde `errorType` preserva `error.name` quando casa `/^[A-Za-z]+Error$/` (ou `'Error'` nos demais casos) e `code` é incluído somente para instâncias de `SafeError` — omitindo `error.message` para evitar vazamento de PII ou payloads upstream.
+- **Eventos emitidos nos pontos de entrada**:
+  - `auth_service_unavailable` (`error`, `src/index.ts`): emitido quando o `fetch` principal captura uma falha antes de devolver HTTP `503`; registra `{ path, ...errorFields(error) }` apenas com o `pathname` da requisição (sem query string).
+  - `unexpected_error` (`error`, `src/mcp/result.ts`): emitido por `errorToolResult` com `errorFields(error)` antes da conversão quando o erro não é `SafeError`; falhas esperadas do tipo `SafeError` não são registradas.
+  - `oauth_authorization_failed` (`warn`, `src/oauth/handler.ts`): emitido em falhas de `GET /authorize` com o diagnóstico sanitizado de `oauthFailureDiagnostic(phase, error)`.

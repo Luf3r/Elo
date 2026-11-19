@@ -1,4 +1,5 @@
 import { errorData, SafeError } from '../shared/errors';
+import { errorFields, logEvent } from '../shared/logger';
 export const MAX_TOOL_OUTPUT_BYTES = 524_288;
 
 export function jsonToolResult(value: unknown) {
@@ -22,6 +23,9 @@ export function jsonToolResult(value: unknown) {
   return { content: [{ type: 'text' as const, text }] };
 }
 export function errorToolResult(error: unknown) {
+  if (!(error instanceof SafeError)) {
+    logEvent('error', 'unexpected_error', errorFields(error));
+  }
   const result = { ...jsonToolResult({ error: errorData(error) }), isError: true as const };
   if (error instanceof SafeError && error.requiredScope)
     return {

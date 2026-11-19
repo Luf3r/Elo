@@ -1,5 +1,6 @@
 import { AuthorizationError, CimdFetchError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../env';
+import { logEvent } from '../shared/logger';
 import { readOAuthConfig, ORIGIN, OPTIONAL_SCOPE, SUPPORTED_SCOPES, type OAuthConfig } from './config';
 import { verifyAccessIdentity } from './identity';
 import { consentPage } from './consent';
@@ -170,7 +171,7 @@ export const loginHandler = {
       return pageError(405, 'Método não permitido.');
     } catch (error) {
       if (pathname === '/authorize' && request.method === 'GET')
-        console.warn({ event: 'oauth_authorization_failed', ...oauthFailureDiagnostic(phase, error) });
+        logEvent('warn', 'oauth_authorization_failed', oauthFailureDiagnostic(phase, error));
       if (error instanceof RangeError) return pageError(413, 'Solicitação muito grande.');
       if (error instanceof AuthorizationError || error instanceof CimdFetchError || error instanceof TypeError)
         return pageError(400, 'Solicitação inválida ou expirada. Inicie a conexão novamente.');

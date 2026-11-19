@@ -8,6 +8,7 @@ import { acceptChatHint } from './automation/ingress';
 import { automationDomainHooks } from './automation/resolution';
 import { AutomationAccount as BaseAutomationAccount } from './automation/state/account';
 import { accountState } from './automation/state/budget';
+import { errorFields, logEvent } from './shared/logger';
 
 export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
@@ -49,7 +50,8 @@ export default {
       if (path === '/.well-known/oauth-protected-resource')
         request = new Request(new URL('/.well-known/oauth-protected-resource/mcp', request.url), request);
       return await oauthProvider.fetch(request, env, ctx);
-    } catch {
+    } catch (error) {
+      logEvent('error', 'auth_service_unavailable', { path, ...errorFields(error) });
       return Response.json(
         { error: 'temporarily_unavailable', error_description: 'Authentication service unavailable.' },
         { status: 503, headers: { 'Cache-Control': 'no-store' } },

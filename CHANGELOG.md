@@ -29,6 +29,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 - **Fase 5.1 — Remoção do token fixo (`61c9fae`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
 - **Fase 2 — Documentação**: gerador `scripts/docs-tools.mjs` (`npm run docs:tools`) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
 - **Fase 4.2 (parte 1) — Logger estruturado**: adicionado `src/shared/logger.ts` (`logEvent` e `errorFields`) emitindo um único objeto indexável pelo Workers Logs com redação automática de campos sensíveis e padrões de PII/token, omissão de objetos/arrays aninhados e extração de erros sem mensagem.
+- **Fase 4.2 (parte 2) — Logs nos pontos de entrada HTTP e MCP**: uso de `logEvent` e `errorFields` em `src/index.ts` (`auth_service_unavailable` no `503` sem query string), `src/mcp/result.ts` (`unexpected_error` apenas para erros fora de `SafeError`) e `src/oauth/handler.ts` (`oauth_authorization_failed`), preservando todas as respostas.
 
 ## [0.1.7] — 2026-11-10
 
