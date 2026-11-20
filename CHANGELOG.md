@@ -25,6 +25,9 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
+- **Dependências**: `agents` 0.29.0 → 0.33.0 junto com `@modelcontextprotocol/server` e `@modelcontextprotocol/client` 2.3.1 → 2.4.0 (o `agents` fixa a versão exata do SDK do MCP, por isso sobem juntos; o SDK v1 e o express saem da árvore). Também `jose` 6.2.17, `@cloudflare/workers-oauth-provider` 1.2.4, `wrangler` 4.163.0, `@cloudflare/vitest-plugin` 1.8.3, `@cloudflare/workers-types` 5.20261117.1, `@modelcontextprotocol/inspector` 2.15.0, `@types/node` 26.6.6 e `actions/checkout`/`actions/setup-node` v7 nos workflows.
+- **Dependabot**: novo grupo `mcp-stack` para `agents` e `@modelcontextprotocol/*`, que agora são atualizados sempre no mesmo PR.
+
 ## [0.2.0] — 2026-11-20
 
 - **Staging só leitura e rollout gradual (Fase 8)**: ambiente `staging` com recursos próprios e `readOnly: true` em `__ELO_DEPLOYMENT__`; nesse modo o OAuth só concede escopos de leitura e cada requisição descarta os demais escopos do token. `npm run release` passa a imprimir staging, `wrangler versions upload` e `versions deploy` em 10%, 50% e 100%; o deploy direto usa `--env=""`.

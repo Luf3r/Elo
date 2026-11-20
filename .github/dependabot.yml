@@ -6,9 +6,16 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # agents pins exact peer versions of the MCP SDK, so they must move together.
+      mcp-stack:
+        patterns:
+          - agents
+          - '@modelcontextprotocol/*'
       dev-dependencies:
         dependency-type: development
         update-types: [minor, patch]
+        exclude-patterns:
+          - '@modelcontextprotocol/*'
   - package-ecosystem: github-actions
     directory: /
     schedule:
