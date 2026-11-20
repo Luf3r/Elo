@@ -13,6 +13,8 @@ Este documento descreve o modelo de ameaça, os controles de autenticação e au
 - **Rate limiting por superfície**:
   - `MCP_RATE_LIMITER` (`1001`): 30 requisições por janela de 10 s por `clientId` autenticado.
   - `OAUTH_RATE_LIMITER` (`1003`): 30 requisições por janela de 10 s por IP (`CF-Connecting-IP`) nas rotas OAuth (`/authorize`, `/callback`, `/token`, `/token/revoke`, `/register`). Requisições sem `CF-Connecting-IP` são recusadas imediatamente com `429` (`Retry-After: 10`), sem fallback para chave compartilhada.
+- **Registro dinâmico de clientes (`/register`)**: o endpoint é aberto e limitado somente pelo rate limiter por IP de `OAUTH_RATE_LIMITER`; os registros ficam no `OAUTH_KV` com TTL de 90 dias. O risco de registro aberto é aceito porque o acesso às ferramentas ainda exige a identidade `OWNER_EMAIL`. O crescimento do KV permanece como ponto de atenção operacional.
+- **Diagnóstico OAuth**: os eventos `oauth_identity_exchange_failed`, `oauth_consent_failed` e `oauth_callback_failed` (`warn`) registram falhas sanitizadas nas etapas de troca de identidade, consentimento e callback.
 - **Ingresso de webhook do Chat**: o endpoint público sem assinatura foi removido (`404`); esse ingresso só voltará com webhook assinado do Agendor.
 - **Egress e downloads seguros**:
   - O Worker utiliza a flag `global_fetch_strictly_public`.

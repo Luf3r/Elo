@@ -26,6 +26,13 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
+- **Correção de comportamento da fila**: mensagens `queued` e `uncertain` são reagendadas como mensagens novas com `delaySeconds` e confirmadas com `ack`, sem consumir `max_retries`; `queue_message_dead_lettered` só ocorre com `attempts > 4`, na 5ª entrega. Corpos inválidos geram `queue_message_malformed`.
+- **Observabilidade**: `errorFields` pode registrar `errorSite` com a primeira linha do stack, redigida e limitada a 200 caracteres, sem incluir a mensagem do erro.
+- **Observabilidade OAuth**: novos avisos `oauth_identity_exchange_failed`, `oauth_consent_failed` e `oauth_callback_failed` registram falhas diagnósticas sanitizadas.
+- **Arquitetura interna**: `isConfiguredSecret` foi centralizada em `src/shared/secrets.ts`; `timingSafeTokenEqual` e `enforceCrmRateLimit`/`enforceChatRateLimit` foram removidas. `src/shared` não pode importar camadas de automation, domain, agendor, mcp ou oauth, e o orçamento usa `BUDGET_WINDOW_MS`/`BUDGET_MAX_RESERVATIONS`.
+- **Cobertura**: adicionados pisos para `src/oauth`, `src/mcp`, `src/agendor` e `src/shared` em `vitest.config.ts`.
+- **Sincronia documental**: `test/readme-sync.test.mjs` verifica a versão e os passos de `npm run check` no `README.md` e no `AGENTS.md`.
+
 ## [0.2.1] — 2026-11-20
 
 - **Dependências**: `agents` 0.29.0 → 0.33.0 junto com `@modelcontextprotocol/server` e `@modelcontextprotocol/client` 2.3.1 → 2.4.0 (o `agents` fixa a versão exata do SDK do MCP, por isso sobem juntos; o SDK v1 e o express saem da árvore). Também `jose` 6.2.17, `@cloudflare/workers-oauth-provider` 1.2.4, `wrangler` 4.163.0, `@cloudflare/vitest-plugin` 1.8.3, `@cloudflare/workers-types` 5.20261117.1, `@modelcontextprotocol/inspector` 2.15.0, `@types/node` 26.6.6 e `actions/checkout`/`actions/setup-node` v7 nos workflows.
@@ -33,17 +40,11 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [0.2.0] — 2026-11-20
 
-- **Staging só leitura e rollout gradual (Fase 8)**: ambiente `staging` com recursos próprios e `readOnly: true` em `__ELO_DEPLOYMENT__`; nesse modo o OAuth só concede escopos de leitura e cada requisição descarta os demais escopos do token. `npm run release` passa a imprimir staging, `wrangler versions upload` e `versions deploy` em 10%, 50% e 100%; o deploy direto usa `--env=""`.
-- **Observabilidade (4.3)**: `invocation_logs` ligado e quatro consultas salvas no Workers Observability (eventos, falhas inesperadas, fila e DLQ, erros por código).
-- **Contrato no CI (6.5)**: workflow manual `Agendor contract` com os segredos do environment `contract`; `test:contract` usa `wrangler.example.jsonc` quando não há `wrangler.jsonc` local.
-- **Versão 0.2.0** em `package.json`, por causa da quebra de códigos de erro da Fase 4.
-- **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
 > **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4): clientes avisados antes da publicação em 2026-11-20. Rollout gradual a partir do staging só leitura: 10%, 50% e 100% da versão `0266825f`, sem erros nas invocações.
 
-- **Fase 0 — Rede de segurança (`803f5fa`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
+- **Fase 0 — Rede de segurança (`803f5fa`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.ts` (migrado na Fase 7) e exposição de `commit` em `/health` e `server_status`.
 - **Fase 1 — Formatação e lint (`e30d911`, `2ff4995`, `eea14bb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
-- **Fase 5.1 — Remoção do token fixo (`1f767cc`)**: remoção definitiva de `MCP_TEST_TOKEN` e `scripts/setup-local-token.mjs` (C10).
-- **Fase 2 — Documentação**: gerador `scripts/docs-tools.mjs` (`npm run docs:tools`) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
+- **Fase 2 — Documentação**: gerador `scripts/docs-tools.ts` (`npm run docs:tools`, migrado na Fase 7) com teste de sincronia, reescrita do `README.md`, documentação vigente de arquitetura, segurança, operações, integrações e ADRs, `CHANGELOG.md`, `AGENTS.md` e organização histórica em `docs/history/`.
 - **Fase 3 — Reestruturação**:
   - Camada de domínio pura extraída para `src/domain/` (identidade, demandas, planejador, campos, estágios, política, autorização e revisões), sem dependências de IO, `env`, `fetch` ou Durable Object.
   - Portas de adaptadores definidas em `src/agendor/ports.ts` (`BudgetGate` e `InboxGuard`), injetadas na criação dos clientes Agendor e removendo imports de `src/agendor/` para `src/automation/` ou `src/domain/` (C5).
@@ -68,6 +69,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
     - `queue_message_retry` (`warn`, `src/automation/execution/queue.ts`) quando `handleAutomationQueue` agenda retry (`attempts < 4`);
     - `queue_message_dead_lettered` (`error`, `src/automation/execution/queue.ts`) na 4ª tentativa antes do envio à DLQ;
     - `watchdog_failed` (`error`, `src/index.ts`) quando o handler `scheduled` falha ao executar `maintainAccount`.
+- **Fase 5.1 — Remoção do token fixo (`1f767cc`)**: remoção definitiva de `MCP_TEST_TOKEN` e do script `scripts/setup-local-token.mjs` (C10).
 - **Fase 5.2 — Remoção de `/automation/chat-events` e endurecimento OAuth**:
   - Remoção do endpoint não assinado `/automation/chat-events` e da flag `AUTOMATION_CHAT_HINTS_ENABLED` (C11).
   - Rotas OAuth (`/authorize`, `/callback`, `/token`, `/token/revoke`, `/register`) sem cabeçalho `CF-Connecting-IP` passam a responder HTTP `429` (`temporarily_unavailable`, `Retry-After: 10`, `Cache-Control: no-store`) antes de consultar `OAUTH_RATE_LIMITER`.
@@ -78,6 +80,11 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
   - Testes de propriedade com `fast-check` (`test/domain/properties.test.ts`) cobrindo idempotência e invariantes de `normalizeName`, `normalizeEmail`, `normalizeDocument`, `normalizedPhone`, `canonical` e `payloadDigest`.
 - **Fase 7 — Scripts em TypeScript**:
   - Migração dos utilitários `scripts/*.mjs` para TypeScript (`scripts/*.ts`) executados diretamente pelo Node (`>=22.19.0`) via *type stripping*, com helpers compartilhados em `scripts/lib/` (`args.ts`, `redaction.ts`, `oauth-session.ts`, `mcp-client.ts`) e catálogo atualizado em `docs/operations/scripts.md`.
+- **Observabilidade (Fase 4.3)**: `invocation_logs` ligado e quatro consultas salvas no Workers Observability (eventos, falhas inesperadas, fila e DLQ, erros por código).
+- **Contrato no CI (Fase 6.5)**: workflow manual `Agendor contract` com os segredos do environment `contract`; `test:contract` usa `wrangler.example.jsonc` quando não há `wrangler.jsonc` local.
+- **Staging só leitura e rollout gradual (Fase 8)**: ambiente `staging` com recursos próprios e `readOnly: true` em `__ELO_DEPLOYMENT__`; nesse modo o OAuth só concede escopos de leitura e cada requisição descarta os demais escopos do token. `npm run release` passa a imprimir staging, `wrangler versions upload` e `versions deploy` em 10%, 50% e 100%; o deploy direto usa `--env=""`.
+- **Versão 0.2.0** em `package.json`, por causa da quebra de códigos de erro da Fase 4.
+- **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
 
 ## [0.1.7] — 2026-11-10
 

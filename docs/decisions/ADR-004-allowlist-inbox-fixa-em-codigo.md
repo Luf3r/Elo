@@ -5,11 +5,11 @@
 
 ## Contexto
 
-A conta do Agendor Chat pode conter múltiplas caixas de entrada, mas apenas duas caixas comerciais específicas (`4101` e `4102`) fazem parte do escopo autorizado da automação. O endpoint de listagem de conversas do Chat não comprova filtro nativo isolado por caixa no servidor upstream, e uma política configurada dinamicamente sem limite rígido poderia expor inadvertidamente conversas de outras caixas.
+A conta do Agendor Chat pode conter múltiplas caixas de entrada, mas somente as caixas comerciais definidas para cada implantação fazem parte do escopo autorizado da automação (atualmente `4101` e `4102` nesta implantação). O endpoint de listagem de conversas do Chat não comprova filtro nativo isolado por caixa no servidor upstream, e uma política configurada dinamicamente sem limite rígido poderia expor inadvertidamente conversas de outras caixas.
 
 ## Decisão
 
-Fixar a allowlist autorizada em código (`allowedInboxIds = Object.freeze([4101, 4102])` em `src/automation/inbox-policy.ts`) e exigir interseção com `policy.allowedInboxIds` (lista vazia nega tudo, fail-closed). A restrição é verificada em todas as etapas críticas: inventário completo antes do discovery, detalhe canônico antes da preparação/retomada e revalidação antes e depois de cada dispatch na fila.
+Obter a allowlist autorizada de `allowedInboxIds` no define `__ELO_DEPLOYMENT__` do build. `src/app/config/deployment.ts` valida essa configuração fail-closed; `src/app/config/tenant.ts` a expõe como `ALLOWED_INBOX_IDS`, e `assertInboxAllowed` em `src/domain/inbox-policy.ts` verifica os IDs autorizados. A allowlist é imutável em tempo de execução, e a política persistida só pode restringi-la (`allowedInboxIds ∩ policy.allowedInboxIds`; lista vazia nega tudo, fail-closed). A restrição é verificada em todas as etapas críticas: inventário completo antes do discovery, detalhe canônico antes da preparação/retomada e revalidação antes e depois de cada dispatch na fila.
 
 ## Alternativas consideradas
 
@@ -18,8 +18,8 @@ Fixar a allowlist autorizada em código (`allowedInboxIds = Object.freeze([4101,
 
 ## Consequências
 
-- Expandir para uma nova caixa exige alteração deliberada de código, revisão e deploy.
-- Enquanto `GET /accounts/{account}/inboxes` não retornar exclusivamente `4101` e `4102` sem duplicatas ou paginação restante, o discovery falha fechado para proteger caixas externas.
+- Expandir para uma nova caixa exige alteração deliberada de `allowedInboxIds` na configuração da implantação, novo build e deploy.
+- Enquanto `GET /accounts/{account}/inboxes` não retornar exclusivamente o conjunto configurado em `allowedInboxIds` (atualmente `4101` e `4102` nesta implantação), sem duplicatas ou paginação restante, o discovery falha fechado para proteger caixas externas.
 - Esta regra é tratada como invariante de segurança do repositório.
 
 ## Revisão de 2026-11-19

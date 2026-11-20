@@ -50,7 +50,7 @@ flowchart LR
 ```
 
 1. **`automation_preflight_sync` (somente leitura)**: verifica ator OAuth, modo efetivo e versão da política no DO, allowlist efetiva, recorte `inboxIds`, limites e disponibilidade do SQLite/lease. Não reserva lease, não consome orçamento do Agendor e não acessa Chat ou CRM. Retorna `ready_for_scope_check`, `ready_for_discovery` (para `target.kind = "pending"`) ou `blocked`.
-2. **`automation_discover_pending`**: consulta o inventário completo de inboxes do Chat antes de cada página e exige exatamente `[4101, 4102]` sem duplicatas ou paginação restante. Lê uma página por chamada de uma caixa autorizada (janela de 7 dias, até 100 conversas/página e 10 páginas/caixa), persiste cursor opaco (expira em 30 min) e eventos `pending_activity` em SQLite, e devolve metadados `candidates[].prepare` sem expor mensagens ou anexos.
+2. **`automation_discover_pending`**: consulta o inventário completo de inboxes do Chat antes de cada página e exige exatamente o conjunto configurado por `allowedInboxIds` em `__ELO_DEPLOYMENT__`, sem duplicatas ou paginação restante (por exemplo, `[4101, 4102]` na implantação atual). Lê uma página por chamada de uma caixa autorizada (janela de 7 dias, até 100 conversas/página e 10 páginas/caixa), persiste cursor opaco (expira em 30 min) e eventos `pending_activity` em SQLite, e devolve metadados `candidates[].prepare` sem expor mensagens ou anexos.
 3. **`automation_prepare_sync`**: reserva ou renova um `WorkLease` (600 s) com `fence` monotônico e trava de preparação (`preparation_locks`, expiração de 60 s). Valida o inbox canônico antes das leituras de conteúdo, coleta mensagens (`after`), metadados de anexos, contato individual (`crmPersonId`), candidatos e catálogo CRM. Pode retornar `continue` ou `deferred` com `retryAt` e cursor vinculados ao trabalho e cliente OAuth; cinco adiamentos sem avanço bloqueiam a preparação. Em `ready`, grava manifesto e snapshot em uma transação SQLite.
 4. **`automation_submit_analysis`**: valida ator, lease, revisões exatas de snapshot/contexto e fontes citadas. Persiste análise estruturada, projeção pendente de contexto e plano determinístico (`SyncPlan`). Em modo `preview`, o fluxo termina aqui sem escrever no CRM.
 5. **`automation_apply_plan`**: exige `policy.mode === "apply"`, `policyVersion` atual, `nativeCreatorDisabled === true` quando existir comando `create_person`, e todas as capacidades CRM derivadas de cada comando do plano no token OAuth do chamador. Gera `AuthorizedPlan` com validade máxima de 300 segundos (limitada à expiração do ator), reserva os comandos com fencing e enfileira uma referência mínima na `AUTOMATION_QUEUE`.
@@ -60,7 +60,7 @@ Ferramentas CRM diretas (`crm_create_*`, `crm_enrich_*`, `crm_update_task` e as 
 
 ## Durable Object `AutomationAccount`
 
-`accountState(env)` resolve sempre o singleton lógico `env.AUTOMATION_STATE.getByName('elotenant')`. Nenhum chamador HTTP pode escolher outra conta.
+`accountState(env)` resolve sempre o singleton lógico `env.AUTOMATION_STATE.getByName(tenantKey)`, usando `tenantKey` de `__ELO_DEPLOYMENT__` (atualmente `elotenant` nesta implantação). Nenhum chamador HTTP pode escolher outra conta.
 
 - **SQLite e migrations**: `migrate(ctx.storage)` executa no construtor dentro de `blockConcurrencyWhile` e mantém 8 versões numeradas em `schema_migrations`:
   - **v1**: `account_binding`, `customers`, `bindings`, `identity_reservations`, `events`, `work`, `snapshot_manifest`, `demands`, `facts`, `contexts`, `plans`, `commands`, `reviews`, `outbox`, `policy`, `budget`, `budget_clock`.
@@ -76,7 +76,7 @@ Ferramentas CRM diretas (`crm_create_*`, `crm_enrich_*`, `crm_update_task` e as 
 ## Fila, execução recuperável e DLQ
 
 - **Fila**: `AUTOMATION_QUEUE` (`elo-agendor-operations`), configurada em `wrangler.jsonc` com `max_batch_size: 1`, `max_concurrency: 1`, `max_retries: 4` (5 entregas totais: 1 inicial + 4 retries) e Dead Letter Queue `elo-agendor-operations-dlq`.
-- **Envelope mínimo**: a mensagem da fila carrega somente `{ accountKey: "elotenant", operationId, version }`, sem tokens OAuth, credenciais Agendor ou corpos de clientes.
+- **Envelope mínimo**: a mensagem da fila carrega somente `{ accountKey: tenantKey, operationId, version }` (atualmente `elotenant` nesta implantação), sem tokens OAuth, credenciais Agendor ou corpos de clientes.
 - **Revalidação e envio (`createQueueExecutionDeps` / `resumeOperation`)**: antes de cada escrita no CRM, o consumidor verifica a política atual, o inbox canônico de todas as conversas associadas, os hashes das fontes (`message`, `contact`, `crm`) e os valores `before` observados no registro alvo. Após `POST`/`PUT`, confirma o efeito com `GET` antes de marcar o recibo como `confirmed`.
 - **Retries e incerteza**: apenas rejeições conhecidas `429` permitem nova tentativa automática (respeitando `Retry-After` ou backoff de `10`, `20`, `40`, `80` e `160` segundos, limitado a 5 tentativas no ledger de execução). Timeout, erro desconhecido ou abandono de token de envio (> 30 s) preserva a reserva como `uncertain` e permite apenas reconciliação por `GET`, nunca repetição automática de `POST`. Esgotar as 4 redeliveries envia a mensagem à DLQ, mantendo o estado recuperável no DO.
 
