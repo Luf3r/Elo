@@ -35,11 +35,19 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: 'istanbul',
-      include: ['src/domain/**/*.ts', 'src/automation/**/*.ts'],
+      include: [
+        'src/domain/**/*.ts',
+        'src/automation/**/*.ts',
+        'src/oauth/**/*.ts',
+        'src/mcp/**/*.ts',
+        'src/agendor/**/*.ts',
+        'src/shared/**/*.ts',
+      ],
       reporter: ['text', 'json-summary'],
       reportsDirectory: './dist/coverage',
-      // Floors sit one point below the measured coverage: platform and timing
-      // differences move a single branch between Windows and the Linux CI.
+      // Domain and automation floors sit one point below measured coverage.
+      // OAuth, MCP, Agendor, and shared floors sit three points below the lowest
+      // measured subdirectory because coverage varies more between Windows and Linux CI.
       thresholds: {
         'src/domain/**/*.ts': {
           statements: 86,
@@ -52,6 +60,30 @@ export default defineConfig({
           branches: 81,
           functions: 96,
           lines: 93,
+        },
+        'src/oauth/**/*.ts': {
+          statements: 87,
+          branches: 77,
+          functions: 97,
+          lines: 90,
+        },
+        'src/mcp/**/*.ts': {
+          statements: 87,
+          branches: 68,
+          functions: 84,
+          lines: 88,
+        },
+        'src/agendor/**/*.ts': {
+          statements: 87,
+          branches: 79,
+          functions: 90,
+          lines: 89,
+        },
+        'src/shared/**/*.ts': {
+          statements: 88,
+          branches: 80,
+          functions: 85,
+          lines: 89,
         },
       },
     },
