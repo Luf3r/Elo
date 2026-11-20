@@ -26,7 +26,7 @@ Referência vigente dos scripts configurados em `package.json` e dos utilitário
 | `test:watch` | `vitest --exclude=test/contract/**` | Offline (hermético) | Modo observação da suíte Vitest principal |
 | `test:domain` | `vitest run --config vitest.domain.config.ts` | Offline (Node) | Testes unitários puros de `src/domain/` em ambiente Node puro |
 | `test:adapters` | `vitest run --config vitest.adapters.config.ts` | Offline (Node) | Testes unitários de confiabilidade dos adaptadores |
-| `test:scripts` | `node --test test/oauth-scripts.test.mjs test/scripts-lib.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs test/automation-verifier.test.mjs test/release-script.test.mjs test/docs-tools.test.mjs` | Offline (Node) | Testa helpers/scripts em `scripts/` e a sincronia de [tools.md](../tools.md) |
+| `test:scripts` | `node --test test/oauth-scripts.test.mjs test/scripts-lib.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs test/automation-verifier.test.mjs test/release-script.test.mjs test/docs-tools.test.mjs test/readme-sync.test.mjs` | Offline (Node) | Testa helpers/scripts em `scripts/` e a sincronia de [tools.md](../tools.md) e do README com `package.json` |
 | `test:coverage` | `vitest run --exclude=test/contract/** --coverage` | Offline (hermético) | Executa a suíte principal com cobertura Istanbul e aplica os limiares mínimos de `src/domain/` e `src/automation/` |
 | `test:contract` | `node scripts/run-contract.ts` | Rede real (opt-in) | Carrega `.dev.vars` se existir, define `RUN_AGENDOR_CONTRACT_TESTS=1` e executa `test/contract` (veja [quando executar](#quando-executar-testcontract)) |
 

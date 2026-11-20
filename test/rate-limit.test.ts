@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { enforceRateLimit, enforceCrmRateLimit } from '../src/shared/rate-limit';
+import { enforceRateLimit } from '../src/shared/rate-limit';
+import { createBudgetGate } from '../src/automation/state/budget';
 import worker from '../src/index';
 import { context, testEnv, budgetMock } from './helpers';
 import { issueTestToken } from './oauth-token';
@@ -49,9 +50,9 @@ describe('native rate limiting', () => {
   });
   it('enforces a separate upstream budget per CRM call', async () => {
     const env = testEnv();
-    await enforceCrmRateLimit(env);
+    await createBudgetGate(env, 'crm')();
     expect(budgetMock(env)).toHaveBeenCalledWith('crm', expect.any(Number));
     budgetMock(env).mockResolvedValue({ allowed: false, retryAt: Date.now() + 10_000 });
-    await expect(enforceCrmRateLimit(env)).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
+    await expect(createBudgetGate(env, 'crm')()).rejects.toMatchObject({ code: 'UPSTREAM_RATE_LIMITED' });
   });
 });

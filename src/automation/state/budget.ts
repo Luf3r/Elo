@@ -5,6 +5,8 @@ import { BudgetDeferredError, SafeError } from '../../shared/errors';
 import type { BudgetTicket } from '../types';
 
 export { BudgetDeferredError, type BudgetGate };
+export const BUDGET_WINDOW_MS = 10_000;
+export const BUDGET_MAX_RESERVATIONS = 4;
 /** Account routing is server-owned; no request argument can select another bucket. */
 export function accountState(env: Pick<Env, 'AUTOMATION_STATE'>) {
   if (!env.AUTOMATION_STATE)
@@ -36,11 +38,12 @@ export function takeBudget(storage: DurableObjectStorage, product: 'crm' | 'chat
       product,
       now,
     );
-    sql.exec('DELETE FROM budget WHERE product = ? AND reserved_at <= ?', product, now - 10_000);
+    sql.exec('DELETE FROM budget WHERE product = ? AND reserved_at <= ?', product, now - BUDGET_WINDOW_MS);
     const rows = sql
       .exec<{ reserved_at: number }>('SELECT reserved_at FROM budget WHERE product = ? ORDER BY reserved_at', product)
       .toArray();
-    if (rows.length >= 4) return { allowed: false, retryAt: rows[0]!.reserved_at + 10_000 };
+    if (rows.length >= BUDGET_MAX_RESERVATIONS)
+      return { allowed: false, retryAt: rows[0]!.reserved_at + BUDGET_WINDOW_MS };
     const reservationId = crypto.randomUUID();
     sql.exec('INSERT INTO budget VALUES (?, ?, ?)', reservationId, product, now);
     return { allowed: true, reservationId };

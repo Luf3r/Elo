@@ -5,6 +5,7 @@ export type LogLevel = 'info' | 'warn' | 'error';
 export type ErrorLogFields = {
   errorType: string;
   code?: ErrorCode;
+  errorSite?: string;
 };
 
 const SENSITIVE_FIELD_PATTERN = /(?:token|secret|authorization|password|cookie|email|phone|telefone|cpf|cnpj)/i;
@@ -58,7 +59,15 @@ export function errorFields(error: unknown): ErrorLogFields {
   if (error instanceof SafeError) {
     return { errorType, code: error.code };
   }
-  return { errorType };
+  const stack = typeof error === 'object' && error !== null && 'stack' in error ? error.stack : undefined;
+  const errorSite =
+    typeof stack === 'string'
+      ? stack
+          .split('\n')
+          .map((line) => line.trim())
+          .find((line) => line.startsWith('at '))
+      : undefined;
+  return { errorType, ...(errorSite ? { errorSite: redactText(errorSite).slice(0, 200) } : {}) };
 }
 
 /** Emit a single structured object log entry for Workers Logs with automatic PII/secret redaction. */
