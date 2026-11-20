@@ -319,7 +319,7 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(logged).not.toContain('Queue failure');
   });
 
-  it('logs queue_message_dead_lettered on the fourth queue attempt', async () => {
+  it('logs queue_message_dead_lettered on the fifth queue attempt', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const ack = vi.fn();
@@ -329,8 +329,8 @@ describe('HTTP and MCP entrypoint logging', () => {
       {
         messages: [
           {
-            body: { accountKey: 'elotenant', operationId: 'op-dlq-4', version: 1 },
-            attempts: 4,
+            body: { accountKey: 'elotenant', operationId: 'op-dlq-5', version: 1 },
+            attempts: 5,
             ack,
             retry,
           },
@@ -350,7 +350,7 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(errorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'queue_message_dead_lettered',
-        attempts: 4,
+        attempts: 5,
         errorType: 'RangeError',
       }),
     );
@@ -358,6 +358,37 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(logged).not.toContain('carol@example.com');
     expect(logged).not.toContain('12345678901');
     expect(logged).not.toContain('Dead-letter failure');
+  });
+
+  it('logs queue_message_retry on the fourth queue attempt', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const ack = vi.fn();
+    const retry = vi.fn();
+
+    await handleAutomationQueue(
+      {
+        messages: [
+          {
+            body: { accountKey: 'elotenant', operationId: 'op-retry-4', version: 1 },
+            attempts: 4,
+            ack,
+            retry,
+          },
+        ],
+      },
+      testEnv(),
+      () => {
+        throw new RangeError('Queue retry failure');
+      },
+    );
+
+    expect(retry).toHaveBeenCalledWith({ delaySeconds: 10 });
+    expect(ack).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'queue_message_retry', attempts: 4, errorType: 'RangeError' }),
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('logs watchdog_failed and propagates the error when scheduled maintainAccount fails', async () => {

@@ -25,6 +25,8 @@ export const automationQueuePayloadSchema = z.strictObject({
   version: z.number().int().positive(),
 });
 export type AutomationQueuePayload = z.infer<typeof automationQueuePayloadSchema>;
+/** Keep this value aligned with the consumer's max_retries in wrangler.example.jsonc. */
+export const QUEUE_MAX_RETRIES = 4;
 interface QueueBatch {
   messages: readonly {
     body: unknown;
@@ -219,11 +221,14 @@ export async function handleAutomationQueue(
     payload: AutomationQueuePayload,
     env: Env,
   ) => ExecutionDeps | Promise<ExecutionDeps> = createQueueExecutionDeps,
+  requeue: (payload: AutomationQueuePayload, delaySeconds: number) => Promise<void> = (payload, delaySeconds) =>
+    env.AUTOMATION_QUEUE.send(payload, { delaySeconds }).then(() => undefined),
 ): Promise<void> {
   for (const message of batch.messages) {
     const parsed = automationQueuePayloadSchema.safeParse(message.body);
     if (!parsed.success) {
       message.ack();
+      logEvent('warn', 'queue_message_malformed', {});
       continue;
     }
     try {
@@ -246,11 +251,14 @@ export async function handleAutomationQueue(
           ),
         );
         const next = commands.reduce((deadline, c) => Math.max(deadline, c?.nextAttemptAt ?? 0), Date.now() + 10_000);
-        message.retry({ delaySeconds: Math.min(43_200, Math.max(1, Math.ceil((next - Date.now()) / 1000))) });
+        const delaySeconds = Math.min(43_200, Math.max(1, Math.ceil((next - Date.now()) / 1000)));
+        await requeue(parsed.data, delaySeconds);
+        message.ack();
+        logEvent('info', 'queue_message_rescheduled', { delaySeconds, state: status.state });
       } else message.ack();
     } catch (error) {
       const { attempts } = message;
-      if (attempts >= 4) {
+      if (attempts > QUEUE_MAX_RETRIES) {
         logEvent('error', 'queue_message_dead_lettered', { attempts, ...errorFields(error) });
       } else {
         logEvent('warn', 'queue_message_retry', { attempts, ...errorFields(error) });
