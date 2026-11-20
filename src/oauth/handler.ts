@@ -88,7 +88,7 @@ export const loginHandler = {
         const auth = await oauth.parseAuthRequest(request);
         if (!auth.codeChallenge || auth.codeChallengeMethod !== 'S256')
           return pageError(400, 'Este aplicativo precisa usar PKCE S256.');
-        if (auth.scope.some((scope) => !(SUPPORTED_SCOPES as readonly string[]).includes(scope)))
+        if (auth.scope.some((scope) => !SUPPORTED_SCOPES.includes(scope)))
           return pageError(400, 'Permissões inválidas.');
         // Offer renewable access in the browser-bound consent even when the MCP client omits it.
         auth.scope = [...new Set([...auth.scope, OPTIONAL_SCOPE])];

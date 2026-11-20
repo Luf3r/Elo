@@ -24,6 +24,10 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
+- **Staging só leitura e rollout gradual (Fase 8)**: ambiente `staging` com recursos próprios e `readOnly: true` em `__ELO_DEPLOYMENT__`; nesse modo o OAuth só concede escopos de leitura e cada requisição descarta os demais escopos do token. `npm run release` passa a imprimir staging, `wrangler versions upload` e `versions deploy` em 10%, 50% e 100%; o deploy direto usa `--env=""`.
+- **Observabilidade (4.3)**: `invocation_logs` ligado e quatro consultas salvas no Workers Observability (eventos, falhas inesperadas, fila e DLQ, erros por código).
+- **Contrato no CI (6.5)**: workflow manual `Agendor contract` com os segredos do environment `contract`; `test:contract` usa `wrangler.example.jsonc` quando não há `wrangler.jsonc` local.
+- **Versão 0.2.0** em `package.json`, por causa da quebra de códigos de erro da Fase 4.
 - **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
 > **Próxima versão publicada: `0.2.0`** devido à **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4). A versão em `package.json` permanece `0.1.7` até o momento da preparação do release.
 

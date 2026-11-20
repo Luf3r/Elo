@@ -13,7 +13,7 @@ export const AUTOMATION_READ_SCOPE = 'automation:read';
 export const AUTOMATION_PROCESS_SCOPE = 'automation:process';
 export const AUTOMATION_MANAGE_SCOPE = 'automation:manage';
 export const OPTIONAL_SCOPE = 'offline_access';
-export const SUPPORTED_SCOPES = [
+const ALL_SCOPES = [
   READ_SCOPE,
   CHAT_READ_SCOPE,
   WRITE_SCOPE,
@@ -24,6 +24,16 @@ export const SUPPORTED_SCOPES = [
   AUTOMATION_MANAGE_SCOPE,
   OPTIONAL_SCOPE,
 ] as const;
+/** Scopes a read-only deployment (staging) may grant: no CRM writes, no automation processing or management. */
+export const READ_ONLY_SCOPES: readonly string[] = Object.freeze([
+  READ_SCOPE,
+  CHAT_READ_SCOPE,
+  AUTOMATION_READ_SCOPE,
+  OPTIONAL_SCOPE,
+]);
+export const SUPPORTED_SCOPES: readonly string[] = DEPLOYMENT.readOnly
+  ? READ_ONLY_SCOPES
+  : Object.freeze([...ALL_SCOPES]);
 export interface OAuthConfig {
   clientId: string;
   clientSecret: string;

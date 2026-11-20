@@ -8,7 +8,7 @@ export function buildDryRun(): number {
   const wrangler = resolve(import.meta.dirname, '../node_modules/wrangler/bin/wrangler.js');
   const result = spawnSync(
     process.execPath,
-    [wrangler, 'deploy', '--dry-run', '--outdir', 'dist', '--config', wranglerConfigPath()],
+    [wrangler, 'deploy', '--dry-run', '--env=', '--outdir', 'dist', '--config', wranglerConfigPath()],
     { stdio: 'inherit' },
   );
   return result.status ?? 1;
