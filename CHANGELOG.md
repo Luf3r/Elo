@@ -8,6 +8,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 | Versão | Commit | ID de versão Cloudflare | Data | Resumo |
 |---|---|---|---|---|
+| `0.2.1` | `8e027f0` | `af5e44e5-5052-49ad-a8e6-bfe1eef83931` | 2026-11-20 | Atualização conjunta de `agents` 0.33.0 e do SDK do MCP 2.4.0, demais dependências e Actions v7; rollout 10/50/100% a partir do staging |
 | `0.2.0` | `d1cf9af` | `0266825f-3774-49c2-a736-3ee1de9f409c` | 2026-11-20 | Taxonomia de erros (quebra para clientes MCP), logs operacionais, remoção de `/automation/chat-events`, configuração de implantação fora do Git e rollout gradual 10/50/100% a partir do staging só leitura |
 | `0.1.7` | `9dedbfd` | `816fc83d-752a-405d-87f9-b9cd2c6b0b67` | 2026-11-10 *(commit em 2026-11-17)* | Diagnóstico de `deferred`, trava SQLite por trabalho (`preparation_locks`), status e auditoria de preparação |
 | `0.1.6` | *(consolidado em `9dedbfd`)* | `198ce0f1-af14-48ed-986a-68ce04d7a323` | 2026-11-10 | Hotfix do parser de inboxes para coleções `payload`-only abaixo de 100 itens |
