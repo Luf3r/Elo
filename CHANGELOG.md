@@ -8,6 +8,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 | Versão | Commit | ID de versão Cloudflare | Data | Resumo |
 |---|---|---|---|---|
+| `0.2.0` | `d1cf9af` | `0266825f-3774-49c2-a736-3ee1de9f409c` | 2026-11-20 | Taxonomia de erros (quebra para clientes MCP), logs operacionais, remoção de `/automation/chat-events`, configuração de implantação fora do Git e rollout gradual 10/50/100% a partir do staging só leitura |
 | `0.1.7` | `9dedbfd` | `816fc83d-752a-405d-87f9-b9cd2c6b0b67` | 2026-11-10 *(commit em 2026-11-17)* | Diagnóstico de `deferred`, trava SQLite por trabalho (`preparation_locks`), status e auditoria de preparação |
 | `0.1.6` | *(consolidado em `9dedbfd`)* | `198ce0f1-af14-48ed-986a-68ce04d7a323` | 2026-11-10 | Hotfix do parser de inboxes para coleções `payload`-only abaixo de 100 itens |
 | `0.1.5` | *(consolidado em `9dedbfd`)* | `1903e692-2212-4f91-8813-409ac2b2929f` | 2026-11-10 | Validação completa do inventário de inboxes no discovery antes de listar conversas |
@@ -24,12 +25,14 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
+## [0.2.0] — 2026-11-20
+
 - **Staging só leitura e rollout gradual (Fase 8)**: ambiente `staging` com recursos próprios e `readOnly: true` em `__ELO_DEPLOYMENT__`; nesse modo o OAuth só concede escopos de leitura e cada requisição descarta os demais escopos do token. `npm run release` passa a imprimir staging, `wrangler versions upload` e `versions deploy` em 10%, 50% e 100%; o deploy direto usa `--env=""`.
 - **Observabilidade (4.3)**: `invocation_logs` ligado e quatro consultas salvas no Workers Observability (eventos, falhas inesperadas, fila e DLQ, erros por código).
 - **Contrato no CI (6.5)**: workflow manual `Agendor contract` com os segredos do environment `contract`; `test:contract` usa `wrangler.example.jsonc` quando não há `wrangler.jsonc` local.
 - **Versão 0.2.0** em `package.json`, por causa da quebra de códigos de erro da Fase 4.
 - **Configuração de implantação fora do Git**: origem, e-mail do dono, chave do tenant e allowlist de inbox vêm do define `__ELO_DEPLOYMENT__` (`src/app/config/deployment.ts`, fail-closed). O `wrangler.jsonc` real deixa de ser versionado; o repositório traz `wrangler.example.jsonc`, e `npm run build` usa o arquivo local quando existe e o exemplo nos demais casos (CI, clones novos).
-> **Próxima versão publicada: `0.2.0`** devido à **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4). A versão em `package.json` permanece `0.1.7` até o momento da preparação do release.
+> **QUEBRA DE COMPATIBILIDADE** na taxonomia de erros MCP (Fase 4): clientes avisados antes da publicação em 2026-11-20. Rollout gradual a partir do staging só leitura: 10%, 50% e 100% da versão `0266825f`, sem erros nas invocações.
 
 - **Fase 0 — Rede de segurança (`803f5fa`)**: configuração hermética de testes em `test/wrangler.jsonc`, correção de falhas preexistentes na suíte (`P4`/`P5`), alteração da listagem de auditoria (`AuditRepository.listAudit` / `automation_list_audit`) para ordem mais recente primeiro (`ORDER BY occurred_at DESC, audit_id DESC`) com paginação por `cursor`, script `npm run check`, workflow de CI em `.github/workflows/ci.yml`, `scripts/release.mjs` e exposição de `commit` em `/health` e `server_status`.
 - **Fase 1 — Formatação e lint (`e30d911`, `2ff4995`, `eea14bb`)**: Prettier + ESLint type-aware (`no-floating-promises`, `no-misused-promises`, regras de fronteira de camadas) integrados ao `npm run check`.
