@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { Env } from '../../env';
-import { isConfiguredSecret } from '../../auth';
+import { isConfiguredSecret } from '../../shared/secrets';
 import { throwIfCancelled } from '../../shared/cancellation';
 import { SafeError, safeError } from '../../shared/errors';
 import { fetchJson } from '../../shared/http';

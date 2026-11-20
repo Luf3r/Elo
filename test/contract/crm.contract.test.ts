@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { createAgendorCrmClient } from '../../src/automation/clients';
-import { isConfiguredSecret } from '../../src/auth';
+import { isConfiguredSecret } from '../../src/shared/secrets';
 
 const bindings = env as unknown as { AGENDOR_CRM_TOKEN?: string; RUN_AGENDOR_CONTRACT_TESTS?: string };
 const enabled = bindings.RUN_AGENDOR_CONTRACT_TESTS === '1' && isConfiguredSecret(bindings.AGENDOR_CRM_TOKEN);

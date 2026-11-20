@@ -2,7 +2,7 @@ import { collectionPageInfo, readConversationBatch } from './pagination';
 import type { BudgetGate, InboxGuard } from '../ports';
 import type { Env } from '../../env';
 import { SafeError } from '../../shared/errors';
-import { isConfiguredSecret } from '../../auth';
+import { isConfiguredSecret } from '../../shared/secrets';
 import { throwIfCancelled } from '../../shared/cancellation';
 import { createChatTransport } from './transport';
 import {
@@ -41,16 +41,22 @@ export interface ChatClientOptions {
   maxAttachmentBytes?: number;
   waitForBudget?: boolean;
 }
+export function isChatConfigured(env: Partial<Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>>): boolean {
+  return isConfiguredSecret(env.AGENDOR_CHAT_TOKEN) && /^\d{1,20}$/.test(env.AGENDOR_CHAT_ACCOUNT_ID ?? '');
+}
+
 export function createAgendorChatClient(
   env: Pick<Env, 'AGENDOR_CHAT_TOKEN' | 'AGENDOR_CHAT_ACCOUNT_ID'>,
   options: ChatClientOptions,
 ) {
-  if (!isConfiguredSecret(env.AGENDOR_CHAT_TOKEN) || !/^\d{1,20}$/.test(env.AGENDOR_CHAT_ACCOUNT_ID ?? '')) {
+  if (!isChatConfigured(env)) {
     throw new SafeError('CHAT_API_NOT_CONFIGURED', 'Chat service is not configured.', false, 503);
   }
+  const token = env.AGENDOR_CHAT_TOKEN ?? '';
+  const account = env.AGENDOR_CHAT_ACCOUNT_ID ?? '';
   const { inboxGuard } = options;
   const { reserve, get } = createChatTransport({
-    token: env.AGENDOR_CHAT_TOKEN,
+    token,
     budgetGate: options.budgetGate,
     signal: options.signal,
     request: options.request,
@@ -65,7 +71,6 @@ export function createAgendorChatClient(
       throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned an unexpected response format.', false);
     return result.data;
   }
-  const account = env.AGENDOR_CHAT_ACCOUNT_ID;
   const partial = (...missingReasons: string[]): Coverage => ({ complete: false, missingReasons, pagesRead: 1 });
   async function contacts() {
     return parse(contactsEnvelopeSchema, await get(`/accounts/${account}/contacts`)).map((value) =>

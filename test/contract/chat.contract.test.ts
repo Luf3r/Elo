@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { createAgendorChatClient } from '../../src/automation/clients';
-import { isConfiguredSecret } from '../../src/auth';
+import { isChatConfigured } from '../../src/agendor/chat/client';
 
 const bindings = env as unknown as {
   AGENDOR_CHAT_TOKEN?: string;
   AGENDOR_CHAT_ACCOUNT_ID?: string;
   RUN_AGENDOR_CHAT_CONTRACT_TESTS?: string;
 };
-const enabled =
-  isConfiguredSecret(bindings.AGENDOR_CHAT_TOKEN) && /^\d{1,20}$/.test(bindings.AGENDOR_CHAT_ACCOUNT_ID ?? '');
+const enabled = isChatConfigured(bindings);
 const client = enabled
   ? createAgendorChatClient({
       AGENDOR_CHAT_TOKEN: bindings.AGENDOR_CHAT_TOKEN ?? '',

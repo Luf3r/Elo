@@ -7,17 +7,6 @@ export interface AuthContext {
   scopes: readonly string[];
   expiresAt?: number;
 }
-export function isConfiguredSecret(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && !/\s/.test(value) && value !== 'replace-me';
-}
-export async function timingSafeTokenEqual(provided: string, expected: string): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const [left, right] = await Promise.all([
-    crypto.subtle.digest('SHA-256', encoder.encode(provided)),
-    crypto.subtle.digest('SHA-256', encoder.encode(expected)),
-  ]);
-  return crypto.subtle.timingSafeEqual(left, right);
-}
 export function authenticateClient(ctx: ExecutionContext): AuthContext {
   const auth = (ctx as ExecutionContext & { auth?: OAuthResourceAuth }).auth;
   const props: unknown = ctx.props;

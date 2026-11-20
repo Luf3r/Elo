@@ -22,10 +22,10 @@ export default {
     await handleAutomationQueue(batch, env);
   },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (new URL(request.url).pathname === '/health' && request.method === 'GET') {
+    const { pathname: path } = new URL(request.url);
+    if (path === '/health' && request.method === 'GET') {
       return Response.json({ status: 'ok', service: TENANT_SERVICE_NAME, version: VERSION, commit: COMMIT });
     }
-    const path = new URL(request.url).pathname;
     const known = [
       '/mcp',
       '/authorize',
