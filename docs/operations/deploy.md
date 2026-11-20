@@ -55,7 +55,7 @@ Configuração ausente, com chaves extras ou inválida derruba o Worker na inici
    - Existência da tag `vX.Y.Z` apontando para o `HEAD` atual;
    - Passagem integral de `npm run check` (`format:check`, `lint`, `typecheck`, `test:domain`, `test:adapters`, `test:scripts`, `test:coverage`, `build`).
 
-   Ao passar, `npm run release` **não faz deploy automaticamente**; ele imprime o comando exato de publicação com `__BUILD_COMMIT__` injetado e `--tag` / `--message` rastreáveis.
+   Ao passar, `npm run release` **não faz deploy automaticamente**; ele imprime os comandos de staging, upload e rollout gradual com `__BUILD_COMMIT__` injetado e `--tag` / `--message` rastreáveis.
 
 3. Caso precise autenticar o Wrangler ou atualizar o secret do Access antes da publicação:
 
@@ -66,7 +66,38 @@ Configuração ausente, com chaves extras ou inválida derruba o Worker na inici
 
    `oauth:stage-secret` envia `ACCESS_CLIENT_SECRET` via `stdin` (sem expor valores em argumentos) e cria uma versão intermediária sem tráfego; o deploy seguinte herda os secrets da versão mais recente.
 
-4. Execute manualmente o comando `npx wrangler deploy ...` impresso por `npm run release` após aprovação explícita de publicação.
+4. Siga os passos impressos por `npm run release`, depois de aprovação explícita de publicação:
+   1. **Staging** (`npx wrangler deploy --env staging ...`): publica o mesmo build no ambiente só leitura e roda o smoke check da seção seguinte contra a origem do staging.
+   2. **Upload sem tráfego** (`npx wrangler versions upload --env="" ...`): cria a versão de produção sem enviar tráfego. Anote o `Version ID` impresso; o ID da versão atual sai de `npx wrangler versions list --env=""` ou `npx wrangler deployments list --env=""`.
+   3. **Rollout gradual** (`npx wrangler versions deploy --env="" <NEW_VERSION_ID>@10% <CURRENT_VERSION_ID>@90% ...`, depois 50% e 100%): entre cada etapa, confira as consultas salvas da seção [Observabilidade](#observabilidade) e o smoke check. Para voltar, faça `versions deploy` com a versão anterior a 100% (ver [Rollback por versão](#rollback-por-versão)).
+
+   `npx wrangler deploy --env="" ...` continua impresso como caminho direto, só para emergências. O `--env=""` é obrigatório porque o arquivo tem mais de um ambiente.
+
+## Staging (só leitura)
+
+O ambiente `staging` do `wrangler.jsonc` publica o Worker `<name>-staging` com recursos próprios (KV `OAUTH_KV`, fila e DLQ, rate limiters, Durable Object) e o define `__ELO_DEPLOYMENT__` com `readOnly: true` e a origem do staging. Ele não tem cron, para não consumir a cota da API do Agendor.
+
+- **Só leitura no servidor**: com `readOnly`, o OAuth só anuncia e concede `crm:read`, `chat:read`, `automation:read` e `offline_access`, e cada requisição descarta qualquer outro escopo do token. Escrita no CRM e processamento ou gestão da automação falham fechado, mesmo com tokens reais do Agendor.
+- **Login**: reaproveita o app OIDC do Cloudflare Access de produção, com a URL `https://<origem-do-staging>/callback` acrescentada às *Redirect URLs*. Por isso `ACCESS_CLIENT_SECRET` é o mesmo da produção.
+- **Segredos**: grave cada um com `npx wrangler secret put <NOME> --env staging` (`AGENDOR_CRM_TOKEN`, `AGENDOR_CHAT_TOKEN`, `ACCESS_CLIENT_SECRET`). Segredos não são herdados entre ambientes.
+- **Smoke check do staging**: `GET /health` com o commit publicado; `/.well-known/oauth-authorization-server` listando só os escopos de leitura; `/authorize` pedindo `crm:write` responde `400`; `/mcp` sem token responde `401`.
+
+## Observabilidade
+
+`observability.logs.invocation_logs` está ligado em produção e no staging, além dos logs estruturados de `src/shared/logger.ts`. No Workers Observability há quatro consultas salvas, filtradas pelo nome do Worker de produção:
+
+| Consulta | O que mostra |
+|---|---|
+| Elo - eventos por nome | Todos os logs estruturados, agrupados pelo campo `event` |
+| Elo - falhas inesperadas | `mcp_request_failed`, `watchdog_failed` e `auth_service_unavailable`, por evento e `errorType` |
+| Elo - fila e DLQ | `queue_message_retry` e `queue_message_dead_lettered`, por evento e `attempts` |
+| Elo - erros por código | Logs com campo `code`, por código e evento |
+
+Para acompanhar em tempo real: `npx wrangler tail --env=""` (ou `--env staging`). Recusas do gate de orçamento (`UPSTREAM_RATE_LIMITED`) não geram log hoje; elas aparecem nas respostas das ferramentas.
+
+## Testes de contrato no CI
+
+O workflow manual `Agendor contract` (`.github/workflows/contract.yml`, item 6.5) roda `npm run test:contract`, que só lê o Agendor. Ele usa o *environment* `contract` do GitHub, com os segredos `WRANGLER_CONFIG_JSONC` (conteúdo do `wrangler.jsonc` real), `AGENDOR_CRM_TOKEN`, `AGENDOR_CHAT_TOKEN` e `AGENDOR_CHAT_ACCOUNT_ID`. Segredos de *environment* não chegam a forks nem a pull requests.
 
 ## Verificação pós-deploy (smoke check)
 
