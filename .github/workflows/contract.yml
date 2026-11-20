@@ -1,0 +1,34 @@
+name: Agendor contract
+
+# Plan item 6.5: read-only contract tests against the real Agendor APIs.
+# Manual only, and gated by the "contract" environment, whose secrets are never
+# exposed to forks or pull requests.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    environment: contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19'
+          cache: npm
+      - run: npm ci
+      # The real deployment config is not versioned; it lives in this environment secret.
+      - name: Write wrangler.jsonc
+        env:
+          WRANGLER_CONFIG_JSONC: ${{ secrets.WRANGLER_CONFIG_JSONC }}
+        run: |
+          test -n "$WRANGLER_CONFIG_JSONC" || { echo 'WRANGLER_CONFIG_JSONC is not set' >&2; exit 1; }
+          printf '%s' "$WRANGLER_CONFIG_JSONC" > wrangler.jsonc
+      - run: npm run test:contract
+        env:
+          AGENDOR_CRM_TOKEN: ${{ secrets.AGENDOR_CRM_TOKEN }}
+          AGENDOR_CHAT_TOKEN: ${{ secrets.AGENDOR_CHAT_TOKEN }}
+          AGENDOR_CHAT_ACCOUNT_ID: ${{ secrets.AGENDOR_CHAT_ACCOUNT_ID }}

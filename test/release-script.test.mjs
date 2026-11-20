@@ -84,4 +84,14 @@ test('prepareRelease runs check and returns deploy command with version and comm
   assert.match(result.deployCommand, /--message "Release v0\.1\.7 \(a{40}\)"/);
   assert.match(result.deployCommand, /--tag v0\.1\.7/);
   assert.match(result.deployCommand, /__BUILD_COMMIT__/);
+  assert.match(result.deployCommand, /--env=""/);
+  assert.match(result.stagingCommand, /^npx wrangler deploy --env staging /);
+  assert.match(result.stagingCommand, /__BUILD_COMMIT__/);
+  assert.match(result.uploadCommand, /^npx wrangler versions upload --env="" /);
+  assert.match(result.uploadCommand, /--tag v0\.1\.7/);
+  assert.deepEqual(
+    result.rolloutCommands.map((command) => command.match(/@(\d+)%/)?.[1]),
+    ['10', '50', '100'],
+  );
+  for (const command of result.rolloutCommands) assert.match(command, /^npx wrangler versions deploy --env="" /);
 });

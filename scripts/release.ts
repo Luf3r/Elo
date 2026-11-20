@@ -26,6 +26,12 @@ export interface ReleasePlan {
   tag: string;
   commit: string;
   deployCommand: string;
+  /** Deploys the same build to the read-only staging environment first. */
+  stagingCommand: string;
+  /** Uploads a production version without sending it any traffic. */
+  uploadCommand: string;
+  /** Gradual rollout steps; replace the version placeholders with the IDs from versions upload/list. */
+  rolloutCommands: string[];
 }
 
 const DEFAULT_DEPS: ReleaseDeps = {
@@ -78,15 +84,27 @@ export function prepareRelease(deps: ReleaseDeps = DEFAULT_DEPS): ReleasePlan {
 
   const defineArg =
     process.platform === 'win32' ? `'__BUILD_COMMIT__:\\"${commit}\\"'` : `'__BUILD_COMMIT__:"${commit}"'`;
-  const deployCommand = `npx wrangler deploy --define ${defineArg} --tag ${tag} --message "Release ${tag} (${commit})"`;
-  return { version, tag, commit, deployCommand };
+  const message = `"Release ${tag} (${commit})"`;
+  // --env="" targets the top-level (production) environment explicitly now that staging exists.
+  const deployCommand = `npx wrangler deploy --env="" --define ${defineArg} --tag ${tag} --message ${message}`;
+  const stagingCommand = `npx wrangler deploy --env staging --define ${defineArg} --message ${message}`;
+  const uploadCommand = `npx wrangler versions upload --env="" --define ${defineArg} --tag ${tag} --message ${message}`;
+  const rolloutCommands = [10, 50, 100].map((percent) =>
+    percent === 100
+      ? `npx wrangler versions deploy --env="" <NEW_VERSION_ID>@100% --yes --message ${message}`
+      : `npx wrangler versions deploy --env="" <NEW_VERSION_ID>@${percent}% <CURRENT_VERSION_ID>@${100 - percent}% --yes --message ${message}`,
+  );
+  return { version, tag, commit, deployCommand, stagingCommand, uploadCommand, rolloutCommands };
 }
 
 if (isEntrypoint(import.meta.url)) {
   try {
     const result = prepareRelease();
-    console.log('Release checks passed. Run the following command manually to deploy:');
-    console.log(result.deployCommand);
+    console.log('Release checks passed. Nothing was deployed. Steps (docs/operations/deploy.md):');
+    console.log(`1. Staging (read-only): ${result.stagingCommand}`);
+    console.log(`2. Upload the production version without traffic: ${result.uploadCommand}`);
+    result.rolloutCommands.forEach((command, index) => console.log(`${index + 3}. Gradual rollout: ${command}`));
+    console.log(`Direct deploy, only for emergencies: ${result.deployCommand}`);
   } catch (error: unknown) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

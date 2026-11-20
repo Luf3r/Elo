@@ -1,7 +1,10 @@
+import { existsSync } from 'node:fs';
 import { cloudflareTest } from '@cloudflare/vitest-plugin';
 import { configDefaults, defineConfig } from 'vitest/config';
 
 const contract = process.env.RUN_AGENDOR_CONTRACT_TESTS === '1';
+// Contract runs use the real local config; fresh clones only have the versioned example.
+const contractConfig = existsSync('./wrangler.jsonc') ? './wrangler.jsonc' : './wrangler.example.jsonc';
 
 export default defineConfig({
   plugins: [
@@ -9,7 +12,7 @@ export default defineConfig({
       // Use an isolated Wrangler config inside test/ for non-contract runs so
       // root .dev.vars is never loaded into the test worker and all synthetic
       // bindings come directly from test/wrangler.jsonc.
-      wrangler: { configPath: contract ? './wrangler.jsonc' : './test/wrangler.jsonc' },
+      wrangler: { configPath: contract ? contractConfig : './test/wrangler.jsonc' },
       ...(contract
         ? {
             miniflare: {

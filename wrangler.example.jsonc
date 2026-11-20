@@ -33,5 +33,35 @@
     { "name": "MCP_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 10 } },
     { "name": "OAUTH_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 30, "period": 10 } }
   ],
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": true } },
+  // Read-only staging (docs/operations/deploy.md). Wrangler names it "<name>-staging".
+  // Bindings, vars, define and secrets are not inherited, so they are repeated here.
+  "env": {
+    "staging": {
+      "secrets": { "required": ["AGENDOR_CRM_TOKEN", "ACCESS_CLIENT_SECRET"] },
+      "vars": {
+        "AGENDOR_CHAT_ACCOUNT_ID": "1000",
+        "ACCESS_CLIENT_ID": "example-client-id",
+        "ACCESS_ISSUER": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id",
+        "ACCESS_AUTHORIZATION_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/authorization",
+        "ACCESS_TOKEN_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/token",
+        "ACCESS_JWKS_URL": "https://example-team.cloudflareaccess.com/cdn-cgi/access/sso/oidc/example-client-id/jwks"
+      },
+      "define": {
+        "__BUILD_COMMIT__": "\"unknown\"",
+        "__ELO_DEPLOYMENT__": "{\"origin\":\"https://elo-agendor-mcp-staging.example.workers.dev\",\"ownerEmail\":\"owner@example.com\",\"tenantKey\":\"acme\",\"allowedInboxIds\":[101,102],\"readOnly\":true}"
+      },
+      "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "11111111111111111111111111111111" }],
+      "durable_objects": { "bindings": [{ "name": "AUTOMATION_STATE", "class_name": "AutomationAccount" }] },
+      "triggers": { "crons": [] },
+      "queues": {
+        "producers": [{ "binding": "AUTOMATION_QUEUE", "queue": "elo-agendor-operations-staging" }],
+        "consumers": [{ "queue": "elo-agendor-operations-staging", "max_batch_size": 1, "max_concurrency": 1, "max_retries": 4, "dead_letter_queue": "elo-agendor-operations-staging-dlq" }]
+      },
+      "ratelimits": [
+        { "name": "MCP_RATE_LIMITER", "namespace_id": "1101", "simple": { "limit": 30, "period": 10 } },
+        { "name": "OAUTH_RATE_LIMITER", "namespace_id": "1103", "simple": { "limit": 30, "period": 10 } }
+      ]
+    }
+  }
 }
