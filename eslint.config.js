@@ -222,7 +222,7 @@ export default tseslint.config(
     },
     rules: {
       '@stylistic/max-statements-per-line': ['error', { max: 1 }],
-      'max-lines': ['warn', { max: 400 }],
+      'max-lines': ['error', { max: 400 }],
     },
   },
   {
@@ -236,20 +236,13 @@ export default tseslint.config(
   {
     files: ['test/**'],
     rules: {
-      // Arquivos de teste longos são aceitos; o limite de 400 linhas continua como erro em src/.
+      // Arquivos de teste longos são aceitos; o limite de 400 linhas vale como erro em todo o restante.
       'max-lines': 'off',
-    },
-  },
-  {
-    files: ['src/**/*.ts'],
-    rules: {
-      'max-lines': ['error', { max: 400 }],
     },
   },
   {
     files: ['src/automation/state/**/*.ts'],
     rules: {
-      'max-lines': ['error', { max: 400 }],
       'no-restricted-imports': [
         'error',
         {
