@@ -5,7 +5,7 @@
 
 ## Contexto
 
-A conta do Agendor Chat pode conter múltiplas caixas de entrada, mas somente as caixas comerciais definidas para cada implantação fazem parte do escopo autorizado da automação (atualmente `4101` e `4102` nesta implantação). O endpoint de listagem de conversas do Chat não comprova filtro nativo isolado por caixa no servidor upstream, e uma política configurada dinamicamente sem limite rígido poderia expor inadvertidamente conversas de outras caixas.
+A conta do Agendor Chat pode conter múltiplas caixas de entrada, mas somente as caixas comerciais definidas para cada implantação fazem parte do escopo autorizado da automação (por exemplo, `[4101, 4102]` em `test/wrangler.jsonc`). O endpoint de listagem de conversas do Chat não comprova filtro nativo isolado por caixa no servidor upstream, e uma política configurada dinamicamente sem limite rígido poderia expor inadvertidamente conversas de outras caixas.
 
 ## Decisão
 
@@ -19,7 +19,7 @@ Obter a allowlist autorizada de `allowedInboxIds` no define `__ELO_DEPLOYMENT__`
 ## Consequências
 
 - Expandir para uma nova caixa exige alteração deliberada de `allowedInboxIds` na configuração da implantação, novo build e deploy.
-- Enquanto `GET /accounts/{account}/inboxes` não retornar exclusivamente o conjunto configurado em `allowedInboxIds` (atualmente `4101` e `4102` nesta implantação), sem duplicatas ou paginação restante, o discovery falha fechado para proteger caixas externas.
+- Enquanto `GET /accounts/{account}/inboxes` não retornar exclusivamente o conjunto configurado em `allowedInboxIds` (por exemplo, `[4101, 4102]` em `test/wrangler.jsonc`), sem duplicatas ou paginação restante, o discovery falha fechado para proteger caixas externas.
 - Esta regra é tratada como invariante de segurança do repositório.
 
 ## Revisão de 2026-11-19

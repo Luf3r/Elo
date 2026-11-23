@@ -9,7 +9,7 @@ A automação Chat → CRM coordena leases de trabalho com fencing, idempotênci
 
 ## Decisão
 
-Centralizar todo o estado transacional e a coordenação da conta em um único Durable Object SQLite (`AutomationAccount`), endereçado exclusivamente pelo servidor via `env.AUTOMATION_STATE.getByName('elotenant')`, com migrations incrementais em `schema_migrations` e blocos curtos de `transactionSync`.
+Centralizar todo o estado transacional e a coordenação da conta em um único Durable Object SQLite (`AutomationAccount`), endereçado exclusivamente pelo servidor via `env.AUTOMATION_STATE.getByName(tenantKey)`, com `tenantKey` de `__ELO_DEPLOYMENT__`, migrations incrementais em `schema_migrations` e blocos curtos de `transactionSync`.
 
 ## Alternativas consideradas
 
@@ -18,6 +18,6 @@ Centralizar todo o estado transacional e a coordenação da conta em um único D
 
 ## Consequências
 
-- Serialização forte e garantida para leases, `requestId`, vínculos de cliente, política e orçamento compartilhado da conta `elotenant`.
+- Serialização forte e garantida para leases, `requestId`, vínculos de cliente, política e orçamento compartilhado da conta `tenantKey`.
 - Chamadores HTTP nunca podem selecionar outra instância ou conta.
 - A conta lógica única torna o DO um ponto central de serialização (mitigado mantendo hashing e chamadas HTTP fora dos blocos `transactionSync`).

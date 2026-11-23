@@ -35,6 +35,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 - **Cobertura**: adicionados pisos para `src/oauth`, `src/mcp`, `src/agendor` e `src/shared` em `vitest.config.ts`.
 - **Suíte de testes**: um alarme de manutenção deixado por operações `queued` ou `uncertain` podia disparar após o teste e causar `EnvironmentTeardownError` durante o fechamento do ambiente Workers. Os alarmes de todas as instâncias de `AUTOMATION_STATE` agora são removidos após cada teste, e `test/reliability/vitest-config.test.ts` protege essa configuração contra o ocultamento de erros não tratados. O código de produção e as asserções existentes não mudaram.
 - **Sincronia documental**: `test/readme-sync.test.mjs` verifica a versão e os passos de `npm run check` no `README.md` e no `AGENTS.md`.
+- **Documentação**: referências à configuração de tenant e à allowlist agora apontam para `__ELO_DEPLOYMENT__` ou rotulam os exemplos de `test/wrangler.jsonc`; corrigidos o link do modelo de contexto histórico e as regras de camada do lint; registrado o estado de 2026-11-23 com os itens #13 e #14 concluídos e a Fase 9 em andamento.
 
 ## [0.2.1] — 2026-11-20
 

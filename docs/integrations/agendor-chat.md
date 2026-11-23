@@ -12,7 +12,7 @@ Contrato vigente e limites do adaptador `src/agendor/chat/`.
 
 | Capacidade | Rota | Comportamento e limites observados |
 |---|---|---|
-| Inboxes | `GET /accounts/{account}/inboxes` | Usada antes do discovery; parser exige inventário completo `<100` itens sem `links`, duplicatas ou caixas fora de `4101`/`4102`. |
+| Inboxes | `GET /accounts/{account}/inboxes` | Usada antes do discovery; parser exige inventário completo `<100` itens sem `links`, duplicatas ou caixas fora de `allowedInboxIds`. |
 | Conversas | `GET /accounts/{account}/conversations` | Envia `status=all` por padrão (sem `status`, a API retorna apenas `open`). Sem `links.next` confiável, varre lotes de até 3 páginas registrando páginas vazias sem assumir fim terminal; cobertura permanece **parcial**. |
 | Detalhe | `GET /accounts/{account}/conversations/{id}` | Projeta apenas ID, `inboxId` e contato para validação de escopo; descarta mensagens embutidas no detalhe. |
 | Mensagens | `GET /accounts/{account}/conversations/{id}/messages?after={cursor}` | Paginação cronológica exclusiva validada a partir de `after=1` em páginas de até `100` itens. Retorno menor/vazio encerra `endReached`; começar com `after > 1` não comprova `startReached`. Edições antigas indisponíveis no upstream são reportadas como limitação do provedor. |
