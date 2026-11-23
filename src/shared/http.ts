@@ -1,5 +1,6 @@
 import { SafeError } from './errors';
 import { throwIfCancelled } from './cancellation';
+import { readBoundedBody } from './bounded-body';
 
 export interface UpstreamRequestOptions {
   timeoutMs?: number;
@@ -78,46 +79,28 @@ export async function fetchJson(request: Request, options: UpstreamRequestOption
     }
     if (!response.body)
       throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Upstream returned an empty response.', false, response.status);
-    const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
+    const result = await readBoundedBody(response.body, MAX_RESPONSE_BYTES, {
+      race: (promise) => untilAborted(promise, signal),
+      signal,
+    });
+    if (result.kind === 'non_binary')
+      throw new SafeError(
+        'UPSTREAM_INVALID_RESPONSE',
+        'Upstream returned a non-binary response chunk.',
+        false,
+        response.status,
+      );
+    if (result.kind === 'too_large')
+      throw new SafeError(
+        'UPSTREAM_INVALID_RESPONSE',
+        'Upstream response exceeded the size limit.',
+        false,
+        response.status,
+      );
     try {
-      while (true) {
-        const { done, value } = await untilAborted(reader.read(), signal);
-        if (done) break;
-        if (!(value instanceof Uint8Array)) {
-          void reader.cancel().catch(() => {});
-          throw new SafeError(
-            'UPSTREAM_INVALID_RESPONSE',
-            'Upstream returned a non-binary response chunk.',
-            false,
-            response.status,
-          );
-        }
-        size += value.byteLength;
-        if (size > MAX_RESPONSE_BYTES) {
-          void reader.cancel().catch(() => {});
-          throw new SafeError(
-            'UPSTREAM_INVALID_RESPONSE',
-            'Upstream response exceeded the size limit.',
-            false,
-            response.status,
-          );
-        }
-        chunks.push(value);
-      }
-    } finally {
-      if (signal.aborted) void reader.cancel().catch(() => {});
-      reader.releaseLock();
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    try {
-      const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
+      const parsed: unknown = JSON.parse(
+        new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(result.bytes),
+      );
       return parsed;
     } catch {
       throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Upstream returned invalid JSON.', false, response.status);

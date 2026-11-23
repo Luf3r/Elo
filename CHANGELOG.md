@@ -26,7 +26,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
-- **Leitura limitada de corpo**: `src/shared/bounded-body.ts` (`readBoundedBody`) passa a concentrar a leitura limitada de streams.
+- **Leitura limitada de corpo**: `limitedText` (OAuth), `fetchJson` (HTTP), o transporte do Chat e o download de anexos usam `readBoundedBody`, sem mudança de respostas.
 - **Lint e sincronia documental**: `max-lines` passa a ser erro global (exceto em `test/`), sem entrada duplicada; `test/docs-consistency.test.mjs` impede que a documentação vigente volte a tratar valores de exemplo como da implantação.
 - **Correção de comportamento da fila**: `queue_message_dead_lettered` só ocorre com `attempts > 4`, na 5ª entrega, que é quando a mensagem vai de fato para a DLQ. Operações `queued` e `uncertain` continuam esperando com `message.retry` e `delaySeconds` (`queue_message_rescheduled`); na 5ª entrega são confirmadas com `ack` (`queue_message_parked`) em vez de irem para a DLQ, e o watchdog as entrega de novo. Cada cadeia de entregas fica limitada a 5, sem reenvio por `AUTOMATION_QUEUE.send` que se perpetuaria a cada passagem do watchdog. Corpos inválidos geram `queue_message_malformed`.
 - **Sincronia de configuração**: `test/queue-config-sync.test.mjs` falha se `QUEUE_MAX_RETRIES` divergir do `max_retries` dos consumidores em `wrangler.example.jsonc`.

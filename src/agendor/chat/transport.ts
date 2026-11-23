@@ -1,6 +1,7 @@
 import type { BudgetGate } from '../ports';
 import { SafeError, type ErrorCode } from '../../shared/errors';
 import { throwIfCancelled } from '../../shared/cancellation';
+import { readBoundedBody } from '../../shared/bounded-body';
 import { awaitChatRead } from './attachments';
 
 const CHAT_API_ORIGIN = 'https://chat.agendor.com.br/api/v1';
@@ -81,36 +82,17 @@ export function createChatTransport(options: ChatTransportOptions) {
         throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
       }
       if (!response.body) throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned an empty response.', false);
-      const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
+      const result = await readBoundedBody(response.body, CHAT_MAX_RESPONSE_BYTES, {
+        race: (promise) => awaitChatRead(promise, signal),
+        awaitCancel: true,
+        signal,
+      });
+      if (result.kind === 'non_binary')
+        throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned a non-binary response chunk.', false);
+      if (result.kind === 'too_large')
+        throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
       try {
-        while (true) {
-          const { value, done } = await awaitChatRead(reader.read(), signal);
-          if (done) break;
-          if (!(value instanceof Uint8Array)) {
-            await awaitChatRead(reader.cancel(), signal);
-            throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned a non-binary response chunk.', false);
-          }
-          size += value.byteLength;
-          if (size > CHAT_MAX_RESPONSE_BYTES) {
-            await awaitChatRead(reader.cancel(), signal);
-            throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat response exceeded the size limit.', false);
-          }
-          chunks.push(value);
-        }
-      } finally {
-        if (signal.aborted) void reader.cancel().catch(() => {});
-        reader.releaseLock();
-      }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      try {
-        return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes));
+        return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(result.bytes));
       } catch {
         throw new SafeError('UPSTREAM_INVALID_RESPONSE', 'Chat returned invalid JSON.', false);
       }
