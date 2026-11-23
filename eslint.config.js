@@ -28,7 +28,15 @@ const strictTypeRules = {
 
 export default tseslint.config(
   {
-    ignores: ['docs/**', 'dist/**', '.wrangler/**', 'package-lock.json', '.agent-runs/**', '.tooling/**', '.superpowers/**'],
+    ignores: [
+      'docs/**',
+      'dist/**',
+      '.wrangler/**',
+      'package-lock.json',
+      '.agent-runs/**',
+      '.tooling/**',
+      '.superpowers/**',
+    ],
   },
   js.configs.recommended,
   {
@@ -62,35 +70,38 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
-      '@typescript-eslint/no-unsafe-assignment': 'warn',
-      '@typescript-eslint/no-unsafe-call': 'warn',
-      '@typescript-eslint/no-unsafe-member-access': 'warn',
-      '@typescript-eslint/no-unsafe-return': 'warn',
-      '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
-      // Regras restantes que exigem refatoração ou limpeza em massa viram 'warn' na Fase 1.
       // A regra só acusa funções async sem await, que aqui implementam interfaces que devolvem Promise; tirar o async trocaria rejeição por exceção síncrona, e promessas esquecidas já são pegas por no-floating-promises e no-misused-promises.
       '@typescript-eslint/require-await': 'off',
-      // Type assertions redundantes legadas em src/ e test/, pendentes de limpeza na Fase 3.
-      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
-      // Imports/variáveis não usados legados em test/; prefixo _ já ignorado por convenção.
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
-      ],
-      // Concatenação de URLSearchParams com '+' em chat client e testes OAuth; exige troca para .toString().
-      '@typescript-eslint/restrict-plus-operands': 'warn',
-      // Rejeição com signal.reason (any) em src/http.ts e stubs de teste.
-      '@typescript-eslint/prefer-promise-reject-errors': 'warn',
-      // Referências a métodos em asserções/mocks de teste.
-      '@typescript-eslint/unbound-method': 'warn',
-      // String(input) sobre RequestInfo | URL em helper de teste OAuth.
-      '@typescript-eslint/no-base-to-string': 'warn',
       // Regras de fronteira entre camadas da seção 2 do plano (erro na Fase 3.9).
       'import-x/no-restricted-paths': [
         'error',
         {
           zones: [
+            {
+              target: './src/shared',
+              from: './src/automation',
+              message: 'Camada shared não deve importar automation.',
+            },
+            {
+              target: './src/shared',
+              from: './src/domain',
+              message: 'Camada shared não deve importar domain.',
+            },
+            {
+              target: './src/shared',
+              from: './src/agendor',
+              message: 'Camada shared não deve importar adaptadores agendor.',
+            },
+            {
+              target: './src/shared',
+              from: './src/mcp',
+              message: 'Camada shared não deve importar mcp.',
+            },
+            {
+              target: './src/shared',
+              from: './src/oauth',
+              message: 'Camada shared não deve importar oauth.',
+            },
             {
               target: './src/agendor',
               from: './src/automation',
@@ -212,12 +223,6 @@ export default tseslint.config(
     rules: {
       '@stylistic/max-statements-per-line': ['error', { max: 1 }],
       'max-lines': ['warn', { max: 400 }],
-      // Escapes redundantes legados em regexes e template strings; limpeza sem mudar comportamento fica para refatoração.
-      'no-useless-escape': 'warn',
-      // Bloco catch vazio legado; mantido em aviso para compatibilidade.
-      'no-empty': 'warn',
-      // Omissão intencional de `cause` em erros sanitizados (ex.: scripts/verify-chat-contract.ts) para não vazar transporte/headers.
-      'preserve-caught-error': 'warn',
     },
   },
   {

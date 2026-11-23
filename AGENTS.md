@@ -4,7 +4,7 @@ Este arquivo define as regras operacionais para qualquer agente que trabalhe nes
 
 ## Fluxo de verificação e qualidade
 
-1. **Verde obrigatório (`npm run check`)**: execute `npm run check` antes de encerrar qualquer tarefa ou preparar um commit. O script valida formatação (`format:check`), ESLint type-aware (`lint`), `tsc --noEmit` (`typecheck`), suíte Vitest no workerd (`test`), adaptadores (`test:adapters`), testes de scripts (`test:scripts`, incluindo a sincronia de `docs/tools.md`) e dry-run do Wrangler (`build`).
+1. **Verde obrigatório (`npm run check`)**: execute `npm run check` antes de encerrar qualquer tarefa ou preparar um commit. O script executa, nesta ordem: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run test:domain` (domínio puro em Node), `npm run test:adapters`, `npm run test:scripts` (incluindo as verificações de sincronia da documentação), `npm run test:coverage` (suíte Vitest no workerd com `test/wrangler.jsonc` hermético e limiares Istanbul) e `npm run build` (dry-run do Wrangler).
 2. **Formatação**: rode `npm run format` nos arquivos alterados em `src/`, `test/` e `scripts/`. Não reformate arquivos fora do escopo da sua tarefa.
 3. **Sem commits `wip`**: nunca crie commits intermediários com suíte quebrada, testes pulados ou código morto para "arrumar depois".
 

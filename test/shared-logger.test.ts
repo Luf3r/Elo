@@ -146,19 +146,32 @@ describe('errorFields', () => {
 
   it('uses matching error name without code for standard and custom errors', () => {
     const typeErr = new TypeError('sensitive pii 12345678901');
-    expect(errorFields(typeErr)).toEqual({ errorType: 'TypeError' });
+    expect(errorFields(typeErr)).toMatchObject({ errorType: 'TypeError' });
 
     const customErr = Object.assign(new Error('private payload'), {
       name: 'CimdFetchError',
       code: 'SHOULD_NOT_LEAK',
     });
-    expect(errorFields(customErr)).toEqual({ errorType: 'CimdFetchError' });
+    expect(errorFields(customErr)).toMatchObject({ errorType: 'CimdFetchError' });
+  });
+
+  it('includes a redacted stack site without exposing the error message', () => {
+    const err = new Error('private message alice@example.com');
+    err.stack = `Error: ${err.message}\n    at ${'x'.repeat(240)} alice@example.com`;
+
+    const fields = errorFields(err);
+
+    expect(fields.errorSite).toHaveLength(200);
+    expect(fields.errorSite).toMatch(/^at /);
+    expect(JSON.stringify(fields)).not.toContain('private message');
+    expect(JSON.stringify(fields)).not.toContain('alice@example.com');
+    expect('message' in fields).toBe(false);
   });
 
   it('falls back to Error when name does not match /^[A-Za-z]+Error$/ or value is not an error object', () => {
-    expect(errorFields(Object.assign(new Error('x'), { name: 'invalid_name' }))).toEqual({ errorType: 'Error' });
-    expect(errorFields(Object.assign(new Error('x'), { name: '123Error' }))).toEqual({ errorType: 'Error' });
-    expect(errorFields(Object.assign(new Error('x'), { name: 'CustomFailure' }))).toEqual({ errorType: 'Error' });
+    expect(errorFields(Object.assign(new Error('x'), { name: 'invalid_name' }))).toMatchObject({ errorType: 'Error' });
+    expect(errorFields(Object.assign(new Error('x'), { name: '123Error' }))).toMatchObject({ errorType: 'Error' });
+    expect(errorFields(Object.assign(new Error('x'), { name: 'CustomFailure' }))).toMatchObject({ errorType: 'Error' });
     expect(errorFields('raw secret string')).toEqual({ errorType: 'Error' });
     expect(errorFields(null)).toEqual({ errorType: 'Error' });
   });

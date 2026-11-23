@@ -4,7 +4,7 @@ Worker TypeScript executado na Cloudflare Workers que expõe um servidor MCP rem
 
 ## Estado atual
 
-- **Versão do pacote:** `0.1.7` (fonte única em [package.json](package.json) / [src/version.ts](src/version.ts)) — veja o histórico completo e a tabela de versões Cloudflare em [CHANGELOG.md](CHANGELOG.md).
+- **Versão do pacote:** `0.2.1` (fonte única em [package.json](package.json) / [src/version.ts](src/version.ts)) — veja o histórico completo e a tabela de versões Cloudflare em [CHANGELOG.md](CHANGELOG.md).
 - **Política de automação:** armazenada e versionada no Durable Object `AutomationAccount` (consulte o modo e a versão vigentes em tempo de execução pela ferramenta `automation_get_status`; não existe manifesto estático de modo).
 - **Catálogo de ferramentas:** gerado diretamente a partir de `tools/list` do servidor em [docs/tools.md](docs/tools.md) (mantido em sincronia por teste automatizado).
 
@@ -45,10 +45,11 @@ O comando `npm run check` executa em sequência:
 1. `npm run format:check` (Prettier em `src/`, `test/` e `scripts/`)
 2. `npm run lint` (ESLint com checagem de tipos e fronteiras)
 3. `npm run typecheck` (`tsc --noEmit`)
-4. `npm test` (suíte Vitest no runtime workerd com [test/wrangler.jsonc](test/wrangler.jsonc) sintético e hermético, sem carregar `.dev.vars`)
+4. `npm run test:domain` (testes puros do domínio em Node)
 5. `npm run test:adapters` (testes unitários de adaptadores em Node)
-6. `npm run test:scripts` (testes dos scripts em `scripts/`, incluindo a validação de sincronia de [docs/tools.md](docs/tools.md))
-7. `npm run build` (`wrangler deploy --dry-run --outdir dist`)
+6. `npm run test:scripts` (testes dos scripts em `scripts/`, incluindo a sincronia de [docs/tools.md](docs/tools.md) e deste README com `package.json`)
+7. `npm run test:coverage` (suíte Vitest no workerd, com [test/wrangler.jsonc](test/wrangler.jsonc) hermético, cobertura Istanbul e limiares mínimos)
+8. `npm run build` (`wrangler deploy --dry-run --outdir dist`)
 
 Para atualizar [docs/tools.md](docs/tools.md) após alterar o registro de ferramentas:
 
@@ -70,6 +71,7 @@ Verificações de rede real (`npm run test:contract`, `npm run verify:oauth`, `n
 | [docs/operations/rotation.md](docs/operations/rotation.md) | Rotação de segredos e revogação/renovação OAuth |
 | [docs/operations/recovery.md](docs/operations/recovery.md) | Pausa, reconciliação, DLQ, revisões, retenção e rollback |
 | [docs/operations/pilot.md](docs/operations/pilot.md) | Regras de verificação e piloto controlado |
+| [docs/operations/scripts.md](docs/operations/scripts.md) | Catálogo dos scripts NPM e utilitários de `scripts/` |
 | [docs/integrations/agendor-crm.md](docs/integrations/agendor-crm.md) | Contrato e limites da integração Agendor CRM |
 | [docs/integrations/agendor-chat.md](docs/integrations/agendor-chat.md) | Contrato e limites da integração Agendor Chat |
 | [docs/decisions/README.md](docs/decisions/README.md) | Registros de decisões arquiteturais (ADRs) |

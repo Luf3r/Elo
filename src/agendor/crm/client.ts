@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AgendorCrmClient } from './types';
 import { fetchJson } from '../../shared/http';
 import { SafeError } from '../../shared/errors';
-import { isConfiguredSecret } from '../../auth';
+import { isConfiguredSecret } from '../../shared/secrets';
 import { normalizePage } from './pagination';
 import { normalizeCatalogPage } from './catalog';
 import {

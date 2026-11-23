@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { authenticateClient, timingSafeTokenEqual } from '../src/auth';
+import { describe, expect, it } from 'vitest';
+import { authenticateClient } from '../src/auth';
 import worker from '../src/index';
 import { context, testEnv } from './helpers';
 import { RESOURCE } from '../src/oauth/config';
@@ -31,15 +31,6 @@ describe('OAuth authentication', () => {
       auth: { clientId: 'client', userId: 'owner', audience: RESOURCE, scope: ['crm:read'] },
     });
     expect(() => authenticateClient(ctx)).toThrow();
-  });
-  it('uses fixed length timing safe digests for secret comparisons', async () => {
-    const compare = vi.spyOn(crypto.subtle, 'timingSafeEqual');
-    expect(await timingSafeTokenEqual('short', 'a much longer value')).toBe(false);
-    expect(await timingSafeTokenEqual('a', 'a')).toBe(true);
-    for (const [left, right] of compare.mock.calls) {
-      expect(left.byteLength).toBe(32);
-      expect(right.byteLength).toBe(32);
-    }
   });
   it.each([undefined, '', 'replace-me', 'bad\nvalue'])(
     'keeps MCP available when CRM is unconfigured while failing CRM tools locally',

@@ -12,13 +12,13 @@ Base: `main` em `9dedbfd` (0.1.7). Diagnóstico completo na seção 1; execuçã
 | Fase 3 — Reestruturação | **Concluída** | Testes de caracterização, `src/agendor/ports.ts`, `src/domain/` puro, repositórios por agregado em `src/automation/state/repositories/`, casos de uso em `src/automation/usecases/`, schemas separados, migrations declarativas, `readJson`, `src/app/config/tenant.ts` e regras de camada como erro no lint. |
 | Fase 4 — Erros e observabilidade | **Concluída** | `4.1` (`POLICY_BLOCKED`, `WORK_STALE`, `CONFLICT`, quebra registrada para `0.2.0`), `4.2` (logs estruturados em HTTP/MCP, fila e watchdog) e `4.3` (`invocation_logs` ligado e quatro consultas salvas no Workers Observability, descritas em `docs/operations/deploy.md`). |
 | Fase 5 — Limpeza e segurança | **Concluída** | `5.1` (remoção de `MCP_TEST_TOKEN`), `5.2` (remoção de `/automation/chat-events`; rotas OAuth sem `CF-Connecting-IP` retornam `429`), `5.3` (revisão de segurança e `npm audit --omit=dev` no CI) e `5.4` (Dependabot para npm e GitHub Actions em `.github/dependabot.yml`). |
-| Fase 6 — Testes | **Concluída** | Suíte unitária de `src/domain/` em Node (`npm run test:domain`), builders de fixture (`test/fixtures/builders.ts`), cobertura Istanbul com limiares em `src/domain/` e `src/automation/` (`npm run test:coverage`), testes de propriedade com `fast-check` (`test/domain/properties.test.ts`) critérios de `npm run test:contract` documentados e o workflow manual `Agendor contract` no CI (`6.5`). |
+| Fase 6 — Testes | **Concluída** | Suíte unitária de `src/domain/` em Node (`npm run test:domain`), builders de fixture (`test/fixtures/builders.ts`), cobertura Istanbul com limiares em `src/domain/` e `src/automation/` (`npm run test:coverage`), testes de propriedade com `fast-check` (`test/domain/properties.test.ts`), critérios de `npm run test:contract` documentados e o workflow manual `Agendor contract` no CI (`6.5`). |
 | Fase 7 — Scripts e ferramentas | **Concluída** | Scripts migrados para TypeScript executado diretamente pelo Node (`scripts/*.ts`), helpers comuns extraídos em `scripts/lib/` e referência operacional documentada em `docs/operations/scripts.md`. |
 | Fase 8 — Ambientes e rollout | **Concluída** | `8.1` staging só leitura (`readOnly`) com KV, fila, DLQ e rate limiters próprios, reaproveitando o app do Access; `8.2` release com staging, `versions upload` e rollout gradual; `8.3` rollback por versão em `docs/operations/deploy.md`. |
 
 ### Decisões da seção 5 (registradas como tomadas)
 
-1. **Remoto (5.1)**: repositório **público** no GitHub, decidido em 2026-11-19, depois de limpar identificadores do código e do histórico e renomear o projeto para Elo (execução operacional de `0.1`, proteção de branch `0.6` e Dependabot `5.4` pendentes).
+1. **Remoto (5.1)**: repositório **público** no GitHub, decidido em 2026-11-19, depois de limpar identificadores do código e do histórico e renomear o projeto para Elo (execução operacional de `0.1`, proteção de branch `0.6` e Dependabot `5.4` concluídos).
 2. **Histórico (5.2)**: preservado em `docs/history/` (aplicado na Fase 2).
 3. **Quebra de códigos de erro na Fase 4 (5.3)**: **aceita** — `POLICY_BLOCKED`, `WORK_STALE` e `CONFLICT` integrados; próximo release sai como `0.2.0`.
 4. **Staging / Fase 8 (5.4)**: adiado em 2026-11-18 e **implementado** em 2026-11-19 como staging só leitura com tokens reais do Agendor e o app do Access de produção.
@@ -207,13 +207,9 @@ F5 após F3 (5.1 pode ir já na F1)
 
 Os releases intermediários (0.1.8…) saem só de tags, sem mudança de comportamento até a F4.
 
-## 5. Decisões pendentes do responsável
+## 5. Decisões do responsável
 
-1. Remoto: GitHub privado? (bloqueia 0.1/0.6)
-2. Histórico em `docs/history/` ou apagar, confiando no git?
-3. Aceitar a quebra de códigos de erro (F4) para os clientes atuais?
-4. Criar staging (F8), com recursos Cloudflare e Access adicionais?
-5. Endpoint de hints (5.2): remover ou implementar assinatura?
+Todas as decisões desta seção foram tomadas e estão registradas em [Decisões da seção 5](#decisões-da-seção-5-registradas-como-tomadas).
 
 ## 6. Pronto quando
 

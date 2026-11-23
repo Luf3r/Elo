@@ -4,12 +4,65 @@ import type { Env } from '../src/env';
 import worker from '../src/index';
 import { errorToolResult } from '../src/mcp/result';
 import { RESOURCE } from '../src/oauth/config';
+import { loginHandler } from '../src/oauth/handler';
 import { oauthOptions } from '../src/oauth/provider';
 import { BudgetDeferredError, SafeError } from '../src/shared/errors';
 import { context, testEnv } from './helpers';
 import { issueTestToken } from './oauth-token';
 
 describe('HTTP and MCP entrypoint logging', () => {
+  it('logs oauth_consent_failed and preserves the POST /authorize response', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = new Error('Consent operation failed with private details');
+    const env = testEnv({
+      OAUTH_PROVIDER: {
+        approveConsent: vi.fn(() => Promise.reject(error)),
+      } as unknown as Env['OAUTH_PROVIDER'],
+    });
+
+    try {
+      const response = await loginHandler.fetch(
+        new Request('https://example.com/authorize', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ handle: 'test-handle', decision: 'approve' }),
+        }),
+        env,
+      );
+
+      expect(response.status).toBe(503);
+      expect(await response.text()).toBe('O login está temporariamente indisponível.');
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({ event: 'oauth_consent_failed' }));
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('Consent operation failed');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('logs oauth_callback_failed and preserves the /callback response', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = new Error('Callback operation failed with private details');
+    const env = testEnv({
+      OAUTH_PROVIDER: {
+        finishUpstream: vi.fn(() => Promise.reject(error)),
+      } as unknown as Env['OAUTH_PROVIDER'],
+    });
+
+    try {
+      const response = await loginHandler.fetch(
+        new Request('https://example.com/callback?code=test-code&state=test-state'),
+        env,
+      );
+
+      expect(response.status).toBe(503);
+      expect(await response.text()).toBe('O login está temporariamente indisponível.');
+      expect(warnSpy).toHaveBeenCalledWith(expect.objectContaining({ event: 'oauth_callback_failed' }));
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('Callback operation failed');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('logs auth_service_unavailable with path and errorType without URL query on 503', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const env = testEnv({
@@ -36,11 +89,13 @@ describe('HTTP and MCP entrypoint logging', () => {
     });
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'auth_service_unavailable',
-      path: '/authorize',
-      errorType: 'TypeError',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth_service_unavailable',
+        path: '/authorize',
+        errorType: 'TypeError',
+      }),
+    );
     const logged = JSON.stringify(errorSpy.mock.calls);
     expect(logged).not.toContain('secret-query-token');
     expect(logged).not.toContain('owner@example.com');
@@ -71,11 +126,13 @@ describe('HTTP and MCP entrypoint logging', () => {
     });
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'auth_service_unavailable',
-      path: '/token',
-      errorType: 'Error',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth_service_unavailable',
+        path: '/token',
+        errorType: 'Error',
+      }),
+    );
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('hidden-secret');
   });
 
@@ -84,10 +141,12 @@ describe('HTTP and MCP entrypoint logging', () => {
     const result = errorToolResult(new RangeError('Sensitive payload for bob@example.com Bearer secret_tok'));
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'unexpected_error',
-      errorType: 'RangeError',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'unexpected_error',
+        errorType: 'RangeError',
+      }),
+    );
     const logged = JSON.stringify(errorSpy.mock.calls);
     expect(logged).not.toContain('bob@example.com');
     expect(logged).not.toContain('secret_tok');
@@ -186,10 +245,12 @@ describe('HTTP and MCP entrypoint logging', () => {
       },
     });
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'mcp_request_failed',
-      errorType: 'TypeError',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'mcp_request_failed',
+        errorType: 'TypeError',
+      }),
+    );
     const logged = JSON.stringify(errorSpy.mock.calls);
     expect(logged).not.toContain('alice@example.com');
     expect(logged).not.toContain('tok_secret_123');
@@ -244,11 +305,13 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(retry).toHaveBeenCalledWith({ delaySeconds: 10 });
     expect(ack).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith({
-      event: 'queue_message_retry',
-      attempts: 1,
-      errorType: 'TypeError',
-    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'queue_message_retry',
+        attempts: 1,
+        errorType: 'TypeError',
+      }),
+    );
     expect(errorSpy).not.toHaveBeenCalled();
     const logged = JSON.stringify(warnSpy.mock.calls);
     expect(logged).not.toContain('bob@example.com');
@@ -256,7 +319,7 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(logged).not.toContain('Queue failure');
   });
 
-  it('logs queue_message_dead_lettered on the fourth queue attempt', async () => {
+  it('logs queue_message_dead_lettered on the fifth queue attempt', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const ack = vi.fn();
@@ -266,8 +329,8 @@ describe('HTTP and MCP entrypoint logging', () => {
       {
         messages: [
           {
-            body: { accountKey: 'elotenant', operationId: 'op-dlq-4', version: 1 },
-            attempts: 4,
+            body: { accountKey: 'elotenant', operationId: 'op-dlq-5', version: 1 },
+            attempts: 5,
             ack,
             retry,
           },
@@ -284,15 +347,48 @@ describe('HTTP and MCP entrypoint logging', () => {
     expect(ack).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'queue_message_dead_lettered',
-      attempts: 4,
-      errorType: 'RangeError',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'queue_message_dead_lettered',
+        attempts: 5,
+        errorType: 'RangeError',
+      }),
+    );
     const logged = JSON.stringify(errorSpy.mock.calls);
     expect(logged).not.toContain('carol@example.com');
     expect(logged).not.toContain('12345678901');
     expect(logged).not.toContain('Dead-letter failure');
+  });
+
+  it('logs queue_message_retry on the fourth queue attempt', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const ack = vi.fn();
+    const retry = vi.fn();
+
+    await handleAutomationQueue(
+      {
+        messages: [
+          {
+            body: { accountKey: 'elotenant', operationId: 'op-retry-4', version: 1 },
+            attempts: 4,
+            ack,
+            retry,
+          },
+        ],
+      },
+      testEnv(),
+      () => {
+        throw new RangeError('Queue retry failure');
+      },
+    );
+
+    expect(retry).toHaveBeenCalledWith({ delaySeconds: 10 });
+    expect(ack).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'queue_message_retry', attempts: 4, errorType: 'RangeError' }),
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('logs watchdog_failed and propagates the error when scheduled maintainAccount fails', async () => {
@@ -309,10 +405,12 @@ describe('HTTP and MCP entrypoint logging', () => {
     await expect(worker.scheduled({} as ScheduledController, env)).rejects.toBe(failure);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith({
-      event: 'watchdog_failed',
-      errorType: 'Error',
-    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'watchdog_failed',
+        errorType: 'Error',
+      }),
+    );
     const logged = JSON.stringify(errorSpy.mock.calls);
     expect(logged).not.toContain('dave@example.com');
     expect(logged).not.toContain('tok_watchdog');

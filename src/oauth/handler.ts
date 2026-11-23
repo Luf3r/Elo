@@ -1,6 +1,6 @@
 import { AuthorizationError, CimdFetchError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../env';
-import { logEvent } from '../shared/logger';
+import { errorFields, logEvent } from '../shared/logger';
 import { readOAuthConfig, ORIGIN, OPTIONAL_SCOPE, SUPPORTED_SCOPES, type OAuthConfig } from './config';
 import { verifyAccessIdentity } from './identity';
 import { consentPage } from './consent';
@@ -151,7 +151,8 @@ export const loginHandler = {
         let identity;
         try {
           identity = await exchangeIdentity(code, resumed.data.verifier, resumed.data.nonce, config);
-        } catch {
+        } catch (error) {
+          logEvent('warn', 'oauth_identity_exchange_failed', errorFields(error));
           return pageError(
             403,
             'Não foi possível autorizar este login. Inicie a conexão novamente com o e-mail permitido.',
@@ -172,6 +173,9 @@ export const loginHandler = {
     } catch (error) {
       if (pathname === '/authorize' && request.method === 'GET')
         logEvent('warn', 'oauth_authorization_failed', oauthFailureDiagnostic(phase, error));
+      if (pathname === '/authorize' && request.method === 'POST')
+        logEvent('warn', 'oauth_consent_failed', errorFields(error));
+      if (pathname === '/callback') logEvent('warn', 'oauth_callback_failed', errorFields(error));
       if (error instanceof RangeError) return pageError(413, 'Solicitação muito grande.');
       if (error instanceof AuthorizationError || error instanceof CimdFetchError || error instanceof TypeError)
         return pageError(400, 'Solicitação inválida ou expirada. Inicie a conexão novamente.');
