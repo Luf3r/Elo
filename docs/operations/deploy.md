@@ -86,7 +86,7 @@ O ambiente `staging` do `wrangler.jsonc` publica o Worker `<name>-staging` com r
 
 ## Observabilidade
 
-`observability.logs.invocation_logs` está ligado em produção e no staging, além dos logs estruturados de `src/shared/logger.ts`. No Workers Observability há quatro consultas salvas, filtradas pelo nome do Worker de produção:
+`observability.logs.invocation_logs` está ligado em produção e no staging, além dos logs estruturados de `src/shared/logger.ts`. No Workers Observability há cinco consultas salvas, filtradas pelo nome do Worker de produção:
 
 | Consulta | O que mostra |
 |---|---|
@@ -94,6 +94,7 @@ O ambiente `staging` do `wrangler.jsonc` publica o Worker `<name>-staging` com r
 | Elo - falhas inesperadas | `mcp_request_failed`, `watchdog_failed` e `auth_service_unavailable`, por evento e `errorType` |
 | Elo - fila e DLQ | `queue_message_retry` e `queue_message_dead_lettered`, por evento e `attempts` (`queue_message_rescheduled` e `queue_message_parked` são `info` e indicam só espera) |
 | Elo - erros por código | Logs com campo `code`, por código e evento |
+| Elo - registros OAuth recusados | `oauth_registration_rejected` por `reason`; `oauth_client_registered` para acompanhar o volume de registros |
 
 Para acompanhar em tempo real: `npx wrangler tail --env=""` (ou `--env staging`). Recusas do gate de orçamento (`UPSTREAM_RATE_LIMITED`) não geram log hoje; elas aparecem nas respostas das ferramentas.
 
