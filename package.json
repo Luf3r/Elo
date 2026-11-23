@@ -21,7 +21,7 @@
     "test:domain": "vitest run --config vitest.domain.config.ts",
     "test:adapters": "vitest run --config vitest.adapters.config.ts",
     "test:coverage": "vitest run --exclude=test/contract/** --coverage",
-    "test:scripts": "node --test test/oauth-scripts.test.mjs test/scripts-lib.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs test/automation-verifier.test.mjs test/release-script.test.mjs test/docs-tools.test.mjs test/readme-sync.test.mjs test/queue-config-sync.test.mjs",
+    "test:scripts": "node --test test/oauth-scripts.test.mjs test/scripts-lib.test.mjs test/chat-contract-script.test.mjs test/oauth-lifetime.node.mjs test/automation-contract-script.test.mjs test/automation-verifier.test.mjs test/release-script.test.mjs test/docs-tools.test.mjs test/readme-sync.test.mjs test/queue-config-sync.test.mjs test/docs-consistency.test.mjs",
     "test:contract": "node scripts/run-contract.ts",
     "docs:tools": "node scripts/docs-tools.ts",
     "release": "node scripts/release.ts",
