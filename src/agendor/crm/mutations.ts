@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { Env } from '../../env';
-import { isConfiguredSecret } from '../../shared/secrets';
+import { isCrmConfigured } from '../../app/config/integrations';
 import { throwIfCancelled } from '../../shared/cancellation';
 import { SafeError, safeError } from '../../shared/errors';
 import { fetchJson } from '../../shared/http';
@@ -81,7 +81,7 @@ export function createCrmMutationClient(deps: CrmMutationDependencies): CrmMutat
       return { state: 'rejected', code: 'COLLECTION_WRITE_UNVERIFIED' };
     }
     throwIfCancelled(deps.signal);
-    if (!isConfiguredSecret(deps.env.AGENDOR_CRM_TOKEN))
+    if (!isCrmConfigured(deps.env))
       throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const payload = writePayload(record);
     const request = new Request(`https://api.agendor.com.br/v3${route}`, {

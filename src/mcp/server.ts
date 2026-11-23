@@ -1,8 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import type { Env } from '../env';
 import type { AuthContext } from '../auth';
-import { isConfiguredSecret } from '../shared/secrets';
-import { isChatConfigured } from '../agendor/chat/client';
+import { isChatConfigured, isCrmConfigured } from '../app/config/integrations';
 import { registerStatus } from './tools/status';
 import { registerPeople } from './tools/crm-people';
 import { registerOrganizations } from './tools/crm-organizations';
@@ -32,13 +31,13 @@ export function createServer(env: Env, auth: AuthContext, signal?: AbortSignal):
   registerTasks(server, env, auth, signal);
   registerCatalog(server, env, auth, signal);
   registerCrmUpdates(server, env, auth, signal);
-  if (isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) {
+  if (isCrmConfigured(env)) {
     registerCrmCreate(server, env, auth, signal);
     registerCrmEnrich(server, env, auth, signal);
   }
   if (isChatConfigured(env)) {
     registerChat(server, env, auth, signal);
-    if (isConfiguredSecret(env.AGENDOR_CRM_TOKEN)) registerAutomation(server, env, auth, signal);
+    if (isCrmConfigured(env)) registerAutomation(server, env, auth, signal);
   }
   return server;
 }
