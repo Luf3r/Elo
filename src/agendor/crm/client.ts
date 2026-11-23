@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AgendorCrmClient } from './types';
 import { fetchJson } from '../../shared/http';
 import { SafeError } from '../../shared/errors';
-import { isConfiguredSecret } from '../../shared/secrets';
+import { isCrmConfigured } from '../../app/config/integrations';
 import { normalizePage } from './pagination';
 import { normalizeCatalogPage } from './catalog';
 import {
@@ -38,7 +38,7 @@ export function createAgendorCrmClient(
   const { budgetGate } = options;
   async function get(path: string, params: Record<string, string | number | boolean | undefined> = {}) {
     throwIfCancelled(options.signal);
-    if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN))
+    if (!isCrmConfigured(env))
       throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${path}`);
     for (const [name, value] of Object.entries(params))
@@ -73,7 +73,7 @@ export function createAgendorCrmClient(
   async function update(route: string, expectedId: number, fields: unknown, schema: z.ZodType) {
     const payload = parseInput(schema, fields) as Record<string, unknown>;
     throwIfCancelled(options.signal);
-    if (!isConfiguredSecret(env.AGENDOR_CRM_TOKEN))
+    if (!isCrmConfigured(env))
       throw new SafeError('UPSTREAM_UNAVAILABLE', 'CRM service is not configured.', false, 503);
     const url = new URL(`https://api.agendor.com.br/v3${route}`);
     await budgetGate();

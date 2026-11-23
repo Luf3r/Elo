@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { createAgendorChatClient } from '../../src/automation/clients';
-import { isChatConfigured } from '../../src/agendor/chat/client';
+import { isChatConfigured } from '../../src/app/config/integrations';
 
 const bindings = env as unknown as {
   AGENDOR_CHAT_TOKEN?: string;
