@@ -2,6 +2,7 @@ import { TENANT_SERVICE_NAME } from './app/config/tenant';
 import type { Env } from './env';
 import { oauthProvider } from './oauth/provider';
 import { readOAuthConfig } from './oauth/config';
+import { checkRegistrationQuota, recordRegistration } from './oauth/registration';
 import { COMMIT, VERSION } from './version';
 import { handleAutomationQueue } from './automation/execution/queue';
 import { automationDomainHooks } from './automation/resolution';
@@ -57,10 +58,33 @@ export default {
             { error: 'temporarily_unavailable' },
             { status: 429, headers: { 'Retry-After': '10', 'Cache-Control': 'no-store' } },
           );
+        const quota = await checkRegistrationQuota(env.OAUTH_KV, new Date());
+        if (quota !== 'ok') {
+          logEvent('warn', 'oauth_registration_rejected', {
+            reason: quota === 'exhausted' ? 'daily_quota' : 'quota_unavailable',
+          });
+          return Response.json(
+            {
+              error: 'temporarily_unavailable',
+              error_description: 'Client registration is temporarily unavailable.',
+            },
+            { status: 503, headers: { 'Cache-Control': 'no-store' } },
+          );
+        }
       }
       if (path === '/.well-known/oauth-protected-resource')
         request = new Request(new URL('/.well-known/oauth-protected-resource/mcp', request.url), request);
-      return await oauthProvider.fetch(request, env, ctx);
+      const response = await oauthProvider.fetch(request, env, ctx);
+      if (path === '/register' && request.method === 'POST' && response.status === 201) {
+        const body: unknown = await response
+          .clone()
+          .json()
+          .catch(() => null);
+        const redirectUris =
+          typeof body === 'object' && body !== null && 'redirect_uris' in body ? body.redirect_uris : undefined;
+        await recordRegistration(env.OAUTH_KV, new Date(), Array.isArray(redirectUris) ? redirectUris.length : 0);
+      }
+      return response;
     } catch (error) {
       logEvent('error', 'auth_service_unavailable', { path, ...errorFields(error) });
       return Response.json(

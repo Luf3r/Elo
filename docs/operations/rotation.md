@@ -47,7 +47,7 @@ Procedimento vigente para rotação de credenciais, renovação e revogação de
 
 - **Access tokens**: validade de **24 horas** (`ACCESS_TOKEN_TTL_SECONDS`).
 - **Refresh tokens**: validade de **35 dias** a partir do login inicial, emitidos somente quando `offline_access` é aprovado na tela de consentimento (a tela de consentimento inclui `offline_access` explicitamente para clientes compatíveis como ChatGPT Plus e Zapia).
-- **Clientes independentes**: ChatGPT Plus, Zapia e verificadores locais recebem `clientId` e concessões independentes via registro dinâmico (`/register`, TTL de 90 dias).
+- **Clientes independentes**: ChatGPT Plus, Zapia e verificadores locais recebem `clientId` e concessões independentes via registro dinâmico (`/register`, TTL de 90 dias). Novos registros são limitados a 3 por minuto por IP e 20 por dia; se o teto diário bloquear um cliente legítimo, basta esperar a virada do dia UTC.
 - **Renovação**: ocorre no endpoint `/token` com `grant_type=refresh_token` e o mesmo `client_id`. Renovar o access token **não reinicia** o prazo de 35 dias; ao expirar, refaça o login via PIN do Cloudflare Access na página oficial da Cloudflare.
 - **Verificação de renovação**: `npm run verify:oauth-renewal` (`node scripts/verify-oauth-renewal.ts`) testa o ciclo de refresh usando exclusivamente a sessão local ignorada em `.tooling/`, sem exibir tokens nem alterar registros no Agendor.
 - **Revogação**:
