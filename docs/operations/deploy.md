@@ -12,7 +12,7 @@ Este guia descreve o procedimento vigente para publicar o Worker `elo-agendor-mc
 | Durable Object | `AUTOMATION_STATE` → classe SQLite `AutomationAccount` (migração `automation-v1`) |
 | Fila e DLQ | `AUTOMATION_QUEUE` → `elo-agendor-operations` (`max_batch_size: 1`, `max_concurrency: 1`, `max_retries: 4`); DLQ `elo-agendor-operations-dlq` |
 | Cron watchdog | `*/5 * * * *` |
-| Rate limiters | `MCP_RATE_LIMITER` (`1001`, 30/10s) e `OAUTH_RATE_LIMITER` (`1003`, 30/10s) |
+| Rate limiters | `MCP_RATE_LIMITER` (`1001`, 30/10s), `OAUTH_RATE_LIMITER` (`1003`, 30/10s) e `REGISTER_RATE_LIMITER` (`1004`, 3/60s; staging `1104`) |
 | Variáveis e flags | `AGENDOR_CHAT_ACCOUNT_ID="7001"`, endpoints Cloudflare Access OIDC |
 | Observabilidade | `enabled: true`, `invocation_logs: false` (não habilite captura de payloads/headers) |
 | Secrets obrigatórios | `AGENDOR_CRM_TOKEN`, `ACCESS_CLIENT_SECRET`; opcional para Chat/automação: `AGENDOR_CHAT_TOKEN` |
@@ -21,7 +21,9 @@ Preserve os bindings existentes (`OAUTH_KV`, `AUTOMATION_STATE`, filas e secrets
 
 ## Configuração de implantação
 
-O `wrangler.jsonc` real de cada implantação fica fora do Git e parte de `wrangler.example.jsonc`. Além do nome do Worker (`name`), dos bindings de `OAUTH_KV` e `AUTOMATION_STATE` (classe SQLite `AutomationAccount`, migração `automation-v1`), das filas (`AUTOMATION_QUEUE` e DLQ) e dos rate limiters (`MCP_RATE_LIMITER` e `OAUTH_RATE_LIMITER`), ele deve preencher:
+O `wrangler.jsonc` real de cada implantação fica fora do Git e parte de `wrangler.example.jsonc`. Além do nome do Worker (`name`), dos bindings de `OAUTH_KV` e `AUTOMATION_STATE` (classe SQLite `AutomationAccount`, migração `automation-v1`), das filas (`AUTOMATION_QUEUE` e DLQ) e dos rate limiters (`MCP_RATE_LIMITER`, `OAUTH_RATE_LIMITER` e `REGISTER_RATE_LIMITER`), ele deve preencher:
+
+Antes do release, o responsável deve criar o namespace do novo rate limiter e configurar `REGISTER_RATE_LIMITER` no `wrangler.jsonc` real e no secret `WRANGLER_CONFIG_JSONC` do workflow de contrato: `1004` em produção (3 registros por 60 s por IP) e `1104` em staging.
 
 - **Variáveis (`vars`)**: `AGENDOR_CHAT_ACCOUNT_ID` (ID numérico da conta no Agendor Chat) e os parâmetros Cloudflare Access OIDC (`ACCESS_CLIENT_ID`, `ACCESS_ISSUER`, `ACCESS_AUTHORIZATION_URL`, `ACCESS_TOKEN_URL`, `ACCESS_JWKS_URL`, todos em `https://*.cloudflareaccess.com` consistentes com o emissor e `ACCESS_CLIENT_ID`).
 - **Configuração injetada no build (`define.__ELO_DEPLOYMENT__`)**: objeto JSON serializado validado de forma estrita (`z.strictObject`) em `src/app/config/deployment.ts`, exigindo exatamente quatro campos (ex.: `{"origin":"https://elo.example.workers.dev","ownerEmail":"owner@example.com","tenantKey":"acme","allowedInboxIds":[101,102]}`):

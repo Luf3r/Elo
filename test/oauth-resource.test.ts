@@ -3,6 +3,7 @@ import { readResponseJson, readToolJson, type ToolErrorBody } from './helpers/js
 import { describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import { ORIGIN, RESOURCE } from '../src/oauth/config';
+import { oauthProvider } from '../src/oauth/provider';
 import { oauthEnv } from './oauth-helper';
 import { issueTestToken } from './oauth-token';
 import { callTool } from './mcp-helper';
@@ -95,7 +96,7 @@ describe('OAuth resource integration', () => {
     expect(readToolJson<ToolErrorBody>(data).error.code).toBe('MCP_UNAUTHORIZED');
     expect(fetch).not.toHaveBeenCalled();
   });
-  it.each(['OAUTH_KV', 'OAUTH_RATE_LIMITER', 'ACCESS_CLIENT_SECRET'] as const)(
+  it.each(['OAUTH_KV', 'OAUTH_RATE_LIMITER', 'REGISTER_RATE_LIMITER', 'ACCESS_CLIENT_SECRET'] as const)(
     'fails closed without %s',
     async (key) => {
       const env = oauthEnv({ [key]: undefined });
@@ -181,6 +182,69 @@ describe('OAuth resource integration', () => {
     );
     expect(r.status).toBe(429);
     expect(budgetMock(env)).not.toHaveBeenCalled();
+  });
+  it('applies the registration limiter only to POST /register', async () => {
+    const limit = vi.fn(async () => ({ success: true }));
+    const env = oauthEnv({ REGISTER_RATE_LIMITER: { limit } });
+    for (const [path, method] of [
+      ['/register', 'POST'],
+      ['/token', 'POST'],
+      ['/authorize', 'GET'],
+    ]) {
+      await worker.fetch(
+        new Request(`${ORIGIN}${path}`, { method, headers: { 'CF-Connecting-IP': '198.51.100.10' } }),
+        env,
+        context(),
+      );
+    }
+    expect(limit).toHaveBeenCalledTimes(1);
+    expect(limit).toHaveBeenCalledWith({ key: 'register:198.51.100.10' });
+  });
+  it('rejects the fourth registration from one IP before reaching the OAuth provider', async () => {
+    let attempts = 0;
+    const limit = vi.fn(async () => ({ success: ++attempts <= 3 }));
+    const env = oauthEnv({ REGISTER_RATE_LIMITER: { limit } });
+    const providerFetch = vi.spyOn(oauthProvider, 'fetch');
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const response = await worker.fetch(
+          new Request(`${ORIGIN}/register`, {
+            method: 'POST',
+            headers: { 'CF-Connecting-IP': '198.51.100.10' },
+            body: '{}',
+          }),
+          env,
+          context(),
+        );
+        if (attempt === 3) {
+          expect(response.status).toBe(429);
+          expect(response.headers.get('retry-after')).toBe('10');
+          expect(response.headers.get('cache-control')).toBe('no-store');
+          expect(await response.json()).toEqual({ error: 'temporarily_unavailable' });
+        }
+      }
+      expect(providerFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      providerFetch.mockRestore();
+    }
+  });
+  it('does not call the registration limiter when the OAuth limiter rejects', async () => {
+    const registerLimit = vi.fn(async () => ({ success: true }));
+    const env = oauthEnv({
+      OAUTH_RATE_LIMITER: { limit: vi.fn(async () => ({ success: false })) },
+      REGISTER_RATE_LIMITER: { limit: registerLimit },
+    });
+    const response = await worker.fetch(
+      new Request(`${ORIGIN}/register`, {
+        method: 'POST',
+        headers: { 'CF-Connecting-IP': '198.51.100.10' },
+        body: '{}',
+      }),
+      env,
+      context(),
+    );
+    expect(response.status).toBe(429);
+    expect(registerLimit).not.toHaveBeenCalled();
   });
   it.each([undefined, '   '])(
     'rejects OAuth route requests without CF-Connecting-IP (%s) with 429',

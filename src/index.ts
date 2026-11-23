@@ -41,10 +41,18 @@ export default {
     if (!known.includes(path)) return new Response('Not found', { status: 404 });
     try {
       readOAuthConfig(env);
-      if (!env.OAUTH_KV || !env.OAUTH_RATE_LIMITER) throw new Error('Missing OAuth binding.');
+      if (!env.OAUTH_KV || !env.OAUTH_RATE_LIMITER || !env.REGISTER_RATE_LIMITER)
+        throw new Error('Missing OAuth binding.');
+      const ip = request.headers.get('CF-Connecting-IP')?.trim();
       if (!path.startsWith('/.well-known/') && path !== '/mcp') {
-        const ip = request.headers.get('CF-Connecting-IP')?.trim();
         if (!ip || !(await env.OAUTH_RATE_LIMITER.limit({ key: `oauth:${ip}` })).success)
+          return Response.json(
+            { error: 'temporarily_unavailable' },
+            { status: 429, headers: { 'Retry-After': '10', 'Cache-Control': 'no-store' } },
+          );
+      }
+      if (path === '/register' && request.method === 'POST') {
+        if (!ip || !(await env.REGISTER_RATE_LIMITER.limit({ key: `register:${ip}` })).success)
           return Response.json(
             { error: 'temporarily_unavailable' },
             { status: 429, headers: { 'Retry-After': '10', 'Cache-Control': 'no-store' } },

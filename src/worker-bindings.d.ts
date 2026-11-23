@@ -5,6 +5,7 @@ interface __BaseEnv_WorkerBindings {
   AUTOMATION_QUEUE: Queue;
   MCP_RATE_LIMITER: RateLimit;
   OAUTH_RATE_LIMITER: RateLimit;
+  REGISTER_RATE_LIMITER: RateLimit;
   AGENDOR_CHAT_ACCOUNT_ID: string;
   ACCESS_CLIENT_ID: string;
   ACCESS_ISSUER: string;
