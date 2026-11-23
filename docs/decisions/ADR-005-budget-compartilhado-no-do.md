@@ -19,4 +19,4 @@ Implementar um gate único de orçamento compartilhado (`takeBudget` em `Automat
 ## Consequências
 
 - Proteção determinística contra rajadas upstream e contabilização conjunta entre MCP direto, preparação e fila.
-- **Trade-off registrado (C13):** todas as chamadas Agendor — inclusive leituras diretas — passam pelo singleton do DO `elotenant`, limitando a vazão global a 4 req/10s por produto e exigindo transporte conectado ao DO para qualquer CLI live (`discover:automation-contracts -- --live` permanece bloqueado offline até usar esse gate).
+- **Trade-off registrado (C13):** todas as chamadas Agendor — inclusive leituras diretas — passam pelo singleton do DO da conta (`tenantKey`), limitando a vazão global a 4 req/10s por produto e exigindo transporte conectado ao DO para qualquer CLI live (`discover:automation-contracts -- --live` permanece bloqueado offline até usar esse gate).

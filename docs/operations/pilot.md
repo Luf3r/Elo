@@ -26,7 +26,7 @@ Nenhuma escrita automatizada deve ser executada sem atender simultaneamente a to
 
 1. **Política vigente no DO (`automation_get_status`)**:
    - Modo `apply` deliberadamente configurado na política atual do DO (`policyVersion` conhecida).
-   - `allowedInboxIds` restrito às caixas autorizadas (`[4101, 4102]` ou subconjunto).
+   - `allowedInboxIds` restrito às caixas autorizadas da implantação, por exemplo `[4101, 4102]` em `test/wrangler.jsonc`, ou a um subconjunto.
    - `capabilities` mínimas necessárias e alinhadas aos escopos OAuth do cliente executor.
    - Mapeamentos reais de funis (`funnelMapping`), etapas (`stageMapping`) e campos personalizados (`customFieldMapping`) conferidos contra o catálogo CRM.
    - `nativeCreatorDisabled` validado (permanecendo `false`, `create_person` é bloqueado pelo autorizador final).

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Cloudflare Workers, Durable Objects SQLite, Queues, Zod e OAuth existentes. Preservar Node >=22.19.0, MCP SDK 2.3.1, Agents 0.29.0 e lockfile atual; verificar APIs contra as versões instaladas antes de atualizar dependências.
 
-**Spec:** [desenho consolidado](../specs/2026-10-23-chat-to-crm-automation-design.md) e [modelo de contexto](../../templates/cliente-contexto.md).
+**Spec:** [desenho consolidado](../specs/2026-10-23-chat-to-crm-automation-design.md) e [modelo de contexto](../../../templates/cliente-contexto.md).
 
 **Data:** 2026-10-26, America/Cuiaba. Plano solicitado pelo usuário; este documento não executa implantação nem altera o CRM.
 

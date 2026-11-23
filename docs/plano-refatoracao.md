@@ -16,6 +16,14 @@ Base: `main` em `9dedbfd` (0.1.7). Diagnóstico completo na seção 1; execuçã
 | Fase 7 — Scripts e ferramentas | **Concluída** | Scripts migrados para TypeScript executado diretamente pelo Node (`scripts/*.ts`), helpers comuns extraídos em `scripts/lib/` e referência operacional documentada em `docs/operations/scripts.md`. |
 | Fase 8 — Ambientes e rollout | **Concluída** | `8.1` staging só leitura (`readOnly`) com KV, fila, DLQ e rate limiters próprios, reaproveitando o app do Access; `8.2` release com staging, `versions upload` e rollout gradual; `8.3` rollback por versão em `docs/operations/deploy.md`. |
 
+## Estado em 2026-11-23
+
+| Fase | Estado | Resumo do entregue e do que falta |
+|---|---|---|
+| #13 — Correções de fila e observabilidade | **Concluída** | Fila sem consumir `max_retries` durante a espera; logs com `errorSite` e eventos OAuth de diagnóstico; fronteiras de camada de `src/shared`; pisos de cobertura para `oauth`, `mcp`, `agendor` e `shared`; documentação alinhada. |
+| #14 — Entregas em espera e CI | **Concluída** | Limite de entregas em espera da fila; token do CI só leitura; `.agent-runs` ignorado. |
+| Fase 9 — Correções pós-revisão | **Em andamento** | Plano de 2026-11-23: PR 1, consistência da documentação e limpeza do lint; PR 2, leitura limitada de corpo em um único helper (`src/shared/bounded-body.ts`); PR 3, registrar só as ferramentas cujo serviço está configurado; PR 4, limites em camadas no `/register` (rate limiter dedicado, validação de metadados e teto diário); PR 5, `EnvironmentTeardownError` intermitente no Vitest; release `0.3.0` depois dos PRs 3 e 4. |
+
 ### Decisões da seção 5 (registradas como tomadas)
 
 1. **Remoto (5.1)**: repositório **público** no GitHub, decidido em 2026-11-19, depois de limpar identificadores do código e do histórico e renomear o projeto para Elo (execução operacional de `0.1`, proteção de branch `0.6` e Dependabot `5.4` concluídos).
@@ -101,7 +109,7 @@ docs/
 CHANGELOG.md  AGENTS.md (ou CLAUDE.md)
 ```
 
-Regras de dependência (verificadas por lint): `domain` não importa nada de IO; `agendor` não importa `automation`/`domain`; `mcp` só fala com `usecases`.
+Regras de dependência (verificadas por `eslint.config.js`, `import-x/no-restricted-paths`): `domain` não importa IO, `agendor`, `automation`, `mcp`, `oauth` nem `app` (exceto `app/config/tenant.ts`); `agendor` não importa `automation`/`domain`; `shared` não importa as demais camadas; `mcp/` não importa `automation/state/`, `automation/execution/` nem `oauth/`.
 
 ## 3. Fases
 
