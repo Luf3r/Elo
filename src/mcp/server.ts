@@ -25,19 +25,21 @@ export function createServer(env: Env, auth: AuthContext, signal?: AbortSignal):
     },
   );
   registerStatus(server, auth);
-  registerPeople(server, env, auth, signal);
-  registerOrganizations(server, env, auth, signal);
-  registerDeals(server, env, auth, signal);
-  registerTasks(server, env, auth, signal);
-  registerCatalog(server, env, auth, signal);
-  registerCrmUpdates(server, env, auth, signal);
-  if (isCrmConfigured(env)) {
+  const crmConfigured = isCrmConfigured(env);
+  // List product tools only when their credentials are configured, so clients do not see tools that only fail closed.
+  if (crmConfigured) {
+    registerPeople(server, env, auth, signal);
+    registerOrganizations(server, env, auth, signal);
+    registerDeals(server, env, auth, signal);
+    registerTasks(server, env, auth, signal);
+    registerCatalog(server, env, auth, signal);
+    registerCrmUpdates(server, env, auth, signal);
     registerCrmCreate(server, env, auth, signal);
     registerCrmEnrich(server, env, auth, signal);
   }
   if (isChatConfigured(env)) {
     registerChat(server, env, auth, signal);
-    if (isCrmConfigured(env)) registerAutomation(server, env, auth, signal);
+    if (crmConfigured) registerAutomation(server, env, auth, signal);
   }
   return server;
 }

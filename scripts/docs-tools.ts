@@ -154,12 +154,12 @@ function formatAnnotations(tool: McpToolDescriptor): string {
   return `\`${parts.join(', ')}\``;
 }
 
-function determineAvailability(name: string, sets: AvailabilitySets): string {
+export function determineAvailability(name: string, sets: AvailabilitySets): string {
   if (sets.base.has(name)) {
     if (name === 'server_status') {
       return 'Sempre registrada (não contata o Agendor)';
     }
-    return 'Sempre registrada (falha fechada se `AGENDOR_CRM_TOKEN` ausente)';
+    throw new Error(`Unexpected base tool: ${name}`);
   }
   if (sets.crmOnly.has(name)) {
     return 'Requer `AGENDOR_CRM_TOKEN` configurado';
@@ -221,7 +221,7 @@ export async function generateToolsMarkdown(): Promise<string> {
     '- A presença de uma ferramenta em `tools/list` não concede permissão OAuth ao cliente chamador.',
     '- `automation_apply_plan`: além de `automation:process` anunciado em `_meta`, o servidor deriva e exige em tempo de execução os escopos CRM (`crm:create`, `crm:enrich` ou `crm:write`) de todos os comandos do plano, além de política em modo `apply`.',
     '- `automation_update_policy`: além de `automation:manage` anunciado em `_meta`, exige os escopos CRM correspondentes às capacidades habilitadas no patch.',
-    '- Ferramentas `crm_*` sempre registradas (`crm_*` de leitura e `crm_update_*` legadas) validam escopo OAuth e falham fechadas se `AGENDOR_CRM_TOKEN` não estiver configurado.',
+    '- Os adaptadores CRM mantêm a validação de escopo OAuth e falham fechados quando `AGENDOR_CRM_TOKEN` não está configurado.',
     '',
   ];
 
