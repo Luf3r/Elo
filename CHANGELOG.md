@@ -33,6 +33,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 - **Observabilidade OAuth**: novos avisos `oauth_identity_exchange_failed`, `oauth_consent_failed` e `oauth_callback_failed` registram falhas diagnósticas sanitizadas.
 - **Arquitetura interna**: `isConfiguredSecret` foi centralizada em `src/shared/secrets.ts`; `timingSafeTokenEqual` e `enforceCrmRateLimit`/`enforceChatRateLimit` foram removidas. `src/shared` não pode importar camadas de automation, domain, agendor, mcp ou oauth, e o orçamento usa `BUDGET_WINDOW_MS`/`BUDGET_MAX_RESERVATIONS`.
 - **Cobertura**: adicionados pisos para `src/oauth`, `src/mcp`, `src/agendor` e `src/shared` em `vitest.config.ts`.
+- **Suíte de testes**: um alarme de manutenção deixado por operações `queued` ou `uncertain` podia disparar após o teste e causar `EnvironmentTeardownError` durante o fechamento do ambiente Workers. Os alarmes de todas as instâncias de `AUTOMATION_STATE` agora são removidos após cada teste, e `test/reliability/vitest-config.test.ts` protege essa configuração contra o ocultamento de erros não tratados. O código de produção e as asserções existentes não mudaram.
 - **Sincronia documental**: `test/readme-sync.test.mjs` verifica a versão e os passos de `npm run check` no `README.md` e no `AGENTS.md`.
 
 ## [0.2.1] — 2026-11-20

@@ -31,6 +31,7 @@ export default defineConfig({
   // .agent-runs/ holds Contracanto worktrees (full repository copies); never collect their tests.
   test: {
     exclude: [...configDefaults.exclude, '.agent-runs/**', 'test/**/*.test.mjs'],
+    setupFiles: ['test/setup/durable-object-alarms.ts'],
     testTimeout: 15_000,
     restoreMocks: true,
     coverage: {
