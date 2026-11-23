@@ -90,7 +90,7 @@ O ambiente `staging` do `wrangler.jsonc` publica o Worker `<name>-staging` com r
 |---|---|
 | Elo - eventos por nome | Todos os logs estruturados, agrupados pelo campo `event` |
 | Elo - falhas inesperadas | `mcp_request_failed`, `watchdog_failed` e `auth_service_unavailable`, por evento e `errorType` |
-| Elo - fila e DLQ | `queue_message_retry` e `queue_message_dead_lettered`, por evento e `attempts` |
+| Elo - fila e DLQ | `queue_message_retry` e `queue_message_dead_lettered`, por evento e `attempts` (`queue_message_rescheduled` e `queue_message_parked` são `info` e indicam só espera) |
 | Elo - erros por código | Logs com campo `code`, por código e evento |
 
 Para acompanhar em tempo real: `npx wrangler tail --env=""` (ou `--env staging`). Recusas do gate de orçamento (`UPSTREAM_RATE_LIMITED`) não geram log hoje; elas aparecem nas respostas das ferramentas.

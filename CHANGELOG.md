@@ -26,7 +26,8 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 
 ## [Não publicado]
 
-- **Correção de comportamento da fila**: mensagens `queued` e `uncertain` são reagendadas como mensagens novas com `delaySeconds` e confirmadas com `ack`, sem consumir `max_retries`; `queue_message_dead_lettered` só ocorre com `attempts > 4`, na 5ª entrega. Corpos inválidos geram `queue_message_malformed`.
+- **Correção de comportamento da fila**: `queue_message_dead_lettered` só ocorre com `attempts > 4`, na 5ª entrega, que é quando a mensagem vai de fato para a DLQ. Operações `queued` e `uncertain` continuam esperando com `message.retry` e `delaySeconds` (`queue_message_rescheduled`); na 5ª entrega são confirmadas com `ack` (`queue_message_parked`) em vez de irem para a DLQ, e o watchdog as entrega de novo. Cada cadeia de entregas fica limitada a 5, sem reenvio por `AUTOMATION_QUEUE.send` que se perpetuaria a cada passagem do watchdog. Corpos inválidos geram `queue_message_malformed`.
+- **Sincronia de configuração**: `test/queue-config-sync.test.mjs` falha se `QUEUE_MAX_RETRIES` divergir do `max_retries` dos consumidores em `wrangler.example.jsonc`.
 - **Observabilidade**: `errorFields` pode registrar `errorSite` com a primeira linha do stack, redigida e limitada a 200 caracteres, sem incluir a mensagem do erro.
 - **Observabilidade OAuth**: novos avisos `oauth_identity_exchange_failed`, `oauth_consent_failed` e `oauth_callback_failed` registram falhas diagnósticas sanitizadas.
 - **Arquitetura interna**: `isConfiguredSecret` foi centralizada em `src/shared/secrets.ts`; `timingSafeTokenEqual` e `enforceCrmRateLimit`/`enforceChatRateLimit` foram removidas. `src/shared` não pode importar camadas de automation, domain, agendor, mcp ou oauth, e o orçamento usa `BUDGET_WINDOW_MS`/`BUDGET_MAX_RESERVATIONS`.

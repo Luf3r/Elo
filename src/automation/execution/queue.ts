@@ -221,8 +221,6 @@ export async function handleAutomationQueue(
     payload: AutomationQueuePayload,
     env: Env,
   ) => ExecutionDeps | Promise<ExecutionDeps> = createQueueExecutionDeps,
-  requeue: (payload: AutomationQueuePayload, delaySeconds: number) => Promise<void> = (payload, delaySeconds) =>
-    env.AUTOMATION_QUEUE.send(payload, { delaySeconds }).then(() => undefined),
 ): Promise<void> {
   for (const message of batch.messages) {
     const parsed = automationQueuePayloadSchema.safeParse(message.body);
@@ -252,9 +250,17 @@ export async function handleAutomationQueue(
         );
         const next = commands.reduce((deadline, c) => Math.max(deadline, c?.nextAttemptAt ?? 0), Date.now() + 10_000);
         const delaySeconds = Math.min(43_200, Math.max(1, Math.ceil((next - Date.now()) / 1000)));
-        await requeue(parsed.data, delaySeconds);
-        message.ack();
-        logEvent('info', 'queue_message_rescheduled', { delaySeconds, state: status.state });
+        const { attempts } = message;
+        if (attempts <= QUEUE_MAX_RETRIES) {
+          message.retry({ delaySeconds });
+          logEvent('info', 'queue_message_rescheduled', { attempts, delaySeconds, state: status.state });
+        } else {
+          // A retry on the final delivery would dead-letter an operation that is
+          // only waiting. The watchdog redelivers it from the durable state, so
+          // each delivery chain stays bounded instead of rescheduling forever.
+          message.ack();
+          logEvent('info', 'queue_message_parked', { attempts, state: status.state });
+        }
       } else message.ack();
     } catch (error) {
       const { attempts } = message;
