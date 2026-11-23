@@ -1,5 +1,6 @@
 import { SafeError } from '../../shared/errors';
 import { throwIfCancelled } from '../../shared/cancellation';
+import { readBoundedBody } from '../../shared/bounded-body';
 import type { AttachmentInput, AttachmentResult } from './types';
 
 // Add a CDN only after recording its exact host from an authorized observation.
@@ -120,36 +121,17 @@ export async function downloadAttachment(
       return unavailable('unsupported_format');
     }
     if (!response.body) return unavailable('empty_attachment');
-    const reader: ReadableStreamDefaultReader<unknown> = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      while (true) {
-        const { value, done } = await awaitChatRead(reader.read(), signal);
-        if (done) break;
-        if (!(value instanceof Uint8Array)) {
-          await awaitChatRead(reader.cancel(), signal);
-          return unavailable('download_unavailable');
-        }
-        size += value.byteLength;
-        if (size > maxBytes) {
-          await awaitChatRead(reader.cancel(), signal);
-          return unavailable('size_limit');
-        }
-        chunks.push(value);
-      }
-    } finally {
-      if (signal.aborted) void reader.cancel().catch(() => {});
-      reader.releaseLock();
-    }
+    const result = await readBoundedBody(response.body, maxBytes, {
+      race: (promise) => awaitChatRead(promise, signal),
+      awaitCancel: true,
+      signal,
+    });
+    if (result.kind === 'non_binary') return unavailable('download_unavailable');
+    if (result.kind === 'too_large') return unavailable('size_limit');
+    const bytes = result.bytes;
+    const size = bytes.byteLength;
     if (size === 0) return unavailable('empty_attachment');
     if (offset >= size) return unavailable('invalid_content_cursor');
-    const bytes = new Uint8Array(size);
-    let position = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, position);
-      position += chunk.byteLength;
-    }
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
     if (input.expectedSha256 && input.expectedSha256 !== sha256) return unavailable('attachment_changed');

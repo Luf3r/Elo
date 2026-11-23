@@ -1,6 +1,7 @@
 import { AuthorizationError, CimdFetchError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../env';
 import { errorFields, logEvent } from '../shared/logger';
+import { readBoundedBody } from '../shared/bounded-body';
 import { readOAuthConfig, ORIGIN, OPTIONAL_SCOPE, SUPPORTED_SCOPES, type OAuthConfig } from './config';
 import { verifyAccessIdentity } from './identity';
 import { consentPage } from './consent';
@@ -8,30 +9,10 @@ import { oauthFailureDiagnostic } from './diagnostics';
 
 export async function limitedText(body: ReadableStream<Uint8Array> | null, max: number): Promise<string> {
   if (!body) return '';
-  const reader = body.getReader();
-  const parts: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > max) {
-        await reader.cancel();
-        throw new RangeError('Body too large.');
-      }
-      parts.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const part of parts) {
-    bytes.set(part, offset);
-    offset += part.byteLength;
-  }
-  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes);
+  const result = await readBoundedBody(body, max, { awaitCancel: true });
+  if (result.kind === 'too_large') throw new RangeError('Body too large.');
+  if (result.kind === 'non_binary') throw new TypeError('Body is not binary.');
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(result.bytes);
 }
 function pageError(status: number, message: string): Response {
   return new Response(message, {

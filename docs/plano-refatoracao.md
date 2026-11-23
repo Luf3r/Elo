@@ -22,7 +22,7 @@ Base: `main` em `9dedbfd` (0.1.7). Diagnóstico completo na seção 1; execuçã
 |---|---|---|
 | #13 — Correções de fila e observabilidade | **Concluída** | Fila sem consumir `max_retries` durante a espera; logs com `errorSite` e eventos OAuth de diagnóstico; fronteiras de camada de `src/shared`; pisos de cobertura para `oauth`, `mcp`, `agendor` e `shared`; documentação alinhada. |
 | #14 — Entregas em espera e CI | **Concluída** | Limite de entregas em espera da fila; token do CI só leitura; `.agent-runs` ignorado. |
-| Fase 9 — Correções pós-revisão | **Em andamento** | Plano de 2026-11-23: PR 1, consistência da documentação e limpeza do lint; PR 2, leitura limitada de corpo em um único helper (`src/shared/bounded-body.ts`); PR 3, registrar só as ferramentas cujo serviço está configurado; PR 4, limites em camadas no `/register` (rate limiter dedicado, validação de metadados e teto diário); PR 5, `EnvironmentTeardownError` intermitente no Vitest; release `0.3.0` depois dos PRs 3 e 4. |
+| Fase 9 — Correções pós-revisão | **Em andamento** | Plano de 2026-11-23: PR 1, consistência da documentação e limpeza do lint, concluído em #15; PR 5, `EnvironmentTeardownError` intermitente no Vitest, concluído em #16 (alarmes do Durable Object limpos após cada teste e guarda em `test/reliability/vitest-config.test.ts`); PR 2, leitura limitada de corpo em um único helper (`src/shared/bounded-body.ts`), neste PR; PR 3, registrar só as ferramentas cujo serviço está configurado; PR 4, limites em camadas no `/register` (rate limiter dedicado, validação de metadados e teto diário); release `0.3.0` depois dos PRs 3 e 4. |
 
 ### Decisões da seção 5 (registradas como tomadas)
 
