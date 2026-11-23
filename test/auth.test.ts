@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { authenticateClient } from '../src/auth';
 import worker from '../src/index';
 import { context, testEnv } from './helpers';
 import { RESOURCE } from '../src/oauth/config';
-import { callTool } from './mcp-helper';
-import { readToolJson, type ToolErrorBody } from './helpers/json';
+import { callTool, rpc } from './mcp-helper';
+import type { ToolListResult } from './helpers/json';
 
 describe('OAuth authentication', () => {
   it.each([
@@ -33,13 +33,18 @@ describe('OAuth authentication', () => {
     expect(() => authenticateClient(ctx)).toThrow();
   });
   it.each([undefined, '', 'replace-me', 'bad\nvalue'])(
-    'keeps MCP available when CRM is unconfigured while failing CRM tools locally',
+    'keeps MCP available when CRM is unconfigured and lists no CRM tools',
     async (token) => {
       const env = testEnv({ AGENDOR_CRM_TOKEN: token as string });
+      const fetch = vi.spyOn(globalThis, 'fetch');
+      const { response: listResponse, data: listData } = await rpc<ToolListResult>('tools/list', {}, env);
+      expect(listResponse.status).toBe(200);
+      expect(listData.result?.tools.map((tool) => tool.name)).toEqual(['server_status']);
+
       const { response, data } = await callTool('crm_get_deal', { id: 1 }, env);
       expect(response.status).toBe(200);
-      expect(data.result?.isError).toBe(true);
-      expect(readToolJson<ToolErrorBody>(data).error.code).toBe('UPSTREAM_UNAVAILABLE');
+      expect(Boolean(data.result?.isError || data.error)).toBe(true);
+      expect(fetch).not.toHaveBeenCalled();
     },
   );
 });

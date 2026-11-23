@@ -3,8 +3,28 @@ import { rpc, callTool } from './mcp-helper';
 import { readToolJson, type InitializeResult, type ToolListResult } from './helpers/json';
 import packageJson from '../package.json';
 import { COMMIT } from '../src/version';
+import { testEnv } from './helpers';
 
 describe('Streamable HTTP MCP', () => {
+  it.each([
+    ['without CRM or Chat', { AGENDOR_CRM_TOKEN: '', AGENDOR_CHAT_TOKEN: '', AGENDOR_CHAT_ACCOUNT_ID: '' }, 1],
+    ['with CRM only', { AGENDOR_CRM_TOKEN: 'unit-crm-token', AGENDOR_CHAT_TOKEN: '', AGENDOR_CHAT_ACCOUNT_ID: '' }, 23],
+    [
+      'with Chat only',
+      { AGENDOR_CRM_TOKEN: '', AGENDOR_CHAT_TOKEN: 'unit-chat-token', AGENDOR_CHAT_ACCOUNT_ID: '7001' },
+      9,
+    ],
+    [
+      'with CRM and Chat',
+      { AGENDOR_CRM_TOKEN: 'unit-crm-token', AGENDOR_CHAT_TOKEN: 'unit-chat-token', AGENDOR_CHAT_ACCOUNT_ID: '7001' },
+      44,
+    ],
+  ] as const)('lists the configured tool set %s', async (_description, overrides, count) => {
+    const { data, response } = await rpc<ToolListResult>('tools/list', {}, testEnv(overrides));
+    expect(response.status).toBe(200);
+    expect(data.result?.tools).toHaveLength(count);
+  });
+
   it('rejects unauthenticated protocol calls', async () => {
     const { response } = await rpc('tools/list', {}, undefined, { Authorization: 'Bearer invalid' });
     expect(response.status).toBe(401);
