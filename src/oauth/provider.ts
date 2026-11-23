@@ -8,6 +8,7 @@ import { errorFields, logEvent } from '../shared/logger';
 import { createServer } from '../mcp/server';
 import { ORIGIN, RESOURCE, OWNER_EMAIL, SUPPORTED_SCOPES } from './config';
 import { loginHandler } from './handler';
+import { clientRegistrationCallback } from './registration';
 import { ACCESS_TOKEN_TTL_SECONDS, OFFLINE_REFRESH_TOKEN_TTL_SECONDS, refreshTokenTtlForScopes } from './lifetime';
 
 export const oauthOptions: OAuthProviderOptions<Env> = {
@@ -15,6 +16,7 @@ export const oauthOptions: OAuthProviderOptions<Env> = {
   authorizeEndpoint: '/authorize',
   tokenEndpoint: '/token',
   clientRegistrationEndpoint: '/register',
+  clientRegistrationCallback,
   resourceMetadata: { resource: RESOURCE, authorization_servers: [ORIGIN] },
   scopesSupported: [...SUPPORTED_SCOPES],
   accessTokenTTL: ACCESS_TOKEN_TTL_SECONDS,
