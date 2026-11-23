@@ -57,6 +57,7 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     AGENDOR_CHAT_ACCOUNT_ID: '',
     OAUTH_KV: (runtimeEnv as { OAUTH_KV: KVNamespace }).OAUTH_KV,
     OAUTH_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
+    REGISTER_RATE_LIMITER: { limit: vi.fn(async () => ({ success: true })) },
     ACCESS_CLIENT_ID: 'unit-client',
     ACCESS_CLIENT_SECRET: 'unit-secret',
     ACCESS_ISSUER: 'https://elo-unit.cloudflareaccess.com',

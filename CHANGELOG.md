@@ -39,6 +39,7 @@ Todas as mudanças notáveis de `elo-agendor-mcp` estão documentadas neste arqu
 - **Sincronia documental**: `test/readme-sync.test.mjs` verifica a versão e os passos de `npm run check` no `README.md` e no `AGENTS.md`.
 - **Documentação**: referências à configuração de tenant e à allowlist agora apontam para `__ELO_DEPLOYMENT__` ou rotulam os exemplos de `test/wrangler.jsonc`; corrigidos o link do modelo de contexto histórico e as regras de camada do lint; registrado o estado de 2026-11-23 com os itens #13 e #14 concluídos e a Fase 9 em andamento.
 - **Registro de ferramentas (`tools/list`)** — mudança de contrato para implantações parcialmente configuradas, entra no 0.3.0: uma ferramenta só aparece quando as credenciais da integração estão configuradas. Sem segredos, a lista passa de 15 para 1 ferramenta; apenas Chat, de 23 para 9; apenas CRM permanece em 23 e CRM + Chat permanece em 44. Em produção, com CRM e Chat configurados, nada muda.
+- **Registro dinâmico (`/register`)**: camada 1 adiciona o binding obrigatório `REGISTER_RATE_LIMITER`, com limite de 3 registros por 60 s por IP e resposta `429` ao exceder. Sem o binding, as rotas OAuth respondem `503`.
 
 ## [0.2.1] — 2026-11-20
 
